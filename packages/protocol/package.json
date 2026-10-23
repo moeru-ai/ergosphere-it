@@ -1,0 +1,38 @@
+{
+  "name": "@ergosphere-it/protocol",
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Schemas, signatures, and verification rules of the ergosphere-it update protocol",
+  "author": {
+    "name": "Moeru AI Project AIRI Team",
+    "email": "airi@moeru.ai",
+    "url": "https://github.com/moeru-ai"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/moeru-ai/ergosphere-it",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/moeru-ai/ergosphere-it.git",
+    "directory": "packages/protocol"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./vectors": {
+      "types": "./dist/vectors.d.mts",
+      "default": "./dist/vectors.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "vectors": "tsx scripts/generate-vectors.ts"
+  },
+  "dependencies": {
+    "valibot": "catalog:"
+  }
+}

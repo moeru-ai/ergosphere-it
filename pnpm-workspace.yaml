@@ -1,0 +1,28 @@
+packages:
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+
+minimumReleaseAge: 4320
+
+catalog:
+  '@antfu/eslint-config': ^9.0.0
+  '@types/node': ^26.2.0
+  '@vitest/coverage-v8': ^5.0.0
+  bumpp: ^12.2.1
+  eslint: ^10.9.0
+  tsdown: ^0.22.14
+  tsx: ^4.22.4
+  typescript: ^6.0.3
+  valibot: ^1.4.2
+  vitest: ^5.0.0
+
+catalogMode: prefer
+
+cleanupUnusedCatalogs: true
+
+shellEmulator: true
+
+trustPolicy: no-downgrade
+

@@ -1,0 +1,12 @@
+{
+  "trusted": {
+    "keyId": "362ff633a498ae53",
+    "publicKey": "MCowBQYDK2VwAyEAozeq+nTTpK7tLalY+wuh3B4cDTnP3+evtn1GQ3sQrbc=",
+    "privateKey": "MC4CAQAwBQYDK2VwBCIEIB6YsJKsX8kAjn+vqAP4JnJtikvbHwgqRC66LjoWbOQi"
+  },
+  "other": {
+    "keyId": "e2a9fce76b8ca8b6",
+    "publicKey": "MCowBQYDK2VwAyEAlGq5DvKwa3oNPU2Q8YG3dY/GxM6Q9DdywpJXEr5irkA=",
+    "privateKey": "MC4CAQAwBQYDK2VwBCIEIHWUHVZ8oX4N0QBx90EmC7itWiW1VUtBOmOKORwtOSvR"
+  }
+}
