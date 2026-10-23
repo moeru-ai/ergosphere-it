@@ -1,9 +1,9 @@
 import type { ErrorCode } from './errors'
 import type { CoreCandidateContext } from './verify'
 
-import vectorFile from '../vectors/vectors.json' with { type: 'json' }
+import suiteFile from '../conformance/cases.json' with { type: 'json' }
 
-export type ConformanceVector
+export type ConformanceCase
   = | { bucket: number, installId: string, kind: 'rollout', name: string, salt: string }
     | { context: { cadence: string, channel: string, lastIssuedAt?: string, now: string, product: string }, document: string, expect: Expectation, kind: 'pointer', name: string, signature: string }
     | { context?: CoreCandidateContext, document: string, expect: Expectation, kind: 'core-manifest', name: string, signature: string }
@@ -11,13 +11,13 @@ export type ConformanceVector
     | { expect: boolean, kind: 'host-api', name: string, range: { max: number, min: number }, shellHostApi: number }
     | { expect: boolean, kind: 'path', name: string, path: string }
 
-export interface ConformanceVectorFile {
-  /** The only key that the vectors trust. It is a test key and never signs real releases. */
+export interface ConformanceSuite {
+  cases: ConformanceCase[]
+  /** The only key that the cases trust. It is a test key and never signs real releases. */
   trustedKeys: { keyId: string, publicKey: string }[]
-  vectors: ConformanceVector[]
 }
 
 export type Expectation = { code: ErrorCode, ok: false } | { ok: true }
 
-/** Conformance test vectors. Every client implementation must give the expected result for each vector. */
-export const conformanceVectors = vectorFile as ConformanceVectorFile
+/** Conformance cases. Every client implementation must give the expected result for each case. */
+export const conformanceSuite = suiteFile as ConformanceSuite

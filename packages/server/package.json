@@ -35,7 +35,10 @@
   "dependencies": {
     "@ergosphere-it/protocol": "workspace:*",
     "@ergosphere-it/publish": "workspace:*",
+    "@hono/node-server": "catalog:",
     "@moeru/std": "catalog:",
-    "es-toolkit": "catalog:"
+    "es-toolkit": "catalog:",
+    "hono": "catalog:",
+    "valibot": "catalog:"
   }
 }

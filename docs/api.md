@@ -30,7 +30,7 @@ Formats, keys, signatures, and verification. No I/O.
 | `canonicalJson(value)` | The canonical JSON that signatures cover. |
 | `ErgosphereError`, `SignatureError`, `DocumentError`, `PointerError`, `CandidateError`, `ErrorCode` | Errors. |
 | Types: `CoreManifest`, `ShellManifest`, `ShellArtifact`, `Pointer`, `Component`, `ComponentType`, `FileEntry`, `HostApiRange`, `Rollout`, `Cadence`, `Distribution`, `SigningKey`, `TrustedKey` | Data. |
-| `@ergosphere-it/protocol/vectors` | Conformance test vectors. A vector expects `ok` or an error `code`. |
+| `@ergosphere-it/protocol/conformance` | Conformance cases. A case expects `ok` or an error `code`. |
 
 Internal: Valibot schemas, signature primitives, base64 decoding.
 
@@ -112,14 +112,18 @@ Internal: module resolution hooks, the global that holds the core.
 
 ## `@ergosphere-it/server`
 
-Test servers. The tree lives in memory.
+Test servers on Hono. The tree lives in memory.
 
 | Export | Purpose |
 | --- | --- |
 | `MemoryTree` | A map of `TreeFile`s: `put(files)`, `get(key)`, `snapshot()`, `restore(snapshot)`, `entries()`. |
-| `createTreeServer({ tree, faults, port })` | Serves a tree over HTTP and injects faults. |
+| `createTreeApp({ tree, faults, onRequest })` | A Hono app that serves a tree and injects faults. Mount it in another app, or run `app.fetch` on any runtime. |
+| `createTreeServer(options)`, `listen(app, { host, port })` | Serve a tree app, or any Hono app, on Node.js. |
 | `createDevServer({ tree, signingKey, product, release, ... })` | Adds the release console: publish, history, revoke, and the app report. `release.build` returns a `CoreRelease`, and the server uploads it and moves the pointer. |
+| `ReleaseRequestError` | A console request that cannot run. The console answers 400 with its message. |
 | `NO_FAULTS` | Faults that are all off. |
-| Types: `Faults`, `RequestRecord`, `RouteHandler`, `TreeServer`, `TreeServerOptions`, `DevServer`, `DevServerOptions`, `ReleaseChange`, `ReleaseEntry`, `ClientReport` | Data. |
+| Types: `Faults`, `RequestRecord`, `TreeAppOptions`, `ListenOptions`, `TreeServer`, `TreeServerOptions`, `DevServer`, `DevServerOptions`, `ReleaseChange`, `ReleaseEntry`, `ClientReport` | Data. |
+
+Faults use Web streams only: a throttled object is a slow stream, and a dropped request is a body that fails after the headers. Console request bodies are checked with Valibot.
 
 Internal: the console page.

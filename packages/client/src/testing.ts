@@ -10,7 +10,7 @@ import { sumBy } from 'es-toolkit'
 
 interface TestKey { keyId: string, privateKey: string, publicKey: string }
 
-const keys = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'protocol', 'vectors', 'test-keys.json'), 'utf8')) as { other: TestKey, trusted: TestKey }
+const keys = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'protocol', 'conformance', 'test-keys.json'), 'utf8')) as { other: TestKey, trusted: TestKey }
 
 export const trustedKeys = [{ keyId: keys.trusted.keyId, publicKey: keys.trusted.publicKey }]
 

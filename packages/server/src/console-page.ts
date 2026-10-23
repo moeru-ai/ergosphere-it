@@ -62,6 +62,7 @@ async function post(name, body) {
   $('error').textContent = ''
   const response = await fetch('/_api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!response.ok) $('error').textContent = (await response.json()).error
+  return response.ok
 }
 
 function statusOf(entry) {
@@ -80,12 +81,26 @@ function isRevoked(entry) {
   return state.pointers.some(p => p.channel === entry.channel && p.revoked?.includes(entry.seq))
 }
 
+// The form keeps what the user chose. A render rebuilds the options only when the list changes, because replacing an
+// open select closes it. The version follows the suggestion only while the user has not edited it.
+let optionsKey
+let suggested
+function renderForm() {
+  const key = JSON.stringify([state.changes, state.channels])
+  if (key !== optionsKey) {
+    optionsKey = key
+    const change = $('change').value, channel = $('channel').value
+    $('change').innerHTML = state.changes.map(c => '<option value="' + escape(c.id) + '"' + (c.id === change ? ' selected' : '') + '>' + escape(c.label) + '</option>').join('')
+    $('channel').innerHTML = state.channels.map(c => '<option' + (c === channel ? ' selected' : '') + '>' + escape(c) + '</option>').join('')
+  }
+  const version = $('version')
+  if (document.activeElement !== version && (version.value === '' || version.value === suggested))
+    version.value = state.nextVersion
+  suggested = state.nextVersion
+}
+
 function render() {
-  const keep = id => $(id).value
-  const change = keep('change'), channel = keep('channel')
-  $('change').innerHTML = state.changes.map(c => '<option value="' + c.id + '"' + (c.id === change ? ' selected' : '') + '>' + escape(c.label) + '</option>').join('')
-  $('channel').innerHTML = state.channels.map(c => '<option' + (c === channel ? ' selected' : '') + '>' + c + '</option>').join('')
-  if (document.activeElement !== $('version')) $('version').value = state.nextVersion
+  renderForm()
 
   const labelOf = id => state.changes.find(c => c.id === id)?.label ?? id
   const client = state.clientState
@@ -112,7 +127,7 @@ function renderDesync(client) {
   const check = client?.lastCheck
   const unknown = client?.running !== undefined && !state.history.some(entry => entry.seq === client.running)
   let message = ''
-  if (check?.status === 'rejected' && check.reason === 'pointer-replayed')
+  if (check?.status === 'rejected' && check.code === 'pointer-replayed')
     message = 'The app ignores the pointers of this server, because they are older than pointers the app accepted. Publish a new version, or sign the pointers again.'
   else if (unknown)
     message = 'The app runs ' + (client.runningVersion ?? 'seq ' + client.running) + ', which this server does not know. The app never goes back. Publish a newer version, and the app takes it.'
@@ -128,8 +143,12 @@ $('desync').addEventListener('click', (event) => {
 
 $('publish').addEventListener('click', async () => {
   $('publish').disabled = true
-  try { await post('publish', { change: $('change').value, channel: $('channel').value, rollout: Number($('rollout').value), version: $('version').value }) }
-  finally { $('publish').disabled = false; $('version').blur() }
+  try {
+    // After a publish, the version field takes the next suggestion again.
+    if (await post('publish', { change: $('change').value, channel: $('channel').value, rollout: Number($('rollout').value), version: $('version').value }))
+      $('version').value = ''
+  }
+  finally { $('publish').disabled = false; $('version').blur(); render() }
 })
 $('history').addEventListener('click', (event) => {
   const button = event.target.closest('button')

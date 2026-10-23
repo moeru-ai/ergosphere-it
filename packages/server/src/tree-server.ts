@@ -1,16 +1,16 @@
-import type { IncomingMessage, Server, ServerResponse } from 'node:http'
+import type { ServerType } from '@hono/node-server'
 
 import type { MemoryTree } from './tree'
 
-import { createServer } from 'node:http'
-
+import { serve } from '@hono/node-server'
 import { delay } from 'es-toolkit'
+import { Hono } from 'hono'
 
 /** Faults that the server injects into update tree requests. Console and API requests are never affected. */
 export interface Faults {
   /** Limit object downloads to this many bytes per second. 0 means no limit. */
   bytesPerSecond: number
-  /** Percentage of requests whose connection closes before the body. */
+  /** Percentage of requests whose body fails after the headers. */
   dropRate: number
   /** Percentage of requests that get HTTP 500. */
   errorRate: number
@@ -24,8 +24,15 @@ export interface Faults {
 
 export const NO_FAULTS: Faults = { bytesPerSecond: 0, dropRate: 0, errorRate: 0, hidePointers: false, latencyMs: 0, tamperObjects: false }
 
+export interface ListenOptions {
+  /** Defaults to `127.0.0.1`. */
+  host?: string
+  /** Defaults to a free port. */
+  port?: number
+}
+
 export interface RequestRecord {
-  /** Bytes sent in the body. */
+  /** Bytes in the body. */
   bytes: number
   fault?: string
   method: string
@@ -33,86 +40,85 @@ export interface RequestRecord {
   status: number
 }
 
-/** Extra routes. Return true when the route answered the request. */
-export type RouteHandler = (request: IncomingMessage, response: ServerResponse, path: string) => Promise<boolean>
-
-export interface TreeServer {
-  close: () => Promise<void>
-  server: Server
-  url: string
-}
-
-export interface TreeServerOptions {
+export interface TreeAppOptions {
   /** Returns the faults to inject now. */
   faults?: () => Faults
-  host?: string
   /** Called once per tree request, for access logs and tests. */
   onRequest?: (request: RequestRecord) => void
-  port?: number
-  routes?: RouteHandler
   tree: MemoryTree
 }
 
-/** Serves an update tree over HTTP with the headers of each file, and injects faults. */
+export interface TreeServer {
+  close: () => Promise<void>
+  server: ServerType
+  url: string
+}
+
+export interface TreeServerOptions extends ListenOptions, TreeAppOptions {}
+
+/**
+ * Returns a Hono app that serves a tree with the headers of each file, and injects faults.
+ *
+ * Mount it in another Hono app, or run `app.fetch` on any runtime. `createTreeServer` serves it on Node.js.
+ */
+export function createTreeApp(options: TreeAppOptions): Hono {
+  return new Hono().get('*', c => serveTree(c.req.method, c.req.path, options))
+}
+
+/** Serves a tree over HTTP on Node.js. */
 export async function createTreeServer(options: TreeServerOptions): Promise<TreeServer> {
-  const server = createServer(async (request, response) => {
-    const path = decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname)
-    if (options.routes && await options.routes(request, response, path))
-      return
+  return listen(createTreeApp(options), options)
+}
 
-    await serveTree(request, response, path, options)
+/** Serves a Hono app on Node.js. */
+export async function listen(app: Hono, { host = '127.0.0.1', port = 0 }: ListenOptions = {}): Promise<TreeServer> {
+  const { server, url } = await new Promise<{ server: ServerType, url: string }>((resolve) => {
+    const server = serve({ fetch: app.fetch, hostname: host, port }, info => resolve({ server, url: `http://${host}:${info.port}` }))
   })
-
-  const host = options.host ?? '127.0.0.1'
-  await new Promise<void>(resolve => server.listen(options.port ?? 0, host, resolve))
-  const address = server.address()
-  const port = typeof address === 'object' && address ? address.port : options.port
 
   return {
     close: () => new Promise<void>((resolve, reject) => {
-      server.closeAllConnections()
+      if ('closeAllConnections' in server)
+        server.closeAllConnections()
       server.close(error => (error ? reject(error) : resolve()))
     }),
     server,
-    url: `http://${host}:${port}`,
+    url,
   }
 }
 
-async function serveTree(request: IncomingMessage, response: ServerResponse, path: string, options: TreeServerOptions): Promise<void> {
+async function serveTree(method: string, path: string, options: TreeAppOptions): Promise<Response> {
   const faults = options.faults?.() ?? NO_FAULTS
-  const report = (status: number, bytes = 0, fault?: string) => options.onRequest?.({ bytes, fault, method: request.method ?? 'GET', path, status })
+  const report = (status: number, bytes = 0, fault?: string) => options.onRequest?.({ bytes, fault, method, path, status })
 
   if (faults.latencyMs > 0)
     await delay(faults.latencyMs)
 
-  const file = request.method === 'GET' ? options.tree.get(path.replace(/^\/+/, '')) : undefined
+  const file = options.tree.get(path.replace(/^\/+/, ''))
   if (!file) {
-    response.writeHead(404).end()
     report(404)
 
-    return
+    return new Response(null, { status: 404 })
   }
   if (Math.random() * 100 < faults.errorRate) {
-    response.writeHead(500).end()
     report(500, 0, 'error')
 
-    return
+    return new Response(null, { status: 500 })
   }
   if (faults.hidePointers && path.startsWith('/pointers/')) {
-    response.writeHead(404).end()
     report(404, 0, 'hidden pointer')
 
-    return
+    return new Response(null, { status: 404 })
   }
 
   const size = file.bytes.byteLength
-  response.writeHead(200, { ...file.headers, 'Content-Length': size })
+  const headers = { ...file.headers, 'Content-Length': String(size) }
 
   if (Math.random() * 100 < faults.dropRate) {
-    response.destroy()
     report(200, 0, 'dropped')
 
-    return
+    // The headers go out, then the body fails, so the client sees a broken connection.
+    return new Response(new ReadableStream({ start: controller => controller.error(new Error('dropped by a fault')) }), { headers })
   }
 
   let bytes = file.bytes
@@ -124,17 +130,32 @@ async function serveTree(request: IncomingMessage, response: ServerResponse, pat
   }
 
   if (faults.bytesPerSecond > 0 && path.startsWith('/objects/')) {
-    const chunk = Math.max(1024, Math.floor(faults.bytesPerSecond / 10))
-    for (let offset = 0; offset < size && !response.destroyed; offset += chunk) {
-      response.write(bytes.subarray(offset, offset + chunk))
-      await delay(100)
-    }
-    response.end()
     report(200, size, fault ?? `throttled to ${faults.bytesPerSecond} B/s`)
 
-    return
+    return new Response(throttled(bytes, faults.bytesPerSecond), { headers })
   }
 
-  response.end(bytes)
   report(200, size, fault)
+
+  return new Response(bytes, { headers })
+}
+
+/** Sends bytes in chunks, ten chunks per second. */
+function throttled(bytes: Uint8Array<ArrayBuffer>, bytesPerSecond: number): ReadableStream<Uint8Array<ArrayBuffer>> {
+  const chunk = Math.max(1024, Math.floor(bytesPerSecond / 10))
+  let offset = 0
+
+  return new ReadableStream({
+    async pull(controller) {
+      if (offset >= bytes.byteLength) {
+        controller.close()
+
+        return
+      }
+      if (offset > 0)
+        await delay(100)
+      controller.enqueue(bytes.subarray(offset, offset + chunk))
+      offset += chunk
+    },
+  })
 }

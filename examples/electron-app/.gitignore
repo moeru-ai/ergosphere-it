@@ -1,4 +1,2 @@
-# Written by scripts/e2e.mjs
-core/
-core.json
-shell/trusted-key.json
+# electron-vite output, and the builtin core descriptor that the scripts write into it
+out/

@@ -8,15 +8,14 @@ export default defineConfig({
   sortPackageJsonScripts: false,
   typescript: true,
   unocss: false,
-  vue: false,
+  vue: true,
 }, {
   ignores: [
     'cspell.config.yaml',
     '.github/**',
     'CLAUDE.md',
-    // Written by examples/electron-app/scripts/e2e.mjs
-    'examples/electron-app/core/**',
-    'examples/electron-app/core.json',
+    // Build output of the example app
+    'examples/electron-app/out/**',
   ],
 }, {
   rules: {

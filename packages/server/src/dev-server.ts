@@ -1,18 +1,20 @@
-import type { IncomingMessage, ServerResponse } from 'node:http'
-
 import type { Pointer, SigningKey } from '@ergosphere-it/protocol'
 import type { CoreRelease } from '@ergosphere-it/publish'
+import type { Context } from 'hono'
+import type { SSEStreamingApi } from 'hono/streaming'
+import type { GenericSchema, InferOutput } from 'valibot'
 
 import type { MemoryTree } from './tree'
 import type { Faults, TreeServer } from './tree-server'
 
-import { Buffer } from 'node:buffer'
-
 import { buildPointer, createSeq, uploadStages } from '@ergosphere-it/publish'
 import { errorMessageFrom } from '@moeru/std/error'
+import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
+import { boolean, integer, maxValue, minValue, number, object, optional, partial, pipe, safeParse, string, summarize } from 'valibot'
 
 import { consolePage } from './console-page'
-import { createTreeServer, NO_FAULTS } from './tree-server'
+import { createTreeApp, listen, NO_FAULTS } from './tree-server'
 
 /** What the host reports about the app. The console uses it to show desyncs between the app and the server. */
 export interface ClientReport {
@@ -74,6 +76,28 @@ export interface ReleaseEntry {
 
 const CADENCE = 'realtime'
 
+/** A console request that cannot run, for example a version that is already published. The console shows its message. */
+export class ReleaseRequestError extends Error {
+  override name = 'ReleaseRequestError'
+}
+
+const percentSchema = pipe(number(), minValue(0), maxValue(100))
+const faultsSchema = partial(object({
+  bytesPerSecond: pipe(number(), minValue(0)),
+  dropRate: percentSchema,
+  errorRate: percentSchema,
+  hidePointers: boolean(),
+  latencyMs: pipe(number(), minValue(0)),
+  tamperObjects: boolean(),
+}))
+const publishSchema = object({
+  change: string(),
+  channel: optional(string()),
+  rollout: optional(pipe(percentSchema, integer())),
+  version: string(),
+})
+const revokeSchema = object({ seq: pipe(number(), integer(), minValue(1)) })
+
 /**
  * Serves a tree in memory with a small release console for local tests and demos.
  *
@@ -84,14 +108,13 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
   const { product, signingKey, tree } = options
   let faults: Faults = { ...NO_FAULTS, ...options.faults }
   let clientState: ClientReport | undefined
-  const streams = new Set<ServerResponse>()
+  const streams = new Set<SSEStreamingApi>()
   const channels = options.channels ?? ['canary', 'stable']
   const history: ReleaseEntry[] = [...options.release?.history ?? []]
 
   const broadcast = (event: string, data: unknown) => {
-    const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
     for (const stream of streams)
-      stream.write(message)
+      void stream.writeSSE({ data: JSON.stringify(data), event })
   }
 
   const pointerOf = (channel: string): Pointer | undefined => {
@@ -128,23 +151,43 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
     tree.put(built.files)
   }
 
-  const handlers = {
-    async faults(body: Partial<Faults>) {
+  /** Runs a console action with a validated body, then sends the new state to every console. */
+  const action = <Schema extends GenericSchema>(schema: Schema, run: (body: InferOutput<Schema>) => Promise<unknown>) => async (c: Context) => {
+    const parsed = safeParse(schema, await c.req.json().catch(() => undefined))
+    if (!parsed.success)
+      throw new ReleaseRequestError(summarize(parsed.issues))
+
+    const result = await run(parsed.output)
+    broadcast('state', snapshot())
+
+    return c.json({ ok: true, result })
+  }
+
+  const app = new Hono()
+    .get('/', c => c.html(consolePage))
+    .get('/_console', c => c.html(consolePage))
+    .get('/_api/state', c => c.json(snapshot()))
+    .get('/_api/events', c => streamSSE(c, async (stream) => {
+      streams.add(stream)
+      await new Promise<void>(resolve => stream.onAbort(resolve))
+      streams.delete(stream)
+    }))
+    .post('/_api/faults', action(faultsSchema, async (body) => {
       faults = { ...NO_FAULTS, ...body }
 
       return faults
-    },
-    async publish(body: { change: string, channel?: string, rollout?: number, version: string }) {
+    }))
+    .post('/_api/publish', action(publishSchema, async (body) => {
       if (!options.release)
-        throw new Error('This server has no build function.')
+        throw new ReleaseRequestError('This server has no build function.')
       if (!options.release.changes.some(change => change.id === body.change))
-        throw new Error(`Unknown change ${body.change}.`)
+        throw new ReleaseRequestError(`Unknown change ${body.change}.`)
 
       const version = body.version.trim()
       if (!version)
-        throw new Error('The version is empty.')
+        throw new ReleaseRequestError('The version is empty.')
       if (history.some(entry => entry.version === version))
-        throw new Error(`Version ${version} is already published.`)
+        throw new ReleaseRequestError(`Version ${version} is already published.`)
 
       const channel = body.channel ?? channels[0]!
       const rollout = body.rollout ?? 100
@@ -160,95 +203,57 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
       options.release.onHistoryChange?.(history)
 
       return { seq: release.seq, version }
-    },
-    /** Signs every pointer again, for example after the tree went back to a backup and clients ignore its pointers. */
-    async reissue() {
+    }))
+    // Signs every pointer again, for example after the tree went back to a backup and clients ignore its pointers.
+    .post('/_api/reissue', async (c) => {
       for (const pointer of pointers())
         await writePointer(pointer.channel, () => {})
-    },
-    async revoke(body: { seq: number }) {
+      broadcast('state', snapshot())
+
+      return c.json({ ok: true })
+    })
+    .post('/_api/revoke', action(revokeSchema, async ({ seq }) => {
       for (const pointer of pointers()) {
         await writePointer(pointer.channel, (next) => {
-          if (!next.revoked.includes(body.seq))
-            next.revoked.push(body.seq)
-          if (next.core === body.seq) {
+          if (!next.revoked.includes(seq))
+            next.revoked.push(seq)
+          if (next.core === seq) {
             // Serve the newest earlier release that is not revoked, or no core.
-            next.core = history.filter(entry => entry.seq < body.seq && !next.revoked.includes(entry.seq)).at(-1)?.seq
+            next.core = history.filter(entry => entry.seq < seq && !next.revoked.includes(entry.seq)).at(-1)?.seq
             next.rollout = 100
           }
         })
       }
-    },
-  }
-
-  const routes = async (request: IncomingMessage, response: ServerResponse, path: string): Promise<boolean> => {
-    if (path === '/' || path === '/_console') {
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(consolePage)
-
-      return true
-    }
-    if (!path.startsWith('/_api/'))
-      return false
-
-    const name = path.slice('/_api/'.length)
-    try {
-      if (name === 'state' && request.method === 'GET') {
-        sendJson(response, 200, snapshot())
-      }
-      else if (name === 'events' && request.method === 'GET') {
-        response.writeHead(200, { 'Cache-Control': 'no-store', 'Connection': 'keep-alive', 'Content-Type': 'text/event-stream' })
-        response.write(': connected\n\n')
-        streams.add(response)
-        request.on('close', () => streams.delete(response))
-      }
-      else if (request.method === 'POST' && Object.hasOwn(handlers, name)) {
-        // The body comes from the console page. Each handler reads the fields it needs.
-        const handle = handlers[name as keyof typeof handlers] as (body: unknown) => Promise<unknown>
-        const result = await handle(await readBody(request))
-        broadcast('state', snapshot())
-        sendJson(response, 200, { ok: true, result })
-      }
-      else {
-        sendJson(response, 404, { error: 'No such route.' })
-      }
-    }
-    catch (error) {
-      sendJson(response, 400, { error: errorMessageFrom(error) ?? 'The request failed.' })
-    }
-
-    return true
-  }
+    }))
+    .all('/_api/*', c => c.json({ error: 'No such route.' }, 404))
+    .route('/', createTreeApp({ faults: () => faults, tree }))
+    .onError((error, c) => c.json(
+      { error: errorMessageFrom(error) ?? 'The request failed.' },
+      error instanceof ReleaseRequestError ? 400 : 500,
+    ))
 
   if (!pointerOf(channels[0]!))
     await writePointer(channels[0]!, () => {})
 
-  const server = await createTreeServer({ faults: () => faults, host: options.host, port: options.port, routes, tree })
+  const server = await listen(app, { host: options.host, port: options.port })
 
   return {
     ...server,
     async close() {
       for (const stream of streams)
-        stream.end()
+        await stream.close()
       await server.close()
     },
     consoleUrl: `${server.url}/_console`,
     setClientState(state) {
+      // Hosts report on a timer. Send only a change, so the console does not render for nothing.
+      if (JSON.stringify(state) === JSON.stringify(clientState))
+        return
+
       clientState = state
       broadcast('client-state', state)
     },
   }
-}
-
-async function readBody(request: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = []
-  for await (const chunk of request)
-    chunks.push(chunk as Buffer)
-
-  return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
-}
-
-function sendJson(response: ServerResponse, status: number, body: unknown): void {
-  response.writeHead(status, { 'Cache-Control': 'no-store', 'Content-Type': 'application/json' }).end(JSON.stringify(body))
 }
 
 /**

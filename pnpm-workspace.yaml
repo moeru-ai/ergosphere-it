@@ -4,6 +4,11 @@ minimumReleaseAge: 1
 fetchTimeout: 600000
 shellEmulator: true
 trustPolicy: no-downgrade
+# electron-vite reaches these releases through Babel. AIRI already installs the same versions.
+# They have no npm trust evidence, but earlier versions do, so pnpm otherwise rejects them.
+trustPolicyExclude:
+  - '@babel/core@7.29.7'
+  - semver@6.3.1
 packages:
   - packages/**
   - examples/**
@@ -16,15 +21,20 @@ allowBuilds:
 
 catalog:
   '@arethetypeswrong/core': ^0.18.5
+  '@guiiai/logg': ^1.2.12
+  '@hono/node-server': ^2.1.5
   '@moeru/eslint-config': ^0.1.0-beta.20
   '@moeru/std': ^0.1.0-beta.20
   '@types/node': ^26.2.0
+  '@vitejs/plugin-vue': ^6.0.10
   '@vitest/coverage-v8': ^5.0.0
   bumpp: ^12.2.1
   cspell: ^10.0.1
   electron: 43.4.1
+  electron-vite: ^6.0.0
   es-toolkit: ^1.51.0
   eslint: ^10.9.0
+  hono: ^4.13.13
   knip: ^6.31.0
   nano-staged: ^1.0.2
   publint: ^0.3.22
@@ -34,4 +44,7 @@ catalog:
   tsx: ^4.22.4
   typescript: ^6.0.3
   valibot: ^1.4.2
+  vite: ^8.3.4
   vitest: ^5.0.0
+  vue: ^3.5.41
+  vue-tsc: ^3.3.11

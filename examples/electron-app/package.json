@@ -4,20 +4,30 @@
   "version": "0.0.0",
   "private": true,
   "description": "A minimal Electron app that updates its core with ergosphere-it",
-  "main": "shell/index.mjs",
+  "main": "out/shell/index.mjs",
   "scripts": {
-    "demo": "node scripts/demo.mjs",
-    "e2e": "node scripts/e2e.mjs"
+    "build": "electron-vite build",
+    "typecheck": "vue-tsc -p tsconfig.json --noEmit",
+    "demo": "node scripts/demo.ts",
+    "e2e": "node scripts/e2e.ts"
   },
   "dependencies": {
-    "@ergosphere-it/driver-electron": "workspace:*"
+    "@ergosphere-it/driver-electron": "workspace:*",
+    "@guiiai/logg": "catalog:",
+    "@moeru/std": "catalog:",
+    "vue": "catalog:"
   },
   "devDependencies": {
     "@ergosphere-it/protocol": "workspace:*",
     "@ergosphere-it/publish": "workspace:*",
     "@ergosphere-it/server": "workspace:*",
-    "@moeru/std": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
     "electron": "catalog:",
-    "es-toolkit": "catalog:"
+    "electron-vite": "catalog:",
+    "es-toolkit": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vue-tsc": "catalog:"
   }
 }

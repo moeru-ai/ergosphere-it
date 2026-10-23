@@ -2,11 +2,12 @@ version: "0.2"
 ignorePaths:
   - "**/node_modules/**"
   - "**/dist/**"
+  - "**/out/**"
   - "**/coverage/**"
   - pnpm-lock.yaml
   - pnpm-workspace.yaml
   - "**/.git/**"
-  - "**/vectors/*.json"
+  - "**/conformance/*.json"
 dictionaryDefinitions: []
 dictionaries: []
 words:
@@ -18,7 +19,9 @@ words:
   - ergosphere
   - eventa
   - flathub
+  - guiiai
   - kirie
+  - logg
   - masknet
   - moeru
   - neko

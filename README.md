@@ -18,7 +18,7 @@ ergosphere-it works the same way: every install follows its channel to the newes
 
 | Package | Content |
 | --- | --- |
-| [`@ergosphere-it/protocol`](packages/protocol) | Schemas, canonical JSON, signatures, verification rules, and conformance test vectors |
+| [`@ergosphere-it/protocol`](packages/protocol) | Schemas, canonical JSON, signatures, verification rules, and conformance cases |
 | [`@ergosphere-it/publish`](packages/publish) | Builds signed releases and pointers as files in memory. Upload them to any backend. |
 | [`@ergosphere-it/client`](packages/client) | The update state machine. The host injects the network and the file system. |
 | [`@ergosphere-it/driver-electron`](packages/driver-electron) | The Electron driver: `Shell` in the shell entry, `getCore()` in the core |
@@ -33,7 +33,7 @@ There is no publish CLI. Publish from CI: build the release with `@ergosphere-it
 
 Each host gets one `driver-*` package. Version 1 has only the Electron driver.
 
-The protocol package passes all conformance test vectors in Node.js, the Electron main process, and the Electron renderer on macOS, Linux, and Windows.
+The protocol package passes all conformance cases in Node.js, the Electron main process, and the Electron renderer on macOS, Linux, and Windows.
 
 ## Development
 
@@ -46,10 +46,10 @@ pnpm typecheck
 pnpm lint
 ```
 
-After you change a vector or a schema, regenerate the conformance vectors:
+After you change a case or a schema, generate the conformance cases again:
 
 ```sh
-pnpm -F @ergosphere-it/protocol vectors
+pnpm -F @ergosphere-it/protocol conformance
 ```
 
 ## License

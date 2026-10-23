@@ -6,7 +6,7 @@
   "workspaces": {
     "examples/electron-app": {
       "entry": [
-        "scripts/*.mjs"
+        "src/shell/index.ts"
       ]
     },
     "packages/protocol": {

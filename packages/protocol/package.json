@@ -20,9 +20,9 @@
       "types": "./dist/index.d.mts",
       "default": "./dist/index.mjs"
     },
-    "./vectors": {
-      "types": "./dist/vectors.d.mts",
-      "default": "./dist/vectors.mjs"
+    "./conformance": {
+      "types": "./dist/conformance.d.mts",
+      "default": "./dist/conformance.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -34,7 +34,7 @@
   },
   "scripts": {
     "build": "tsdown",
-    "vectors": "tsx scripts/generate-vectors.ts",
+    "conformance": "tsx scripts/generate-conformance.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

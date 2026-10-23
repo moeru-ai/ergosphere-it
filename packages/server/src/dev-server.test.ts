@@ -166,6 +166,43 @@ describe('createDevServer', () => {
     expect(after.core).toEqual(before.core)
   })
 
+  it('rejects a request body that does not match its schema, and an unknown API', async () => {
+    const response = await post('/_api/publish', { change: 'page', rollout: 150, version: '1.0.1' })
+
+    expect(response.status).toBe(400)
+    expect((await response.json() as { error: string }).error).toContain('100')
+    expect((await post('/_api/revoke', { seq: 'one' })).status).toBe(400)
+    expect((await post('/_api/unknown', {})).status).toBe(404)
+    expect(built).toEqual([])
+  })
+
+  it('sends the new state to the console after an action', async () => {
+    const events = await fetch(`${server.url}/_api/events`)
+    const reader = events.body!.pipeThrough(new TextDecoderStream()).getReader()
+    await publish('1.0.1')
+
+    let text = ''
+    while (!text.includes('event: state'))
+      text += (await reader.read()).value ?? ''
+    await reader.cancel()
+
+    expect(text).toContain('"version":"1.0.1"')
+  })
+
+  it('sends a client report to the console only when it changes', async () => {
+    const events = await fetch(`${server.url}/_api/events`)
+    const reader = events.body!.pipeThrough(new TextDecoderStream()).getReader()
+    for (const running of [1, 1, 1, 2])
+      server.setClientState({ running })
+
+    let text = ''
+    while (!text.includes('"running":2'))
+      text += (await reader.read()).value ?? ''
+    await reader.cancel()
+
+    expect(text.match(/event: client-state/g)).toHaveLength(2)
+  })
+
   it('answers 404 for keys that the tree does not hold', async () => {
     expect((await fetch(`${server.url}/keys/signing-key.json`)).status).toBe(404)
     expect((await fetch(`${server.url}/pointers/stable/realtime.json`)).status).toBe(404)

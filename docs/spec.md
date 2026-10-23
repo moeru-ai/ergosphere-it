@@ -262,7 +262,7 @@ A core switch must not change the origin of the renderer pages. Otherwise localS
 
 ### Verification results
 
-A verifier returns the verified document, or fails with one reason code. The TypeScript verifiers throw an `ErgosphereError` subclass with the code. Every client implementation uses the same codes, and the conformance test vectors check them.
+A verifier returns the verified document, or fails with one reason code. The TypeScript verifiers throw an `ErgosphereError` subclass with the code. Every client implementation uses the same codes, and the conformance cases check them.
 
 | Code | Meaning |
 | --- | --- |
@@ -288,7 +288,7 @@ The updater is one project with four parts. AIRI connects to it only through dep
 
 | Part | Content | Built from |
 | --- | --- | --- |
-| Specification | This document, the JSON schemas (Valibot), and conformance test vectors | New |
+| Specification | This document, the JSON schemas (Valibot), and conformance cases | New |
 | Publish API | Build a core release and pointers as files in memory, and order the uploads. The caller uploads them to any backend. | `ota-update-server` store and core modules |
 | Client SDK (TypeScript) | Pointer check, download, content store, staging, boot selection, activation diff, health, rollback | `ota-lab` shell modules, plus the PoC tests |
 | Test server | Tree server in memory with fault injection and a release console | `ota-update-server` |
@@ -299,16 +299,16 @@ The project lives in its own repository, `moeru-ai/ergosphere-it`. Packages that
 
 | Package | Part |
 | --- | --- |
-| `@ergosphere-it/protocol` | Schemas, canonical JSON, signatures, verification rules, and conformance test vectors |
+| `@ergosphere-it/protocol` | Schemas, canonical JSON, signatures, verification rules, and conformance cases |
 | `@ergosphere-it/client` | The update state machine for TypeScript hosts. The host injects the network, file system, and clock. `@ergosphere-it/client/node` gives a Node.js file system. |
 | `@ergosphere-it/web` | The page side: health signals and update status. The host injects the transport. |
 | `@ergosphere-it/publish` | Builds signed core releases and pointers as files in memory. It does no I/O. |
 | `@ergosphere-it/driver-electron` | The Electron driver: `Shell` boots the core in the shell entry, and `getCore()` gives the core its updater. Shell updates through electron-updater come later. |
 | `@ergosphere-it/server` | Tree server in memory with fault injection and a release console, for tests and demos |
 
-Version 1 has only the Electron driver. A Kirie driver (`driver-kirie`, with a C# client) and a Tauri driver (`driver-tauri`) can follow. They use the same protocol and pass the same conformance test vectors.
+Version 1 has only the Electron driver. A Kirie driver (`driver-kirie`, with a C# client) and a Tauri driver (`driver-tauri`) can follow. They use the same protocol and pass the same conformance cases.
 
-Conformance test vectors: valid and tampered manifests, bad signatures, unknown keys, path traversal, `seq` downgrade, expired pointers, revoked releases, host API ranges, and rollout buckets. Every client implementation must pass them.
+Conformance cases: valid and tampered manifests, bad signatures, unknown keys, path traversal, `seq` downgrade, expired pointers, revoked releases, host API ranges, and rollout buckets. Every client implementation must pass them.
 
 ### Kirie
 
@@ -319,7 +319,7 @@ Kirie runs AIRI pages in CEF inside Godot. AIRI host services in Kirie are C#. T
 - This is the main design rule for Kirie: **keep host services thin, and keep business logic in the web layer.** Every C# change needs a full update.
 - Kirie needs these changes, as a Kirie plugin:
   1. A web root that can change, instead of the fixed `res://src-web/dist/index.html`, with the same storage origin for all cores.
-  2. A C# client that implements boot selection, verification, and rollback, and passes the conformance test vectors.
+  2. A C# client that implements boot selection, verification, and rollback, and passes the conformance cases.
   3. A host API integer that covers the Eventa contracts between C# and the web layer, Kirie, and CEF.
   4. A shell installer and updater. Candidates are Velopack and Sparkle with WinSparkle. The user selects one later.
   5. A secure context for the page, if the page verifies signatures. Chromium gives `crypto.subtle` only to secure contexts, so a custom scheme such as `res://` must be registered as secure. Otherwise verification stays in C#.
@@ -329,7 +329,7 @@ Kirie runs AIRI pages in CEF inside Godot. AIRI host services in Kirie are C#. T
 - Most updates download megabytes instead of a full installer of 0.7 GB.
 - A bad core rolls back without user action, and a revoked release leaves all clients at the next check.
 - Developers must manage the host API integer. The CI hash guard catches a forgotten increase.
-- Each host needs its own client. The conformance test vectors keep the clients the same.
+- Each host needs its own client. The conformance cases keep the clients the same.
 - Version 1 has no packs or binary patches. Large changed assets download whole.
 
 ## Decided on 2026-10-23

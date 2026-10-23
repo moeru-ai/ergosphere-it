@@ -1,5 +1,5 @@
-export { createDevServer } from './dev-server'
+export { createDevServer, ReleaseRequestError } from './dev-server'
 export type { ClientReport, DevServer, DevServerOptions, ReleaseChange, ReleaseEntry } from './dev-server'
 export { MemoryTree } from './tree'
-export { createTreeServer, NO_FAULTS } from './tree-server'
-export type { Faults, RequestRecord, RouteHandler, TreeServer, TreeServerOptions } from './tree-server'
+export { createTreeApp, createTreeServer, listen, NO_FAULTS } from './tree-server'
+export type { Faults, ListenOptions, RequestRecord, TreeAppOptions, TreeServer, TreeServerOptions } from './tree-server'

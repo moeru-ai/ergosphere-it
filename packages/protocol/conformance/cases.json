@@ -5,7 +5,7 @@
       "publicKey": "MCowBQYDK2VwAyEAozeq+nTTpK7tLalY+wuh3B4cDTnP3+evtn1GQ3sQrbc="
     }
   ],
-  "vectors": [
+  "cases": [
     {
       "kind": "core-manifest",
       "name": "core: valid manifest",
@@ -48,8 +48,8 @@
       },
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":43,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "expect": {
-        "ok": false,
-        "code": "invalid-signature"
+        "code": "invalid-signature",
+        "ok": false
       },
       "kind": "core-manifest",
       "name": "core: changed byte after signing",
@@ -65,8 +65,8 @@
       },
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "expect": {
-        "ok": false,
-        "code": "invalid-signature"
+        "code": "invalid-signature",
+        "ok": false
       },
       "kind": "core-manifest",
       "name": "core: signature is not base64",
@@ -85,8 +85,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "untrusted-key"
+        "code": "untrusted-key",
+        "ok": false
       }
     },
     {
@@ -102,8 +102,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "invalid-signature"
+        "code": "invalid-signature",
+        "ok": false
       }
     },
     {
@@ -116,8 +116,8 @@
       },
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "expect": {
-        "ok": false,
-        "code": "untrusted-key"
+        "code": "untrusted-key",
+        "ok": false
       },
       "kind": "core-manifest",
       "name": "core: missing keyId",
@@ -133,8 +133,8 @@
       },
       "document": "{\"schema\":1,",
       "expect": {
-        "ok": false,
-        "code": "invalid-json"
+        "code": "invalid-json",
+        "ok": false
       },
       "kind": "core-manifest",
       "name": "core: not JSON",
@@ -153,8 +153,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "invalid-schema"
+        "code": "invalid-schema",
+        "ok": false
       }
     },
     {
@@ -170,8 +170,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "invalid-schema"
+        "code": "invalid-schema",
+        "ok": false
       }
     },
     {
@@ -187,8 +187,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "invalid-schema"
+        "code": "invalid-schema",
+        "ok": false
       }
     },
     {
@@ -204,8 +204,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "unsafe-path"
+        "code": "unsafe-path",
+        "ok": false
       }
     },
     {
@@ -221,8 +221,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "unsafe-path"
+        "code": "unsafe-path",
+        "ok": false
       }
     },
     {
@@ -238,8 +238,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "unsafe-path"
+        "code": "unsafe-path",
+        "ok": false
       }
     },
     {
@@ -255,8 +255,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "unsafe-path"
+        "code": "unsafe-path",
+        "ok": false
       }
     },
     {
@@ -272,8 +272,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "unsafe-path"
+        "code": "unsafe-path",
+        "ok": false
       }
     },
     {
@@ -289,8 +289,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "unsafe-path"
+        "code": "unsafe-path",
+        "ok": false
       }
     },
     {
@@ -306,8 +306,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "duplicate-path"
+        "code": "duplicate-path",
+        "ok": false
       }
     },
     {
@@ -323,8 +323,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "core-mismatch"
+        "code": "core-mismatch",
+        "ok": false
       }
     },
     {
@@ -340,8 +340,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "core-mismatch"
+        "code": "core-mismatch",
+        "ok": false
       }
     },
     {
@@ -357,8 +357,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "platform-mismatch"
+        "code": "platform-mismatch",
+        "ok": false
       }
     },
     {
@@ -374,8 +374,8 @@
         "shellHostApi": 2
       },
       "expect": {
-        "ok": false,
-        "code": "host-api-incompatible"
+        "code": "host-api-incompatible",
+        "ok": false
       }
     },
     {
@@ -391,8 +391,8 @@
         "shellHostApi": 5
       },
       "expect": {
-        "ok": false,
-        "code": "host-api-incompatible"
+        "code": "host-api-incompatible",
+        "ok": false
       }
     },
     {
@@ -411,8 +411,8 @@
         ]
       },
       "expect": {
-        "ok": false,
-        "code": "revoked"
+        "code": "revoked",
+        "ok": false
       }
     },
     {
@@ -431,8 +431,8 @@
         ]
       },
       "expect": {
-        "ok": false,
-        "code": "blocked"
+        "code": "blocked",
+        "ok": false
       }
     },
     {
@@ -448,8 +448,8 @@
         "shellHostApi": 3
       },
       "expect": {
-        "ok": false,
-        "code": "not-newer"
+        "code": "not-newer",
+        "ok": false
       }
     },
     {
@@ -466,8 +466,8 @@
         "currentSeq": 50
       },
       "expect": {
-        "ok": false,
-        "code": "not-newer"
+        "code": "not-newer",
+        "ok": false
       }
     },
     {
@@ -482,8 +482,8 @@
     {
       "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI-0.13.0-arm64-mac.zip\"}],\"builtinCoreSeq\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":9,\"kind\":\"shell\",\"product\":\"airi\",\"schema\":1,\"seq\":7,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
       "expect": {
-        "ok": false,
-        "code": "invalid-signature"
+        "code": "invalid-signature",
+        "ok": false
       },
       "kind": "shell-manifest",
       "name": "shell: changed byte after signing",
@@ -531,8 +531,8 @@
         "now": "2026-10-24T00:00:00.000Z"
       },
       "expect": {
-        "ok": false,
-        "code": "pointer-mismatch"
+        "code": "pointer-mismatch",
+        "ok": false
       }
     },
     {
@@ -547,8 +547,8 @@
         "now": "2026-10-24T00:00:00.000Z"
       },
       "expect": {
-        "ok": false,
-        "code": "pointer-mismatch"
+        "code": "pointer-mismatch",
+        "ok": false
       }
     },
     {
@@ -563,8 +563,8 @@
         "now": "2026-10-24T00:00:00.000Z"
       },
       "expect": {
-        "ok": false,
-        "code": "pointer-mismatch"
+        "code": "pointer-mismatch",
+        "ok": false
       }
     },
     {
@@ -579,8 +579,8 @@
         "now": "2026-11-07T00:00:00.000Z"
       },
       "expect": {
-        "ok": false,
-        "code": "pointer-expired"
+        "code": "pointer-expired",
+        "ok": false
       }
     },
     {
@@ -596,8 +596,8 @@
         "now": "2026-10-24T00:00:00.000Z"
       },
       "expect": {
-        "ok": false,
-        "code": "pointer-replayed"
+        "code": "pointer-replayed",
+        "ok": false
       }
     },
     {
@@ -628,8 +628,8 @@
         "now": "2026-10-21T00:00:00.000Z"
       },
       "expect": {
-        "ok": false,
-        "code": "invalid-schema"
+        "code": "invalid-schema",
+        "ok": false
       }
     },
     {
@@ -644,8 +644,8 @@
         "now": "2026-10-24T00:00:00.000Z"
       },
       "expect": {
-        "ok": false,
-        "code": "invalid-schema"
+        "code": "invalid-schema",
+        "ok": false
       }
     },
     {

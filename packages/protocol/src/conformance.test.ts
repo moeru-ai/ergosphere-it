@@ -1,16 +1,16 @@
+import type { Expectation } from './conformance'
 import type { ErgosphereError, ErrorCode } from './errors'
-import type { Expectation } from './vectors'
 
 import { describe, expect, it } from 'vitest'
 
+import { conformanceSuite } from './conformance'
 import { CandidateError, DocumentError, PointerError, SignatureError } from './errors'
 import { isSafeManifestPath } from './path'
 import { rolloutBucket } from './rollout'
-import { conformanceVectors } from './vectors'
 import { checkCoreCandidate, isHostApiCompatible, verifyCoreManifest, verifyPointer, verifyShellManifest } from './verify'
 
 const encode = (text: string) => new TextEncoder().encode(text)
-const { trustedKeys, vectors } = conformanceVectors
+const { cases, trustedKeys } = conformanceSuite
 
 const classOf: Record<ErrorCode, new (...args: never[]) => ErgosphereError> = {
   'blocked': CandidateError,
@@ -43,37 +43,37 @@ async function expectOutcome(run: () => Promise<unknown>, expectation: Expectati
   expect(error).toMatchObject({ code: expectation.code })
 }
 
-describe('conformance vectors', () => {
-  it('has vectors for every kind', () => {
-    expect(new Set(vectors.map(vector => vector.kind))).toEqual(new Set(['core-manifest', 'host-api', 'path', 'pointer', 'rollout', 'shell-manifest']))
+describe('conformance cases', () => {
+  it('has cases for every kind', () => {
+    expect(new Set(cases.map(testCase => testCase.kind))).toEqual(new Set(['core-manifest', 'host-api', 'path', 'pointer', 'rollout', 'shell-manifest']))
   })
 
-  for (const vector of vectors) {
-    it(vector.name, async () => {
-      switch (vector.kind) {
+  for (const testCase of cases) {
+    it(testCase.name, async () => {
+      switch (testCase.kind) {
         case 'core-manifest':
           await expectOutcome(async () => {
-            const manifest = await verifyCoreManifest(encode(vector.document), vector.signature, trustedKeys)
-            if (vector.context)
-              checkCoreCandidate(manifest, vector.context)
+            const manifest = await verifyCoreManifest(encode(testCase.document), testCase.signature, trustedKeys)
+            if (testCase.context)
+              checkCoreCandidate(manifest, testCase.context)
 
             return manifest
-          }, vector.expect)
+          }, testCase.expect)
           break
         case 'host-api':
-          expect(isHostApiCompatible(vector.shellHostApi, vector.range)).toBe(vector.expect)
+          expect(isHostApiCompatible(testCase.shellHostApi, testCase.range)).toBe(testCase.expect)
           break
         case 'path':
-          expect(isSafeManifestPath(vector.path)).toBe(vector.expect)
+          expect(isSafeManifestPath(testCase.path)).toBe(testCase.expect)
           break
         case 'pointer':
-          await expectOutcome(() => verifyPointer(encode(vector.document), vector.signature, trustedKeys, { ...vector.context, now: new Date(vector.context.now) }), vector.expect)
+          await expectOutcome(() => verifyPointer(encode(testCase.document), testCase.signature, trustedKeys, { ...testCase.context, now: new Date(testCase.context.now) }), testCase.expect)
           break
         case 'rollout':
-          expect(await rolloutBucket(vector.salt, vector.installId)).toBe(vector.bucket)
+          expect(await rolloutBucket(testCase.salt, testCase.installId)).toBe(testCase.bucket)
           break
         case 'shell-manifest':
-          await expectOutcome(() => verifyShellManifest(encode(vector.document), vector.signature, trustedKeys), vector.expect)
+          await expectOutcome(() => verifyShellManifest(encode(testCase.document), testCase.signature, trustedKeys), testCase.expect)
           break
       }
     })
