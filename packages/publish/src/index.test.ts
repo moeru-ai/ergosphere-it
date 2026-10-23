@@ -1,9 +1,9 @@
 import type { SigningKey, TrustedKey } from '@ergosphere-it/protocol'
 
-import { contentHash, createKeyPair, verifyCoreManifest, verifyPointer } from '@ergosphere-it/protocol'
+import { checkShellCandidate, contentHash, createKeyPair, verifyCoreManifest, verifyPointer, verifyShellManifest } from '@ergosphere-it/protocol'
 import { beforeAll, describe, expect, it } from 'vitest'
 
-import { buildCoreRelease, buildPointer, createSeq, reissuePointer, uploadStages } from './index'
+import { buildCoreRelease, buildPointer, buildShellRelease, createSeq, feedFileName, reissuePointer, uploadStages } from './index'
 
 const encode = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
@@ -98,5 +98,50 @@ describe('createSeq', () => {
   it('uses the clock, or goes above a minimum when the clock is behind it', () => {
     expect(createSeq(0, 1_000)).toBe(1_000)
     expect(createSeq(5_000, 1_000)).toBe(5_001)
+  })
+})
+
+describe('buildShellRelease', () => {
+  const artifacts = [
+    { platform: 'darwin-arm64', sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-0.13.0-arm64-mac.zip' },
+    { platform: 'win32-x64', sha512: 'd2lu', size: 200, url: 'https://downloads.test/AIRI-0.13.0-setup.exe' },
+  ]
+
+  it('builds a signed manifest and one electron-updater feed per platform', async () => {
+    const built = await buildShellRelease({ artifacts, builtinCoreSeq: 100, createdAt: '2026-10-24T00:00:00.000Z', host: 'electron', hostApi: 2, product: 'app', seq: 7, signingKey, version: '0.13.0' })
+    const [manifest, signature] = built.manifestFiles
+    const verified = await verifyShellManifest(manifest!.bytes, decode(signature!.bytes), [trustedKey])
+
+    expect(manifest!.key).toBe('shells/7/shell.json')
+    expect(checkShellCandidate(verified, { host: 'electron', platform: 'win32-x64', product: 'app', shellSeq: 6 })).toMatchObject({ url: artifacts[1]!.url })
+    expect(built.feeds.map(feed => feed.key)).toEqual(['shells/7/feeds/darwin-arm64/latest-mac.yml', 'shells/7/feeds/win32-x64/latest.yml'])
+    expect(decode(built.feeds[0]!.bytes)).toBe([
+      'version: "0.13.0"',
+      'files:',
+      '  - url: "https://downloads.test/AIRI-0.13.0-arm64-mac.zip"',
+      '    sha512: "bWFj"',
+      '    size: 100',
+      'path: "https://downloads.test/AIRI-0.13.0-arm64-mac.zip"',
+      'sha512: "bWFj"',
+      'releaseDate: "2026-10-24T00:00:00.000Z"',
+      '',
+    ].join('\n'))
+  })
+
+  it('rejects a relative installer URL', async () => {
+    await expect(buildShellRelease({ artifacts: [{ ...artifacts[0]!, url: 'AIRI.zip' }], builtinCoreSeq: 1, host: 'electron', hostApi: 1, product: 'app', signingKey, version: '1' })).rejects.toThrow('not absolute')
+  })
+
+  it('names the feed file that electron-updater reads on each platform', () => {
+    expect(['darwin-x64', 'win32-arm64', 'linux-x64', 'linux-arm64'].map(feedFileName)).toEqual(['latest-mac.yml', 'latest.yml', 'latest-linux.yml', 'latest-linux-arm64.yml'])
+  })
+
+  it('names the newest shell in the pointer, keeps it when signed again, and uploads shells before pointers', async () => {
+    const shell = await buildShellRelease({ artifacts, builtinCoreSeq: 100, host: 'electron', hostApi: 2, product: 'app', seq: 7, signingKey, version: '0.13.0' })
+    const pointer = await buildPointer({ cadence: 'realtime', channel: 'canary', product: 'app', shell: { seq: 7 }, signingKey })
+
+    expect(pointer.pointer.shell).toEqual({ seq: 7 })
+    expect((await reissuePointer(pointer.pointer, signingKey)).pointer.shell).toEqual({ seq: 7 })
+    expect(uploadStages([shell], [pointer]).map(stage => stage.map(file => file.key.split('/')[0]))).toEqual([['shells', 'shells', 'shells', 'shells'], ['pointers', 'pointers']])
   })
 })

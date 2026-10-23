@@ -138,6 +138,11 @@ The manifest is canonical JSON (sorted keys, no extra spaces). The signature cov
 
 `shell.json` has the same envelope. It lists the installers for each platform with `sha512` and size. It also records `hostApi`, the builtin core `seq`, and the CI input hash. Clients use it to decide that a core needs a newer shell. Host installers keep their own checks: electron-updater checks `sha512` from the generated yml.
 
+- Installer URLs are absolute. Installers can live anywhere, for example on GitHub Releases.
+- Each shell release has one electron-updater feed per platform at `shells/<seq>/feeds/<platform>/`, with one file. One feed per platform keeps an install from reading the installer of another architecture.
+- A feed is not signed. After the platform installer downloads a file, the shell checks it against the `sha512` of the signed manifest before it installs. A mismatch fails the update, and the next attempt waits longer, as a failed core download does.
+- A pointer names the newest shell with `shell.seq`. An install whose shell is older downloads the new shell before any core, because the new shell ships a newer builtin core.
+
 ### Pointer
 
 ```json
@@ -189,10 +194,15 @@ boot.json                         # boot attempts and last healthy seq
 2. Fetch the manifest and check its signature, `seq`, host API, and platform.
 3. Check every file path. Reject absolute paths, `..` segments, backslashes, drive letters, and duplicate paths. The PoC and `ota-lab` did not do this check during staging.
 4. For each file, look for its object in this order: the local content store, the running core, the builtin core, and then the network. The SDK hashes every object before it uses it, also objects that are already on disk. The PoC skipped this check for existing objects.
-5. Write objects as `.part` files, hash them, then rename them. Downloads stream to disk, use a timeout, and resume with HTTP Range when the server supports it.
+5. Write objects as `.part` files, hash them, then rename them. Downloads stream to disk, run a few at a time, and stop when no bytes arrive for a while.
+   - A failed download keeps its `.part` file. The next attempt resumes it with `Range: bytes=<size>-`. A server that answers 200 instead of 206 sends the whole file again.
+   - Network errors, stalls, and server errors get a few retries with exponential backoff in one stage. Other 4xx answers fail the stage at once.
+   - A complete file whose hash does not match is downloaded once more from the start, because a resumed file can hold bad bytes of an earlier attempt. A second mismatch fails the stage.
+   - A failed stage never blocks the core. A download failure says nothing about the release. The next check waits longer after each failure, from 30 seconds up to one hour, and reports `retry-later` until then.
 6. Build `cores/<seq>/` in a temporary directory, with copy-on-write clones when the file system supports them. Rename the directory into place.
 7. Set `staged` to the new `seq`.
-8. Delete cores and objects that `current`, `previous`, `staged`, and builtin no longer use. The PoC never deleted them.
+8. Delete cores and objects that `current`, `previous`, `staged`, `deferred`, and builtin no longer use. The PoC never deleted them.
+   - Never delete the core that the running process booted. A reload moves `current` and `previous`, but the main code of the booted core still runs, and the host can still load files from its directory. Examples are the preload script and lazy chunks. The next boot releases it.
 
 LobeHub also uses packs with zstd frames, HTTP Range reads, and binary patches. Version 1 of this protocol does not. The design leaves room for a `packs` field in a later schema.
 
@@ -281,6 +291,7 @@ A verifier returns the verified document, or fails with one reason code. The Typ
 | `pointer-expired` | The current time is after the pointer `expiresAt`. |
 | `pointer-mismatch` | The pointer is for another product, channel, or cadence than the client asked for. A valid signature proves who signed a document, not which document it is. |
 | `core-mismatch` | The core is for another product or host. |
+| `shell-mismatch` | The shell is for another product or host. |
 
 ### Project shape
 
@@ -303,7 +314,7 @@ The project lives in its own repository, `moeru-ai/ergosphere-it`. Packages that
 | `@ergosphere-it/client` | The update state machine for TypeScript hosts. The host injects the network, file system, and clock. `@ergosphere-it/client/node` gives a Node.js file system. |
 | `@ergosphere-it/web` | The page side: health signals and update status. The host injects the transport. |
 | `@ergosphere-it/publish` | Builds signed core releases and pointers as files in memory. It does no I/O. |
-| `@ergosphere-it/driver-electron` | The Electron driver: `Shell` boots the core in the shell entry, and `getCore()` gives the core its updater. Shell updates through electron-updater come later. |
+| `@ergosphere-it/driver-electron` | The Electron driver: `Shell` boots the core in the shell entry, and `getCore()` gives the core its updater. `/electron-updater` installs new shells with the electron-updater instance of the app. |
 | `@ergosphere-it/server` | Tree server in memory with fault injection and a release console, for tests and demos |
 
 Version 1 has only the Electron driver. A Kirie driver (`driver-kirie`, with a C# client) and a Tauri driver (`driver-tauri`) can follow. They use the same protocol and pass the same conformance cases.

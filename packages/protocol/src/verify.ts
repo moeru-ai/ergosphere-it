@@ -1,6 +1,6 @@
 import type { GenericSchema, InferOutput } from 'valibot'
 
-import type { CoreManifest, HostApiRange, Pointer, ShellManifest, TrustedKey } from './schema'
+import type { CoreManifest, HostApiRange, Pointer, ShellArtifact, ShellManifest, TrustedKey } from './schema'
 
 import { safeParse, ValiError } from 'valibot'
 
@@ -37,6 +37,18 @@ export interface PointerContext {
   product: string
 }
 
+/** Verifies the signature and schema of a shell manifest. Throws an `ErgosphereError` subclass. */
+export interface ShellCandidateContext {
+  /** The host of this install, for example `electron`. */
+  host: string
+  /** The platform of this install, for example `darwin-arm64`. A shell without an installer for it is rejected. */
+  platform: string
+  /** The product of this install. A shell of another product is rejected even when its signature is valid. */
+  product: string
+  /** The `seq` of the installed shell. */
+  shellSeq: number
+}
+
 /**
  * Throws a `CandidateError` when this install cannot take a verified core.
  *
@@ -59,6 +71,21 @@ export function checkCoreCandidate(manifest: CoreManifest, context: CoreCandidat
   const floor = Math.max(context.builtinSeq, context.currentSeq ?? 0)
   if (seq <= floor)
     throw new CandidateError('not-newer', `Core ${seq} is not newer than ${floor}.`, seq)
+}
+
+/** Returns the installer of a verified shell for this install, or throws a `CandidateError`. */
+export function checkShellCandidate(manifest: ShellManifest, context: ShellCandidateContext): ShellArtifact {
+  const { seq } = manifest
+  if (manifest.product !== context.product || manifest.host !== context.host)
+    throw new CandidateError('shell-mismatch', `Shell ${seq} is for ${manifest.product} on ${manifest.host}, and this install is ${context.product} on ${context.host}.`, seq)
+  if (seq <= context.shellSeq)
+    throw new CandidateError('not-newer', `Shell ${seq} is not newer than ${context.shellSeq}.`, seq)
+
+  const artifact = manifest.artifacts.find(entry => entry.platform === context.platform)
+  if (!artifact)
+    throw new CandidateError('platform-mismatch', `Shell ${seq} has no installer for ${context.platform}.`, seq)
+
+  return artifact
 }
 
 /** A shell accepts a core when its host API is inside the core range. */
@@ -92,7 +119,6 @@ export async function verifyPointer(bytes: Uint8Array<ArrayBuffer>, signature: s
   return pointer
 }
 
-/** Verifies the signature and schema of a shell manifest. Throws an `ErgosphereError` subclass. */
 export async function verifyShellManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<ShellManifest> {
   return verifySignedDocument(bytes, signature, trustedKeys, shellManifestSchema)
 }

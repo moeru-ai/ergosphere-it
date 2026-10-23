@@ -47,6 +47,16 @@ describe('createTreeApp', () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(90)
   })
 
+  it('serves a range, and answers 416 for a range after the end', async () => {
+    const app = setup()
+    const partial = await app.request('/objects/sha256/ab/object', { headers: { Range: 'bytes=1000-' } })
+
+    expect(partial.status).toBe(206)
+    expect(partial.headers.get('content-range')).toBe('bytes 1000-4095/4096')
+    expect((await partial.arrayBuffer()).byteLength).toBe(3096)
+    expect((await app.request('/objects/sha256/ab/object', { headers: { Range: 'bytes=4096-' } })).status).toBe(416)
+  })
+
   it('answers 404 for a key that the tree does not hold', async () => {
     expect((await setup().request('/objects/sha256/cd/missing')).status).toBe(404)
   })
@@ -59,6 +69,14 @@ describe('createTreeServer', () => {
     const server = await createTreeServer({ faults: () => ({ ...NO_FAULTS, dropRate: 100 }), tree })
     closers.push(server.close)
 
-    await expect(fetch(`${server.url}/objects/sha256/ab/object`).then(response => response.arrayBuffer())).rejects.toThrow()
+    const response = await fetch(`${server.url}/objects/sha256/ab/object`)
+    const reader = response.body!.getReader()
+    let received = 0
+    await expect((async () => {
+      for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read())
+        received += chunk.value.byteLength
+    })()).rejects.toThrow()
+    // Half of the bytes arrive before the connection breaks, so a client can resume after them.
+    expect(received).toBe(2048)
   })
 })

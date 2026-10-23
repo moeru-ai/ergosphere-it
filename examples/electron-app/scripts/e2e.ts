@@ -8,10 +8,13 @@
 //   5. a pointer that revokes the running core sends the app back to the previous core
 //   6. a core for a newer host API is not taken
 //   7. the server goes back to a backup: the app ignores the old pointer, never goes back, and takes the next release
+//   8. after page reloads, a page that never reports healthy rolls back, and the earlier page still loads its preload
+//   9. a download breaks in the middle, and the next request resumes it with a range
+//  10. a shell update: an installer that does not match the signed manifest is refused, and a good one installs
 //
-// Usage: node scripts/e2e.ts [--keep] [--show] [--pause <ms>] [--capture <dir>]
+// Usage: node scripts/e2e.ts [--asar] [--keep] [--show] [--pause <ms>] [--capture <dir>]
 //
-// --show shows the window. --pause waits after each step, so a person can watch. --capture saves a screenshot of the
+// --asar packs the installed app into app.asar, as installers do. --show shows the window. --pause waits after each step, so a person can watch. --capture saves a screenshot of the
 // window after each page loads.
 
 import type { RequestRecord, TreeServer } from '@ergosphere-it/server'
@@ -25,16 +28,18 @@ import { argv, exit, platform } from 'node:process'
 import { parseArgs } from 'node:util'
 
 import { createSeq } from '@ergosphere-it/publish'
-import { createTreeServer } from '@ergosphere-it/server'
+import { createTreeApp, listen } from '@ergosphere-it/server'
 import { Format, setGlobalFormat, useLogg } from '@guiiai/logg'
 import { errorMessageFrom } from '@moeru/std/error'
 import { delay } from 'es-toolkit'
+import { Hono } from 'hono'
 
 import { findCheck, findEvent, launchApp, Workspace } from './lib.ts'
 
 const { values: options } = parseArgs({
   args: argv.slice(2),
   options: {
+    asar: { default: false, type: 'boolean' },
     capture: { type: 'string' },
     keep: { default: false, type: 'boolean' },
     pause: { default: '0', type: 'string' },
@@ -79,13 +84,27 @@ const lastIndex = () => readEvents().length
 
 let server: TreeServer | undefined
 try {
-  workspace = await Workspace.create(work)
+  workspace = await Workspace.create(work, { asar: options.asar })
   const builtin = await workspace.publish(1, { label: 'v1', mainTag: '1' }, { builtin: true })
   await workspace.point(undefined)
-  server = await createTreeServer({ onRequest: request => requests.push(request), tree: workspace.tree })
-  log.withFields({ platform, server: server.url, work }).log('started')
+  // Paths whose next request breaks after half of the file, to test a resumed download.
+  const interrupt = new Set<string>()
+  const tree = workspace.tree
+  const app = new Hono()
+    .use(async (c, next) => {
+      const file = interrupt.delete(c.req.path) ? tree.get(c.req.path.slice(1)) : undefined
+      if (!file)
+        return next()
 
-  stopApp = await launchApp(workspace, { baseUrl: server.url, capture: options.capture, show: options.show })
+      requests.push({ bytes: file.bytes.byteLength / 2, fault: 'interrupted', method: c.req.method, path: c.req.path, status: 200 })
+
+      return new Response(halfThenBreak(file.bytes), { headers: { ...file.headers, 'Content-Length': String(file.bytes.byteLength) } })
+    })
+    .route('/', createTreeApp({ onRequest: request => requests.push(request), tree }))
+  server = await listen(app)
+  log.withFields({ asar: options.asar, platform, server: server.url, work }).log('started')
+
+  stopApp = await launchApp(workspace, { baseUrl: server.url, capture: options.capture, e2eInstaller: true, show: options.show })
   const first = await waitFor('builtin page v1', list => findEvent(list, 'page-mounted', e => e.label === 'v1'))
   await step('0. boots the builtin core', true, `pid ${first.pid}`)
 
@@ -176,6 +195,55 @@ try {
     Boolean(replayed) && behind.current === lost && !wentBack && fix > lost && fixed.seq === fix,
     `ignored the old pointer, reported server-behind (app ${behind.current} > server ${behind.seq}), took ${fix}`,
   )
+
+  // 8. page reloads move current and previous away from the booted core, then a page never reports healthy
+  mark = lastIndex()
+  for (const label of ['v10', 'v11']) {
+    const seq = createSeq()
+    await workspace.publish(seq, { label, mainTag: '2' })
+    await workspace.point(seq)
+    await waitFor(`page ${label}`, list => findEvent(since(mark)(list), 'page-mounted', e => e.label === label))
+  }
+  mark = lastIndex()
+  const broken = createSeq()
+  await workspace.publish(broken, { label: 'v12-broken', mainTag: '2', noMount: true })
+  await workspace.point(broken)
+  await waitFor('rollback of v12', list => findEvent(since(mark)(list), 'rollback', e => e.from === broken))
+  // The page reports through its preload script, so a mounted page proves that the preload of the booted core is there.
+  const remounted = await waitFor('page v11 after rollback', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v11'))
+  const restartedAgain = since(mark)(readEvents()).some(e => e.type === 'shell-start')
+  await step('8. after page reloads, an unhealthy page rolls back to a working page', !restartedAgain, `page v11 mounted again in pid ${remounted.pid}`)
+
+  // 9. a download breaks in the middle and resumes
+  mark = lastIndex()
+  const resumed = createSeq()
+  const release = await workspace.publish(resumed, { assetMb: 2, label: 'v13', mainTag: '2' })
+  const asset = release.manifest.components.flatMap(component => component.files).find(file => file.path.endsWith('blob.bin'))!
+  const assetPath = `/objects/sha256/${asset.sha256.slice(0, 2)}/${asset.sha256}`
+  interrupt.add(assetPath)
+  const before = requests.length
+  await workspace.point(resumed)
+  await waitFor('page v13', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v13'))
+  const assetRequests = requests.slice(before).filter(request => request.path === assetPath)
+  await step(
+    '9. a broken download resumes with a range',
+    assetRequests.length === 2 && assetRequests[0]!.fault === 'interrupted' && assetRequests[1]!.status === 206 && assetRequests[1]!.range === `bytes=${asset.size / 2}-`,
+    assetRequests.map(request => `${request.status}${request.range ? ` ${request.range}` : ''}${request.fault ? ` ${request.fault}` : ''}`).join(', '),
+  )
+
+  // 10. a shell update
+  mark = lastIndex()
+  const installer = new TextEncoder().encode('example shell installer') as Uint8Array<ArrayBuffer>
+  await workspace.publishShell(2, { baseUrl: server.url, bytes: installer, sha512: 'AAAA' })
+  await workspace.point(resumed, [], { shell: 2 })
+  const refused = await waitFor('refused installer', list => findCheck(since(mark)(list), 'failed', result => result.detail.includes('sha512')))
+  const installedTooEarly = since(mark)(readEvents()).some(e => e.type === 'install')
+
+  mark = lastIndex()
+  await workspace.publishShell(3, { baseUrl: server.url, bytes: installer })
+  await workspace.point(resumed, [], { shell: 3 })
+  const install = await waitFor('install of shell 3', list => findEvent(since(mark)(list), 'install', e => e.seq === 3))
+  await step('10. a shell update refuses a wrong installer, then installs a good one', Boolean(refused) && !installedTooEarly && install.seq === 3, `refused shell 2 (${refused.detail.split(' ').slice(-2).join(' ')}), installed shell 3`)
 }
 catch (error) {
   await step('run', false, errorMessageFrom(error) ?? 'unknown error')
@@ -183,7 +251,6 @@ catch (error) {
 finally {
   stopApp?.()
   await server?.close()
-  workspace?.cleanup()
   if (options.keep)
     log.log(`kept ${work}`)
   else
@@ -191,5 +258,23 @@ finally {
 }
 
 const failed = results.filter(result => !result.ok)
-log.log(`${results.length - failed.length}/${results.length} steps passed on ${platform}`)
+log.log(`${results.length - failed.length}/${results.length} steps passed on ${platform}${options.asar ? ' with app.asar' : ''}`)
 exit(failed.length ? 1 : 0)
+
+/** Sends the first half of a file, then fails, as a dropped connection does. */
+function halfThenBreak(bytes: Uint8Array<ArrayBuffer>): ReadableStream<Uint8Array<ArrayBuffer>> {
+  let pulls = 0
+
+  return new ReadableStream({
+    async pull(controller) {
+      if (pulls++ === 0) {
+        controller.enqueue(bytes.subarray(0, bytes.byteLength / 2))
+
+        return
+      }
+      // Wait, so the first half reaches the client before the connection breaks.
+      await delay(200)
+      controller.error(new Error('interrupted by the e2e test'))
+    },
+  })
+}

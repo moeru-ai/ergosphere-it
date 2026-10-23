@@ -15,9 +15,11 @@
     "@ergosphere-it/driver-electron": "workspace:*",
     "@guiiai/logg": "catalog:",
     "@moeru/std": "catalog:",
+    "electron-updater": "catalog:",
     "vue": "catalog:"
   },
   "devDependencies": {
+    "@electron/asar": "catalog:",
     "@ergosphere-it/protocol": "workspace:*",
     "@ergosphere-it/publish": "workspace:*",
     "@ergosphere-it/server": "workspace:*",
@@ -26,6 +28,7 @@
     "electron": "catalog:",
     "electron-vite": "catalog:",
     "es-toolkit": "catalog:",
+    "hono": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vue-tsc": "catalog:"

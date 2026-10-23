@@ -1,13 +1,18 @@
 // The shell entry of the example app. It only boots the selected core.
 // Everything else, including windows, lives in the core and can be updated over the air.
 
+import type { ShellInstaller } from '@ergosphere-it/driver-electron/shell'
+
 import type { ExampleEvent } from '../events'
 
-import { appendFileSync, readFileSync } from 'node:fs'
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { argv, env, pid } from 'node:process'
 import { fileURLToPath } from 'node:url'
 
+import electronUpdater from 'electron-updater'
+
+import { createElectronUpdaterInstaller } from '@ergosphere-it/driver-electron/electron-updater'
 import { Shell } from '@ergosphere-it/driver-electron/shell'
 import { Format, LogLevel, setGlobalFormat, setGlobalHookPostLog, setGlobalLogLevel, useLogg } from '@guiiai/logg'
 import { app } from 'electron'
@@ -47,8 +52,11 @@ async function start(): Promise<void> {
     entryUrl: import.meta.url,
     healthTimeoutMs: Number(env.ERGOSPHERE_HEALTH_MS ?? 15_000),
     hostApi: HOST_API,
+    // Full updates of the shell go through electron-updater, the installer that the app already has.
+    installer: env.ERGOSPHERE_E2E_INSTALLER ? e2eInstaller() : createElectronUpdaterInstaller(electronUpdater.autoUpdater),
     onEvent: logEvent,
     product: 'example',
+    shellSeq: __EXAMPLE_SHELL_SEQ__,
     trustedKeys: [__EXAMPLE_TRUSTED_KEY__],
   }).start()
 }
@@ -57,3 +65,23 @@ start().catch((error) => {
   log.withError(error).error('The shell could not start the builtin core.')
   app.exit(1)
 })
+
+/**
+ * The installer of the e2e test. An app that is not packaged cannot install with electron-updater, so this installer
+ * downloads the file and quits on install. The shell still checks the file against the signed manifest.
+ */
+function e2eInstaller(): ShellInstaller {
+  return {
+    async download(update, onProgress) {
+      const bytes = new Uint8Array(await (await fetch(update.url)).arrayBuffer())
+      onProgress(bytes.byteLength, update.size)
+      const file = join(app.getPath('temp'), `ergosphere-e2e-${pid}-${update.version}.zip`)
+      writeFileSync(file, bytes)
+
+      return file
+    },
+    install() {
+      app.exit(0)
+    },
+  }
+}

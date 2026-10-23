@@ -1,5 +1,7 @@
 <script setup lang="ts">
-const props = defineProps<{ activation: 'reload' | 'restart', version: string }>()
+import type { Activation } from '@ergosphere-it/driver-electron/core'
+
+const props = defineProps<{ activation: Activation, version: string }>()
 const emit = defineEmits<{ apply: [], later: [] }>()
 </script>
 
@@ -10,15 +12,18 @@ const emit = defineEmits<{ apply: [], later: [] }>()
       <p v-if="props.activation === 'reload'">
         Only the page changed. The page reloads, and the app keeps running.
       </p>
-      <p v-else>
+      <p v-else-if="props.activation === 'restart'">
         The app code changed. The app restarts to finish the update.
+      </p>
+      <p v-else>
+        This is a full update. The app quits, installs it, and opens again.
       </p>
       <div class="row">
         <button @click="emit('later')">
           Later
         </button>
         <button class="primary" @click="emit('apply')">
-          {{ props.activation === 'reload' ? 'Reload now' : 'Restart now' }}
+          {{ { install: 'Install now', reload: 'Reload now', restart: 'Restart now' }[props.activation] }}
         </button>
       </div>
     </div>

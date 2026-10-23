@@ -10,7 +10,7 @@ import { Hono } from 'hono'
 export interface Faults {
   /** Limit object downloads to this many bytes per second. 0 means no limit. */
   bytesPerSecond: number
-  /** Percentage of requests whose body fails after the headers. */
+  /** Percentage of requests whose body fails after half of its bytes, as a dropped connection does. */
   dropRate: number
   /** Percentage of requests that get HTTP 500. */
   errorRate: number
@@ -37,6 +37,8 @@ export interface RequestRecord {
   fault?: string
   method: string
   path: string
+  /** The `Range` header of a resumed download. */
+  range?: string
   status: number
 }
 
@@ -62,7 +64,7 @@ export interface TreeServerOptions extends ListenOptions, TreeAppOptions {}
  * Mount it in another Hono app, or run `app.fetch` on any runtime. `createTreeServer` serves it on Node.js.
  */
 export function createTreeApp(options: TreeAppOptions): Hono {
-  return new Hono().get('*', c => serveTree(c.req.method, c.req.path, options))
+  return new Hono().get('*', c => serveTree(c.req.method, c.req.path, c.req.header('range'), options))
 }
 
 /** Serves a tree over HTTP on Node.js. */
@@ -87,9 +89,32 @@ export async function listen(app: Hono, { host = '127.0.0.1', port = 0 }: Listen
   }
 }
 
-async function serveTree(method: string, path: string, options: TreeAppOptions): Promise<Response> {
+/** Sends some bytes, then fails, as a dropped connection does. */
+function dropped(sent: Uint8Array<ArrayBuffer>): ReadableStream<Uint8Array<ArrayBuffer>> {
+  let pulls = 0
+
+  return new ReadableStream({
+    async pull(controller) {
+      if (pulls++ === 0 && sent.byteLength > 0) {
+        controller.enqueue(sent)
+
+        return
+      }
+      // NOTICE:
+      // The error waits, so the sent bytes reach the client first.
+      // controller.error() drops chunks that the reader has not read yet, and @hono/node-server destroys the socket on
+      // a stream error, which drops bytes that are not flushed yet.
+      // Source: WHATWG Streams ReadableStreamDefaultControllerError, and the node-server response writer.
+      // Removal condition: none while the fault must deliver part of a body.
+      await delay(100)
+      controller.error(new Error('dropped by a fault'))
+    },
+  })
+}
+
+async function serveTree(method: string, path: string, range: string | undefined, options: TreeAppOptions): Promise<Response> {
   const faults = options.faults?.() ?? NO_FAULTS
-  const report = (status: number, bytes = 0, fault?: string) => options.onRequest?.({ bytes, fault, method, path, status })
+  const report = (status: number, bytes = 0, fault?: string) => options.onRequest?.({ bytes, fault, method, path, range, status })
 
   if (faults.latencyMs > 0)
     await delay(faults.latencyMs)
@@ -111,33 +136,49 @@ async function serveTree(method: string, path: string, options: TreeAppOptions):
     return new Response(null, { status: 404 })
   }
 
-  const size = file.bytes.byteLength
-  const headers = { ...file.headers, 'Content-Length': String(size) }
-
-  if (Math.random() * 100 < faults.dropRate) {
-    report(200, 0, 'dropped')
-
-    // The headers go out, then the body fails, so the client sees a broken connection.
-    return new Response(new ReadableStream({ start: controller => controller.error(new Error('dropped by a fault')) }), { headers })
-  }
-
   let bytes = file.bytes
   let fault: string | undefined
-  if (faults.tamperObjects && path.startsWith('/objects/') && size > 0) {
+  if (faults.tamperObjects && path.startsWith('/objects/') && bytes.byteLength > 0) {
     bytes = bytes.slice()
     bytes[0] = bytes[0]! ^ 0xFF
     fault = 'tampered'
   }
 
-  if (faults.bytesPerSecond > 0 && path.startsWith('/objects/')) {
-    report(200, size, fault ?? `throttled to ${faults.bytesPerSecond} B/s`)
+  // Serve `bytes=<start>-` and `bytes=<start>-<end>`, so clients can resume a download.
+  let status = 200
+  const headers: Record<string, string> = { ...file.headers, 'Accept-Ranges': 'bytes' }
+  const match = range ? /^bytes=(\d+)-(\d*)$/.exec(range) : null
+  if (match) {
+    const total = bytes.byteLength
+    const start = Number(match[1])
+    const end = match[2] ? Math.min(Number(match[2]), total - 1) : total - 1
+    if (start >= total || start > end) {
+      report(416)
 
-    return new Response(throttled(bytes, faults.bytesPerSecond), { headers })
+      return new Response(null, { headers: { 'Content-Range': `bytes */${total}` }, status: 416 })
+    }
+    bytes = bytes.subarray(start, end + 1)
+    headers['Content-Range'] = `bytes ${start}-${end}/${total}`
+    status = 206
+  }
+  const size = bytes.byteLength
+  headers['Content-Length'] = String(size)
+
+  if (Math.random() * 100 < faults.dropRate) {
+    report(status, Math.floor(size / 2), 'dropped')
+
+    return new Response(dropped(bytes.subarray(0, Math.floor(size / 2))), { headers, status })
   }
 
-  report(200, size, fault)
+  if (faults.bytesPerSecond > 0 && path.startsWith('/objects/')) {
+    report(status, size, fault ?? `throttled to ${faults.bytesPerSecond} B/s`)
 
-  return new Response(bytes, { headers })
+    return new Response(throttled(bytes, faults.bytesPerSecond), { headers, status })
+  }
+
+  report(status, size, fault)
+
+  return new Response(bytes, { headers, status })
 }
 
 /** Sends bytes in chunks, ten chunks per second. */

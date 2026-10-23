@@ -25,6 +25,7 @@ Formats, keys, signatures, and verification. No I/O.
 | `verifyPointer(bytes, signature, trustedKeys, context)` | Returns the verified `Pointer`, or throws. `context` names the product, channel, and cadence that the client asked for. |
 | `verifyShellManifest(bytes, signature, trustedKeys)` | Returns the verified `ShellManifest`, or throws. |
 | `checkCoreCandidate(manifest, context)` | Throws a `CandidateError` when an install cannot take a verified core. |
+| `checkShellCandidate(manifest, context)` | Returns the installer of a verified shell for this platform, or throws a `CandidateError`. |
 | `isInRollout(rollout, installId)`, `isHostApiCompatible(shellHostApi, range)`, `isSafeManifestPath(path)` | Policy helpers. |
 | `contentHash(bytes)` | The content address: SHA-256 as lowercase hex. |
 | `canonicalJson(value)` | The canonical JSON that signatures cover. |
@@ -41,7 +42,7 @@ Internal: Valibot schemas, signature primitives, base64 decoding.
 | `SignatureError` | `invalid-signature`, `untrusted-key` |
 | `DocumentError` | `invalid-json`, `invalid-schema`, `unsafe-path`, `duplicate-path` |
 | `PointerError` | `pointer-expired`, `pointer-replayed`, `pointer-mismatch` |
-| `CandidateError` | `core-mismatch`, `platform-mismatch`, `host-api-incompatible`, `revoked`, `blocked`, `not-newer` |
+| `CandidateError` | `core-mismatch`, `shell-mismatch`, `platform-mismatch`, `host-api-incompatible`, `revoked`, `blocked`, `not-newer` |
 
 ## `@ergosphere-it/publish`
 
@@ -75,7 +76,9 @@ for (const stage of uploadStages([release], [pointer]))
 | `reissuePointer(pointer, signingKey)` | Signs a pointer again with a new issue time, for example after a backup restore. |
 | `uploadStages(releases, pointers)` | Groups files in upload order: objects, then manifests, then pointers. |
 | `createSeq(minimum?)` | The next `seq`: the current time in milliseconds, or one more than `minimum`. |
-| Types: `TreeFile`, `CoreRelease`, `PointerRelease`, `ComponentSpec`, `BuiltinCore` | Data. |
+| `buildShellRelease(input)` | Returns the signed shell manifest, and one electron-updater feed per platform. Installer URLs must be absolute. |
+| `feedFileName(platform)` | The feed file that electron-updater reads on a platform, for example `latest-mac.yml`. |
+| Types: `TreeFile`, `CoreRelease`, `ShellRelease`, `ShellArtifactInput`, `PointerRelease`, `ComponentSpec`, `BuiltinCore` | Data. |
 
 `TreeFile` is `{ key, bytes, headers: { 'Content-Type', 'Cache-Control' }, immutable }`. An immutable file never changes, so a backend can skip it when the key exists.
 
@@ -87,12 +90,12 @@ The update state machine of one install. The host injects the network, file syst
 
 | Export | Purpose |
 | --- | --- |
-| `UpdateClient` | `check()`, `stage(available, { onProgress })`, `boot()`, `markHealthy(selection)`, `activateInPlace(seq)`, `rollback(seq)`, `storedCore(seq)`, `collectGarbage()`, `state()`. |
+| `UpdateClient` | `check()`, `checkShell()`, `stage(available, { onProgress })`, `boot()`, `markHealthy(selection)`, `activateInPlace(seq)`, `rollback(seq)`, `storedCore(seq)`, `collectGarbage()`, `state()`. |
 | `activationFor(running, next)` | `none`, `reload`, or `restart`. |
 | Types: `UpdateClientOptions`, `CheckResult`, `StageResult`, `StageProgress`, `BootSelection`, `UpdateFileSystem`, `Fetch`, `ClientState` | Data. |
 | `@ergosphere-it/client/node` → `createNodeFileSystem()` | File system for Node.js hosts. |
 
-`UpdateClientOptions` needs `product` and `host`. A rejected check returns `{ status: 'rejected', error }` with the `ErgosphereError`. `boot()` records a boot attempt, so it is not a query.
+`UpdateClientOptions` needs `product` and `host`. Download options: `concurrency` (4), `idleTimeoutMs` (30 s), `retries` (3), and `retryDelayMs` (1 s). `UpdateFileSystem` streams large files: `appendFile` writes a `.part` file, and `hashFile` hashes a file without reading it into memory. A check can return `retry-later` after a failed download. A rejected check returns `{ status: 'rejected', error }` with the `ErgosphereError`. `boot()` records a boot attempt, so it is not a query.
 
 Internal: the object store and the state file.
 
@@ -101,12 +104,14 @@ Internal: the object store and the state file.
 | Export | Purpose |
 | --- | --- |
 | `@ergosphere-it/driver-electron/shell` → `Shell` | The shell entry: `new Shell(options).start()` selects a core, prepares it, and loads its main. |
+| `@ergosphere-it/driver-electron/electron-updater` → `createElectronUpdaterInstaller(autoUpdater)` | Wraps the electron-updater instance of the app as the `installer` of `Shell`. |
 | `@ergosphere-it/driver-electron/core` → `getCore()` | The running core: `info`, `resolve(...parts)`, `markHealthy()`, `onReload(listener)`, and `updater` with `check()`, `apply()`, `status`, and `onStatus(listener)`. |
-| Types: `ShellOptions`, `ShellEvent`, `Core`, `CoreInfo`, `Updater`, `UpdateStatus`, `UpdateResult` | Data. |
+| Types: `ShellOptions`, `ShellEvent`, `ShellInstaller`, `Core`, `CoreInfo`, `Updater`, `UpdateStatus`, `UpdateResult`, `Activation` | Data. |
 
 - `UpdateStatus` is for an update notice in the UI.
 - `UpdateResult` is what `updater.check()` and `updater.apply()` return.
 - `ShellEvent` is for logs and tests.
+- With `installer` and `shellSeq`, a check looks for a newer shell first. A ready shell has `activation: 'install'`, and `apply()` installs it.
 
 Internal: module resolution hooks, the global that holds the core.
 

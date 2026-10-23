@@ -1,6 +1,6 @@
 import type { Component, CoreManifest } from '@ergosphere-it/protocol'
 
-import type { Fetch } from './io'
+import type { Fetch, FetchInit } from './io'
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -21,14 +21,34 @@ export type CoreFiles = Partial<Record<Component['type'], Record<string, string>
 /** A static update server in memory, signed with the protocol test key. */
 export class FakeServer {
   readonly baseUrl = 'https://updates.test'
+  /** Requests with their headers, for tests that check a resumed download. */
+  readonly calls: { range?: string, url: string }[] = []
   readonly files = new Map<string, Uint8Array>()
+
+  /** Answers a request before the files do, for example to break a download. Return `undefined` to serve the file. */
+  intercept?: (path: string, init: FetchInit | undefined, body: Uint8Array | undefined) => Promise<Response | undefined> | Response | undefined
   readonly requests: string[] = []
 
-  readonly fetch: Fetch = async (url) => {
+  readonly fetch: Fetch = async (url, init) => {
     this.requests.push(url)
-    const body = this.files.get(url.slice(this.baseUrl.length))
+    this.calls.push({ range: init?.headers?.Range, url })
+    const path = url.slice(this.baseUrl.length)
+    const body = this.files.get(path)
+    const intercepted = await this.intercept?.(path, init, body)
+    if (intercepted)
+      return intercepted
+    if (!body)
+      return new Response('not found', { status: 404 })
 
-    return body ? new Response(body.slice()) : new Response('not found', { status: 404 })
+    const range = /^bytes=(\d+)-$/.exec(init?.headers?.Range ?? '')
+    if (!range)
+      return new Response(body.slice())
+
+    const start = Number(range[1])
+    if (start >= body.byteLength)
+      return new Response(null, { headers: { 'Content-Range': `bytes */${body.byteLength}` }, status: 416 })
+
+    return new Response(body.slice(start), { headers: { 'Content-Range': `bytes ${start}-${body.byteLength - 1}/${body.byteLength}` }, status: 206 })
   }
 
   /** Publishes a core: its objects, its signed manifest. Returns the manifest. */
@@ -87,6 +107,24 @@ export class FakeServer {
   }
 }
 
+/** A response that sends the first bytes of a body, then fails, as a dropped connection does. */
+export function brokenResponse(body: Uint8Array, sent: number, init?: ResponseInit): Response {
+  let pulls = 0
+
+  // NOTICE:
+  // controller.error() drops chunks that the reader has not read yet, so the error waits for the next pull.
+  // Source: WHATWG Streams, ReadableStreamDefaultControllerError resets the queue.
+  // Removal condition: none. This is how streams work.
+  return new Response(new ReadableStream({
+    pull(controller) {
+      if (pulls++ === 0)
+        controller.enqueue(body.slice(0, sent))
+      else
+        controller.error(new Error('connection reset'))
+    },
+  }), init)
+}
+
 export async function buildComponents(files: CoreFiles): Promise<Component[]> {
   const components: Component[] = []
   for (const [type, entries] of Object.entries(files) as [Component['type'], Record<string, string>][]) {
@@ -97,4 +135,13 @@ export async function buildComponents(files: CoreFiles): Promise<Component[]> {
   }
 
   return components
+}
+
+/** A response whose body never sends a byte, as a stalled connection does. It ends when the request is aborted. */
+export function stalledResponse(signal: AbortSignal | undefined): Response {
+  return new Response(new ReadableStream({
+    start(controller) {
+      signal?.addEventListener('abort', () => controller.error(signal.reason))
+    },
+  }))
 }

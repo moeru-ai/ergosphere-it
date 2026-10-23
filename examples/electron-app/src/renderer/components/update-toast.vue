@@ -13,7 +13,7 @@ const notice = computed(() => {
   const status = props.status
   switch (status.state) {
     case 'applying':
-      return { body: status.version, title: status.activation === 'reload' ? 'Reloading…' : 'Restarting…' }
+      return { body: status.version, title: { install: 'Installing…', reload: 'Reloading…', restart: 'Restarting…' }[status.activation] }
     case 'downloading':
       return {
         body: status.version,
@@ -24,7 +24,7 @@ const notice = computed(() => {
     case 'error':
       return { bad: true, body: status.message, title: 'Update error' }
     case 'ready':
-      return { apply: true, body: `${status.version} is downloaded.`, detail: status.activation === 'reload' ? 'Reload to update' : 'Restart to update', title: 'Update ready' }
+      return { apply: true, body: `${status.version} is downloaded.`, detail: { install: 'Install to update', reload: 'Reload to update', restart: 'Restart to update' }[status.activation], title: 'Update ready' }
     case 'rolled-back':
       return { bad: true, body: `Core ${status.from} did not work, so the app went back to core ${status.to}.`, detail: status.reason, title: 'Update failed' }
     default:

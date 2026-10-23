@@ -4,7 +4,7 @@ export default defineConfig({
   clean: true,
   deps: { neverBundle: ['electron'] },
   dts: true,
-  entry: { core: 'src/core.ts', shell: 'src/shell.ts' },
+  entry: { 'core': 'src/core.ts', 'electron-updater': 'src/electron-updater.ts', 'shell': 'src/shell.ts' },
   format: 'esm',
   sourcemap: true,
 })

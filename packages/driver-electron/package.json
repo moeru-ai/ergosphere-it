@@ -20,6 +20,10 @@
       "types": "./dist/core.d.mts",
       "default": "./dist/core.mjs"
     },
+    "./electron-updater": {
+      "types": "./dist/electron-updater.d.mts",
+      "default": "./dist/electron-updater.mjs"
+    },
     "./shell": {
       "types": "./dist/shell.d.mts",
       "default": "./dist/shell.mjs"
@@ -37,7 +41,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
-    "electron": ">=38"
+    "electron": ">=38",
+    "electron-updater": "^6.8.9"
+  },
+  "peerDependenciesMeta": {
+    "electron-updater": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@ergosphere-it/client": "workspace:*",
@@ -45,6 +55,8 @@
     "@moeru/std": "catalog:"
   },
   "devDependencies": {
-    "electron": "catalog:"
+    "@ergosphere-it/publish": "workspace:*",
+    "electron": "catalog:",
+    "electron-updater": "catalog:"
   }
 }

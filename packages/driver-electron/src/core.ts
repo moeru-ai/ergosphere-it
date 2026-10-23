@@ -2,6 +2,12 @@ import type { ErrorCode } from '@ergosphere-it/protocol'
 
 import { readCore } from './global'
 
+/**
+ * How a ready update takes effect: `reload` reloads the pages, `restart` restarts the app with the new core, and
+ * `install` quits the app and installs a new shell.
+ */
+export type Activation = 'install' | 'reload' | 'restart'
+
 /** The running core, as the shell started it. */
 export interface Core {
   /** The core that runs now. A reload changes it without a restart. */
@@ -38,17 +44,18 @@ export interface Updater {
 
 /** What `check()` and `apply()` return. It is plain data, so it can go to logs and over IPC. */
 export type UpdateResult
-  = | { activation: 'reload' | 'restart', seq: number, status: 'ready' }
+  = | { activation: Activation, seq: number, status: 'ready' }
     | { code: ErrorCode, message: string, status: 'rejected' }
     | { current: number, seq: number, status: 'server-behind' }
     | { detail: string, status: 'failed' }
-    | { seq: number, status: 'reloaded' | 'restarting' }
+    | { retryAt: string, seq: number, status: 'retry-later' }
+    | { seq: number, status: 'installing' | 'reloaded' | 'restarting' }
     | { status: 'busy' | 'nothing-staged' }
     | { status: 'disabled' | 'no-core' | 'not-in-cohort' | 'not-in-rollout' | 'up-to-date' }
 
 /** What an update notice shows. */
 export type UpdateStatus
-  = | { activation: 'reload' | 'restart', seq: number, state: 'applying' | 'ready', version: string }
+  = | { activation: Activation, seq: number, state: 'applying' | 'ready', version: string }
     | { downloadedBytes: number, seq: number, state: 'downloading', totalBytes: number, version: string }
     | { from: number, reason: string, state: 'rolled-back', to: 'builtin' | number }
     | { message: string, state: 'error' }

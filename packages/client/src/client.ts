@@ -1,12 +1,14 @@
-import type { Cadence, Component, CoreManifest, Distribution, TrustedKey } from '@ergosphere-it/protocol'
+import type { Cadence, Component, CoreManifest, Distribution, Pointer, ShellArtifact, ShellManifest, TrustedKey } from '@ergosphere-it/protocol'
 
 import type { Fetch, UpdateFileSystem } from './io'
 import type { ClientState } from './state'
 
-import { CandidateError, checkCoreCandidate, contentHash, DocumentError, ErgosphereError, isInRollout, verifyCoreManifest, verifyPointer } from '@ergosphere-it/protocol'
+import { CandidateError, checkCoreCandidate, checkShellCandidate, DocumentError, ErgosphereError, isInRollout, verifyCoreManifest, verifyPointer, verifyShellManifest } from '@ergosphere-it/protocol'
 import { errorMessageFrom } from '@moeru/std/error'
+import { withRetry } from '@moeru/std/with-retry'
 import { sumBy } from 'es-toolkit'
 
+import { DownloadError, downloadFile } from './download'
 import { loadState, saveState } from './state'
 import { ObjectStore } from './store'
 
@@ -26,17 +28,26 @@ export interface BuiltinCore {
  *
  * `server-behind` means the channel serves an older core than this install runs, for example after the server went
  * back to a backup. `rejected` means the protocol rejected the pointer or the core, and `error.code` comes from the
- * specification.
+ * specification. `retry-later` means the core failed to download in this process, and the next attempt waits until
+ * `retryAt`.
  */
 export type CheckResult
   = | { current: number, seq: number, status: 'server-behind' }
     | { distribution: Distribution, status: 'disabled' }
     | { error: ErgosphereError, status: 'rejected' }
     | { manifest: CoreManifest, manifestBytes: Uint8Array<ArrayBuffer>, signature: string, status: 'available' }
+    | { retryAt: string, seq: number, status: 'retry-later' }
     | { seq: number, status: 'not-in-cohort' }
     | { seq: number, status: 'not-in-rollout' }
     | { seq: number, status: 'up-to-date' }
     | { status: 'no-core' }
+
+/** The result of a shell check. `feedUrl` is the electron-updater feed of this platform. */
+export type ShellCheckResult
+  = | { artifact: ShellArtifact, feedUrl: string, manifest: ShellManifest, status: 'available' }
+    | { distribution: Distribution, status: 'disabled' }
+    | { error: ErgosphereError, status: 'rejected' }
+    | { status: 'up-to-date' }
 
 export interface StageOptions {
   onProgress?: (progress: StageProgress) => void
@@ -61,6 +72,8 @@ export interface UpdateClientOptions {
   channel: string
   /** Cohort of this install. A pointer with cohorts serves only those cohorts. */
   cohort?: string
+  /** Objects to download at the same time. Defaults to 4. */
+  concurrency?: number
   /** The directory that the client owns, for example `<userData>/updates`. */
   dataDir: string
   distribution: Distribution
@@ -68,6 +81,8 @@ export interface UpdateClientOptions {
   fs: UpdateFileSystem
   /** The host that runs cores, for example `electron`. A core for another host is rejected. */
   host: string
+  /** A request stops when no bytes arrive for this long. Defaults to 30 seconds. */
+  idleTimeoutMs?: number
   /** Boots without a healthy report before a core is blocked. */
   maxBootAttempts?: number
   now?: () => Date
@@ -75,12 +90,22 @@ export interface UpdateClientOptions {
   platform: string
   /** The product of this install. Pointers and cores of another product are rejected, even with a valid signature. */
   product: string
+  /** Retries of a failed object download in one stage. Each retry resumes the file. Defaults to 3. */
+  retries?: number
+  /** First wait before a retry. It doubles with each retry, up to 8 times this value. Defaults to 1 second. */
+  retryDelayMs?: number
   shellHostApi: number
+  /** The `seq` of the installed shell. Without it, the client does not check for shell updates. */
+  shellSeq?: number
   trustedKeys: TrustedKey[]
 }
 
 const CODE_COMPONENTS = new Set<Component['type']>(['electron-main', 'electron-preload'])
 const BUILTIN_KEY = 'builtin'
+/** First wait before a core that failed to download is tried again. It doubles up to `MAX_FAILURE_DELAY_MS`. */
+const FAILURE_DELAY_MS = 30_000
+const MAX_FAILURE_DELAY_MS = 3_600_000
+const POINTER_REUSE_MS = 10_000
 
 /**
  * The update state machine of one install.
@@ -89,11 +114,24 @@ const BUILTIN_KEY = 'builtin'
  * It never runs code. The host driver loads the selected core.
  */
 export class UpdateClient {
+  /**
+   * The external core that this process booted. Its main code runs until the process exits, and the host can still
+   * load files from its directory, for example a preload script or a lazy chunk. Reloads do not change it.
+   */
+  private booted: number | undefined
+  private readonly concurrency: number
+  /** Download failures of a core in this process, so a core that keeps failing waits longer between attempts. */
+  private readonly failures = new Map<number, { count: number, retryAt: number }>()
   private readonly fetch: Fetch
   private readonly fs: UpdateFileSystem
+  private readonly idleTimeoutMs: number
+  /** The pointer of the last check, so a core check and a shell check in a row fetch it once. */
+  private lastPointer: undefined | { at: number, pointer: Pointer }
   private readonly maxBootAttempts: number
   private readonly now: () => Date
   private readonly objects: ObjectStore
+  private readonly retries: number
+  private readonly retryDelayMs: number
 
   private get statePath(): string {
     return this.path('state.json')
@@ -101,9 +139,13 @@ export class UpdateClient {
 
   constructor(private readonly options: UpdateClientOptions) {
     this.fs = options.fs
-    this.fetch = options.fetch ?? (url => globalThis.fetch(url))
+    this.fetch = options.fetch ?? ((url, init) => globalThis.fetch(url, init))
     this.now = options.now ?? (() => new Date())
     this.maxBootAttempts = options.maxBootAttempts ?? 3
+    this.concurrency = options.concurrency ?? 4
+    this.idleTimeoutMs = options.idleTimeoutMs ?? 30_000
+    this.retries = options.retries ?? 3
+    this.retryDelayMs = options.retryDelayMs ?? 1_000
     this.objects = new ObjectStore(this.fs, this.path('objects', 'sha256'))
   }
 
@@ -159,6 +201,7 @@ export class UpdateClient {
     const key = chosen ? String(chosen.seq) : BUILTIN_KEY
     state.bootAttempts[key] = (state.bootAttempts[key] ?? 0) + 1
     await saveState(this.fs, this.statePath, state)
+    this.booted = chosen?.seq
 
     if (chosen)
       return { components: chosen.manifest.components, dir: this.coreDir(chosen.seq), kind: 'external', rejected, seq: chosen.seq, version: chosen.manifest.version }
@@ -185,10 +228,45 @@ export class UpdateClient {
     }
   }
 
-  /** Removes cores and objects that no kept core uses. */
+  /**
+   * Checks the channel pointer for a newer shell, and returns its verified manifest and the installer for this platform.
+   *
+   * The host installs the shell with its platform installer, for example electron-updater with `feedUrl`. A rejection by
+   * the protocol is a result. Network errors throw.
+   */
+  async checkShell(): Promise<ShellCheckResult> {
+    const { baseUrl, distribution, platform, product, shellSeq, trustedKeys } = this.options
+    if (distribution !== 'direct')
+      return { distribution, status: 'disabled' }
+    if (shellSeq === undefined)
+      return { status: 'up-to-date' }
+
+    try {
+      const target = (await this.fetchPointer({ reuse: true })).shell?.seq
+      if (target === undefined || target <= shellSeq)
+        return { status: 'up-to-date' }
+
+      const manifestUrl = `${baseUrl}/shells/${target}/shell.json`
+      const manifest = await verifyShellManifest(await this.fetchBytes(manifestUrl), await this.fetchText(`${manifestUrl}.sig`), trustedKeys)
+      if (manifest.seq !== target)
+        throw new DocumentError('invalid-schema', `The shell manifest seq ${manifest.seq} is not the pointer seq ${target}.`)
+
+      const artifact = checkShellCandidate(manifest, { host: this.options.host, platform, product, shellSeq })
+
+      return { artifact, feedUrl: `${baseUrl}/shells/${target}/feeds/${platform}`, manifest, status: 'available' }
+    }
+    catch (error) {
+      if (error instanceof ErgosphereError)
+        return { error, status: 'rejected' }
+
+      throw error
+    }
+  }
+
+  /** Removes cores and objects that no kept core uses. It keeps the core that this process booted. */
   async collectGarbage(): Promise<void> {
     const state = await this.state()
-    const keep = new Set([state.staged, state.current, state.previous, state.deferred].filter((seq): seq is number => seq !== undefined))
+    const keep = new Set([state.staged, state.current, state.previous, state.deferred, this.booted].filter((seq): seq is number => seq !== undefined))
     const used = new Set<string>()
 
     for (const name of await this.fs.list(this.path('cores'))) {
@@ -248,53 +326,14 @@ export class UpdateClient {
   /** Downloads the missing objects of a checked core, builds its directory, and marks it as staged. */
   async stage(available: Extract<CheckResult, { status: 'available' }>, options: StageOptions = {}): Promise<StageResult> {
     const { manifest, manifestBytes, signature } = available
-    const sources = await this.localSources()
-    const missing = new Map<string, { path: string, size: number }>()
-    let reusedBytes = 0
+    const result = await this.stageObjects(manifest, options)
+    if (result.status === 'failed') {
+      const count = (this.failures.get(manifest.seq)?.count ?? 0) + 1
+      this.failures.set(manifest.seq, { count, retryAt: this.now().getTime() + Math.min(FAILURE_DELAY_MS * 2 ** (count - 1), MAX_FAILURE_DELAY_MS) })
 
-    // Phase 1: take every object that is already on disk, and list the objects to download.
-    for (const component of manifest.components) {
-      for (const file of component.files) {
-        if (missing.has(file.sha256) || await this.objects.hasValid(file.sha256, file.size)) {
-          if (!missing.has(file.sha256))
-            reusedBytes += file.size
-          continue
-        }
-
-        const local = sources.get(file.sha256)
-        const bytes = local ? await this.fs.readFile(local) : undefined
-        if (bytes && await this.objects.put(file.sha256, file.size, bytes)) {
-          reusedBytes += file.size
-          continue
-        }
-
-        missing.set(file.sha256, { path: file.path, size: file.size })
-      }
+      return result
     }
-
-    // Phase 2: download the missing objects and report progress against their total size.
-    const totalBytes = sumBy([...missing.values()], object => object.size)
-    let downloadedBytes = 0
-    options.onProgress?.({ downloadedBytes, totalBytes })
-
-    for (const [hash, object] of missing) {
-      const url = `${this.options.baseUrl}/objects/sha256/${hash.slice(0, 2)}/${hash}`
-      const before = downloadedBytes
-      let bytes: Uint8Array<ArrayBuffer>
-      try {
-        bytes = await this.fetchBytes(url, (received) => {
-          downloadedBytes = before + Math.min(received, object.size)
-          options.onProgress?.({ downloadedBytes, totalBytes })
-        })
-      }
-      catch (error) {
-        return { detail: errorMessageFrom(error) ?? 'download failed', path: object.path, status: 'failed' }
-      }
-      if (!await this.objects.put(hash, object.size, bytes))
-        return { detail: `downloaded bytes do not match sha256 ${hash}`, path: object.path, status: 'failed' }
-
-      downloadedBytes = before + object.size
-    }
+    this.failures.delete(manifest.seq)
 
     const target = this.coreDir(manifest.seq)
     const building = this.path('cores', `.building-${manifest.seq}`)
@@ -315,7 +354,7 @@ export class UpdateClient {
     })
     await this.collectGarbage()
 
-    return { downloadedBytes, reusedBytes, seq: manifest.seq, status: 'staged' }
+    return { downloadedBytes: result.downloadedBytes, reusedBytes: result.reusedBytes, seq: manifest.seq, status: 'staged' }
   }
 
   async state(): Promise<ClientState> {
@@ -330,26 +369,12 @@ export class UpdateClient {
   }
 
   private async checkPointer(): Promise<CheckResult> {
-    const { baseUrl, cadence, channel, distribution, trustedKeys } = this.options
+    const { baseUrl, distribution, trustedKeys } = this.options
     if (distribution !== 'direct')
       return { distribution, status: 'disabled' }
 
+    const pointer = await this.fetchPointer()
     const state = await this.state()
-    const pointerUrl = `${baseUrl}/pointers/${channel}/${cadence}.json`
-    const pointer = await verifyPointer(
-      await this.fetchBytes(pointerUrl),
-      await this.fetchText(`${pointerUrl}.sig`),
-      trustedKeys,
-      { cadence, channel, lastIssuedAt: state.lastPointerIssuedAt, now: this.now(), product: this.options.product },
-    )
-    await this.update((next) => {
-      next.lastPointerIssuedAt = pointer.issuedAt
-      for (const seq of pointer.revoked ?? []) {
-        if (!next.blocked.includes(seq))
-          next.blocked.push(seq)
-      }
-    })
-
     if (!pointer.core)
       return { status: 'no-core' }
 
@@ -373,6 +398,11 @@ export class UpdateClient {
     if (state.blocked.includes(target))
       throw new CandidateError('blocked', `Core ${target} is blocked on this install.`, target)
 
+    // A download failure is not a bad release. Wait longer after each failure, but never block the core for it.
+    const failure = this.failures.get(target)
+    if (failure && this.now().getTime() < failure.retryAt)
+      return { retryAt: new Date(failure.retryAt).toISOString(), seq: target, status: 'retry-later' }
+
     const manifestUrl = `${baseUrl}/cores/${target}/manifest.json`
     const manifestBytes = await this.fetchBytes(manifestUrl)
     const signature = await this.fetchText(`${manifestUrl}.sig`)
@@ -394,30 +424,82 @@ export class UpdateClient {
     return { manifest, manifestBytes, signature, status: 'available' }
   }
 
-  private async fetchBytes(url: string, onBytes?: (received: number) => void): Promise<Uint8Array<ArrayBuffer>> {
-    const response = await this.fetch(url)
+  /** Downloads one object into the store. Returns why it failed, or `undefined` when the object is stored. */
+  private async downloadObject(hash: string, size: number, onBytes: (received: number) => void): Promise<string | undefined> {
+    const part = this.objects.partPath(hash)
+    const download = withRetry(async () => downloadFile({
+      fetch: this.fetch,
+      fs: this.fs,
+      idleTimeoutMs: this.idleTimeoutMs,
+      onBytes,
+      path: part,
+      size,
+      url: `${this.options.baseUrl}/objects/sha256/${hash.slice(0, 2)}/${hash}`,
+    }), {
+      onError: (error) => {
+        // withRetry retries every error. Stop early for errors that another attempt cannot fix.
+        if (error instanceof DownloadError && !error.retryable)
+          throw error
+      },
+      retry: this.retries,
+      retryDelay: this.retryDelayMs,
+      retryDelayMax: this.retryDelayMs * 8,
+    })
+
+    // A resumed file can hold bad bytes from an earlier attempt, so a mismatch gets one more download from the start.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await download()
+      }
+      catch (error) {
+        return errorMessageFrom(error) ?? 'download failed'
+      }
+      if (await this.objects.adopt(hash, size, part))
+        return undefined
+    }
+
+    return `downloaded bytes do not match sha256 ${hash}`
+  }
+
+  /** Fetches a small document, for example a pointer or a manifest. A stalled request fails after the idle timeout. */
+  private async fetchBytes(url: string): Promise<Uint8Array<ArrayBuffer>> {
+    const response = await this.fetch(url, { signal: AbortSignal.timeout(this.idleTimeoutMs) })
     if (!response.ok)
       throw new Error(`GET ${url} returned ${response.status}`)
-    if (!onBytes || !response.body)
-      return new Uint8Array(await response.arrayBuffer())
 
-    const chunks: Uint8Array[] = []
-    let received = 0
-    const reader = response.body.getReader()
-    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-      chunks.push(chunk.value)
-      received += chunk.value.byteLength
-      onBytes(received)
-    }
+    return new Uint8Array(await response.arrayBuffer())
+  }
 
-    const bytes = new Uint8Array(received)
-    let offset = 0
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset)
-      offset += chunk.byteLength
-    }
+  /**
+   * Fetches and verifies the channel pointer, and records its issue time and its revoked cores.
+   *
+   * With `reuse`, a pointer verified in the last few seconds is returned, so a shell check after a core check fetches it
+   * once. A core check always fetches.
+   */
+  private async fetchPointer({ reuse = false } = {}): Promise<Pointer> {
+    const now = this.now()
+    if (reuse && this.lastPointer && now.getTime() - this.lastPointer.at < POINTER_REUSE_MS)
+      return this.lastPointer.pointer
 
-    return bytes
+    const { baseUrl, cadence, channel, trustedKeys } = this.options
+    const state = await this.state()
+    const pointerUrl = `${baseUrl}/pointers/${channel}/${cadence}.json`
+    const pointer = await verifyPointer(
+      await this.fetchBytes(pointerUrl),
+      await this.fetchText(`${pointerUrl}.sig`),
+      trustedKeys,
+      { cadence, channel, lastIssuedAt: state.lastPointerIssuedAt, now, product: this.options.product },
+    )
+    await this.update((next) => {
+      next.lastPointerIssuedAt = pointer.issuedAt
+      for (const seq of pointer.revoked ?? []) {
+        if (!next.blocked.includes(seq))
+          next.blocked.push(seq)
+      }
+    })
+    this.lastPointer = { at: now.getTime(), pointer }
+
+    return pointer
   }
 
   private async fetchText(url: string): Promise<string> {
@@ -460,8 +542,7 @@ export class UpdateClient {
         // The client hashed every object when it stored it, and nothing else writes to the core directory.
         // Remove this split when hashing all files at boot costs less than 100 ms.
         if (CODE_COMPONENTS.has(component.type)) {
-          const bytes = await this.fs.readFile(path)
-          if (!bytes || await contentHash(bytes) !== file.sha256)
+          if (await this.fs.hashFile(path) !== file.sha256)
             return { manifest, permanent: true, problem: `file ${file.path} does not match its hash` }
         }
       }
@@ -522,6 +603,63 @@ export class UpdateClient {
 
       throw error
     }
+  }
+
+  /**
+   * Puts every object of a manifest into the store: from the store, from a core on disk, or from the network.
+   *
+   * Downloads run in parallel, resume after a failure, and retry network errors with backoff. A file whose hash does
+   * not match is downloaded once more from the start before the stage fails.
+   */
+  private async stageObjects(manifest: CoreManifest, options: StageOptions): Promise<Extract<StageResult, { status: 'failed' }> | { downloadedBytes: number, reusedBytes: number, status: 'stored' }> {
+    const sources = await this.localSources()
+    const missing = new Map<string, { path: string, size: number }>()
+    let reusedBytes = 0
+
+    // Phase 1: take every object that is already on disk, and list the objects to download.
+    for (const component of manifest.components) {
+      for (const file of component.files) {
+        if (missing.has(file.sha256))
+          continue
+        if (await this.objects.hasValid(file.sha256, file.size)) {
+          reusedBytes += file.size
+          continue
+        }
+
+        const local = sources.get(file.sha256)
+        if (local && await this.objects.copyIn(file.sha256, file.size, local)) {
+          reusedBytes += file.size
+          continue
+        }
+
+        missing.set(file.sha256, { path: file.path, size: file.size })
+      }
+    }
+
+    // Phase 2: download the missing objects, a few at a time, and report progress against their total size.
+    const totalBytes = sumBy([...missing.values()], object => object.size)
+    const received = new Map<string, number>()
+    const report = () => options.onProgress?.({ downloadedBytes: sumBy([...received.values()], bytes => bytes), totalBytes })
+    report()
+
+    let failure: Extract<StageResult, { status: 'failed' }> | undefined
+    const queue = [...missing]
+    const worker = async () => {
+      for (let next = queue.shift(); next && !failure; next = queue.shift()) {
+        const [hash, object] = next
+        const problem = await this.downloadObject(hash, object.size, (bytes) => {
+          received.set(hash, bytes)
+          report()
+        })
+        if (problem)
+          failure ??= { detail: problem, path: object.path, status: 'failed' }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(this.concurrency, queue.length) }, worker))
+    if (failure)
+      return failure
+
+    return { downloadedBytes: totalBytes, reusedBytes, status: 'stored' }
   }
 
   private async update(change: (state: ClientState) => void): Promise<ClientState> {

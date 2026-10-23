@@ -1,4 +1,4 @@
-export type CandidateErrorCode = 'blocked' | 'core-mismatch' | 'host-api-incompatible' | 'not-newer' | 'platform-mismatch' | 'revoked'
+export type CandidateErrorCode = 'blocked' | 'core-mismatch' | 'host-api-incompatible' | 'not-newer' | 'platform-mismatch' | 'revoked' | 'shell-mismatch'
 
 export type DocumentErrorCode = 'duplicate-path' | 'invalid-json' | 'invalid-schema' | 'unsafe-path'
 /** Codes of the specification. Every client implementation reports the same code for the same input. */
@@ -15,7 +15,7 @@ export class ErgosphereError<Code extends ErrorCode = ErrorCode> extends Error {
   }
 }
 
-/** A verified core that this install cannot take. */
+/** A verified core or shell that this install cannot take. */
 export class CandidateError extends ErgosphereError<CandidateErrorCode> {
   override name = 'CandidateError'
 

@@ -7,7 +7,7 @@ import { conformanceSuite } from './conformance'
 import { CandidateError, DocumentError, PointerError, SignatureError } from './errors'
 import { isSafeManifestPath } from './path'
 import { rolloutBucket } from './rollout'
-import { checkCoreCandidate, isHostApiCompatible, verifyCoreManifest, verifyPointer, verifyShellManifest } from './verify'
+import { checkCoreCandidate, checkShellCandidate, isHostApiCompatible, verifyCoreManifest, verifyPointer, verifyShellManifest } from './verify'
 
 const encode = (text: string) => new TextEncoder().encode(text)
 const { cases, trustedKeys } = conformanceSuite
@@ -26,6 +26,7 @@ const classOf: Record<ErrorCode, new (...args: never[]) => ErgosphereError> = {
   'pointer-mismatch': PointerError,
   'pointer-replayed': PointerError,
   'revoked': CandidateError,
+  'shell-mismatch': CandidateError,
   'unsafe-path': DocumentError,
   'untrusted-key': SignatureError,
 }
@@ -73,7 +74,13 @@ describe('conformance cases', () => {
           expect(await rolloutBucket(testCase.salt, testCase.installId)).toBe(testCase.bucket)
           break
         case 'shell-manifest':
-          await expectOutcome(() => verifyShellManifest(encode(testCase.document), testCase.signature, trustedKeys), testCase.expect)
+          await expectOutcome(async () => {
+            const manifest = await verifyShellManifest(encode(testCase.document), testCase.signature, trustedKeys)
+            if (testCase.context)
+              checkShellCandidate(manifest, testCase.context)
+
+            return manifest
+          }, testCase.expect)
           break
       }
     })

@@ -1,6 +1,6 @@
 import type { CoreFiles } from './testing'
 
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { activationFor } from './activation'
 import { UpdateClient } from './client'
 import { createNodeFileSystem } from './node'
-import { buildComponents, FakeServer, trustedKeys } from './testing'
+import { brokenResponse, buildComponents, FakeServer, stalledResponse, trustedKeys } from './testing'
 
 const builtinFiles: CoreFiles = {
   'electron-main': { 'main/index.js': 'main v1' },
@@ -311,5 +311,232 @@ describe('updateClient stage and boot', () => {
     expect((await readdir(join(root, 'updates', 'cores'))).sort()).toEqual(['12', '13'])
     const state = await client.state()
     expect([state.current, state.previous]).toEqual([13, 12])
+  })
+
+  it('survives many page updates in a row that fail their health check', async () => {
+    const client = await createClient()
+    const page = (seq: number) => ({ ...builtinFiles, web: { 'renderer/index.html': `<html>v${seq}</html>` } })
+    await server.publishCore(11, page(11))
+    await server.publishPointer(11, { issuedAt: '2026-10-23T00:00:00.000Z' })
+    await checkAndStage(client)
+    await client.markHealthy(await client.boot())
+
+    // Each round reloads into a broken page, then rolls back in place, as the shell does without a healthy report.
+    for (let seq = 12; seq < 62; seq++) {
+      await server.publishCore(seq, page(seq))
+      await server.publishPointer(seq, { issuedAt: new Date(Date.UTC(2026, 9, 23, 1, 0, seq)).toISOString() })
+      await checkAndStage(client)
+      await client.activateInPlace(seq)
+      expect(await client.rollback(seq)).toBe(11)
+    }
+
+    const state = await client.state()
+    expect([state.staged, state.current]).toEqual([undefined, 11])
+    expect(state.blocked).toHaveLength(50)
+    // The last broken core waits for the next garbage collection. Every earlier one is gone.
+    expect((await readdir(join(root, 'updates', 'cores'))).sort()).toEqual(['11', '61'])
+    expect(await client.storedCore(11)).toMatchObject({ seq: 11 })
+  })
+
+  it('keeps the core that this process booted, after reloads move current and previous past it', async () => {
+    const client = await createClient()
+    const page = (seq: number) => ({ ...builtinFiles, web: { 'renderer/index.html': `<html>v${seq}</html>` } })
+    await server.publishCore(11, page(11))
+    await server.publishPointer(11, { issuedAt: '2026-10-23T01:00:00.000Z' })
+    await checkAndStage(client)
+    expect((await client.boot()).seq).toBe(11)
+
+    // Page-only updates reload in place. The main code and the preload script still come from core 11.
+    for (const seq of [12, 13, 14]) {
+      await server.publishCore(seq, page(seq))
+      await server.publishPointer(seq, { issuedAt: `2026-10-23T0${seq - 10}:00:00.000Z` })
+      await checkAndStage(client)
+      if (seq < 14)
+        await client.activateInPlace(seq)
+    }
+
+    expect((await readdir(join(root, 'updates', 'cores'))).sort()).toEqual(['11', '12', '13', '14'])
+    const state = await client.state()
+    expect([state.staged, state.current, state.previous]).toEqual([14, 13, 12])
+  })
+})
+
+describe('updateClient downloads', () => {
+  const large = Array.from({ length: 4096 }, (_, index) => `line ${index}\n`).join('')
+  const files: CoreFiles = { ...builtinFiles, web: { ...builtinFiles.web, 'renderer/large.js': large } }
+
+  async function publishLarge() {
+    const manifest = await server.publishCore(11, files)
+    await server.publishPointer(11)
+    const file = manifest.components.flatMap(component => component.files).find(entry => entry.path === 'renderer/large.js')!
+
+    return { path: `/objects/sha256/${file.sha256.slice(0, 2)}/${file.sha256}`, sha256: file.sha256, size: file.size }
+  }
+  const callsTo = (path: string) => server.calls.filter(call => call.url.endsWith(path)).map(call => call.range)
+
+  it('resumes a file after the connection breaks in the middle', async () => {
+    const object = await publishLarge()
+    let broken = false
+    server.intercept = (path, _init, body) => {
+      if (path !== object.path || broken)
+        return undefined
+      broken = true
+
+      return brokenResponse(body!, 20_000)
+    }
+    const client = await createClient({ retryDelayMs: 1 })
+
+    expect(await checkAndStage(client)).toMatchObject({ seq: 11, status: 'staged' })
+    expect(callsTo(object.path)).toEqual([undefined, 'bytes=20000-'])
+  })
+
+  it('downloads the whole file again when the server ignores the range', async () => {
+    const object = await publishLarge()
+    let calls = 0
+    server.intercept = (path, _init, body) => {
+      if (path !== object.path)
+        return undefined
+
+      calls++
+
+      return calls === 1 ? brokenResponse(body!, 20_000) : new Response(body!.slice())
+    }
+    const client = await createClient({ retryDelayMs: 1 })
+
+    expect(await checkAndStage(client)).toMatchObject({ status: 'staged' })
+    expect(callsTo(object.path)).toEqual([undefined, 'bytes=20000-'])
+  })
+
+  it('downloads a file from the start when bytes of an earlier attempt are damaged', async () => {
+    const object = await publishLarge()
+    const part = join(root, 'updates', 'objects', 'sha256', object.sha256.slice(0, 2), `${object.sha256}.part`)
+    await mkdir(dirname(part), { recursive: true })
+    await writeFile(part, 'x'.repeat(10_000))
+    const client = await createClient({ retryDelayMs: 1 })
+
+    expect(await checkAndStage(client)).toMatchObject({ status: 'staged' })
+    expect(callsTo(object.path)).toEqual(['bytes=10000-', undefined])
+  })
+
+  it('retries server errors, and fails at once for a missing file', async () => {
+    const object = await publishLarge()
+    let errors = 2
+    server.intercept = path => (path === object.path && errors-- > 0 ? new Response(null, { status: 503 }) : undefined)
+    const client = await createClient({ retryDelayMs: 1 })
+
+    expect(await checkAndStage(client)).toMatchObject({ status: 'staged' })
+    expect(callsTo(object.path)).toHaveLength(3)
+
+    const missing = await publishLarge()
+    server.files.delete(missing.path)
+    server.calls.length = 0
+    const other = await createClient({ dataDir: join(root, 'other'), retryDelayMs: 1 })
+
+    expect(await checkAndStage(other)).toMatchObject({ detail: expect.stringContaining('404'), status: 'failed' })
+    expect(callsTo(missing.path)).toHaveLength(1)
+  })
+
+  it('stops a stalled download, retries it, and waits longer before the next check takes the core again', async () => {
+    const object = await publishLarge()
+    server.intercept = (path, init) => (path === object.path ? stalledResponse(init?.signal) : undefined)
+    let now = new Date('2026-10-24T00:00:00.000Z')
+    const client = await createClient({ idleTimeoutMs: 20, now: () => now, retries: 2, retryDelayMs: 1 })
+
+    expect(await checkAndStage(client)).toMatchObject({ detail: expect.stringContaining('no bytes'), status: 'failed' })
+    expect(callsTo(object.path)).toHaveLength(3)
+    expect(await client.check()).toEqual({ retryAt: '2026-10-24T00:00:30.000Z', seq: 11, status: 'retry-later' })
+
+    now = new Date('2026-10-24T00:00:31.000Z')
+    server.intercept = undefined
+    expect(await checkAndStage(client)).toMatchObject({ status: 'staged' })
+  })
+
+  it('downloads a few files at a time and reports progress up to the total', async () => {
+    const many: CoreFiles = { ...builtinFiles, web: Object.fromEntries(Array.from({ length: 12 }, (_, index) => [`renderer/chunk-${index}.js`, `chunk ${index} `.repeat(500)])) }
+    await server.publishCore(11, many)
+    await server.publishPointer(11)
+    let active = 0
+    let peak = 0
+    server.intercept = async (path) => {
+      if (!path.startsWith('/objects/'))
+        return undefined
+      active++
+      peak = Math.max(peak, active)
+      await new Promise(resolve => setTimeout(resolve, 5))
+      active--
+
+      return undefined
+    }
+    const client = await createClient()
+    const checked = await client.check()
+    if (checked.status !== 'available')
+      throw new Error('expected an available core')
+    const progress: number[] = []
+    const staged = await client.stage(checked, { onProgress: ({ downloadedBytes, totalBytes }) => progress.push(downloadedBytes / totalBytes) })
+
+    expect(staged.status).toBe('staged')
+    expect(peak).toBeGreaterThan(1)
+    expect(peak).toBeLessThanOrEqual(4)
+    expect(progress.at(-1)).toBe(1)
+    expect(await readFile(join(root, 'updates', 'cores', '11', 'renderer', 'chunk-3.js'), 'utf8')).toBe('chunk 3 '.repeat(500))
+  })
+})
+
+describe('updateClient shell check', () => {
+  async function publishShell(seq: number, overrides: Record<string, unknown> = {}) {
+    await server.signed(`/shells/${seq}/shell.json`, {
+      artifacts: [{ platform: 'darwin-arm64', sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-arm64-mac.zip' }],
+      builtinCoreSeq: 20,
+      createdAt: '2026-10-23T00:00:00.000Z',
+      host: 'electron',
+      hostApi: 4,
+      kind: 'shell',
+      product: 'airi',
+      schema: 1,
+      seq,
+      version: '0.14.0',
+      ...overrides,
+    })
+  }
+
+  it('returns a newer shell with the installer and the feed of this platform', async () => {
+    await publishShell(8)
+    await server.publishPointer(undefined, { shell: { seq: 8 } })
+    const client = await createClient({ shellSeq: 7 })
+
+    expect(await client.checkShell()).toMatchObject({
+      artifact: { url: 'https://downloads.test/AIRI-arm64-mac.zip' },
+      feedUrl: `${server.baseUrl}/shells/8/feeds/darwin-arm64`,
+      manifest: { hostApi: 4, seq: 8 },
+      status: 'available',
+    })
+  })
+
+  it('reports an installed shell as up to date, and does nothing without a shell seq', async () => {
+    await publishShell(8)
+    await server.publishPointer(undefined, { shell: { seq: 8 } })
+
+    expect(await (await createClient({ shellSeq: 8 })).checkShell()).toEqual({ status: 'up-to-date' })
+    expect(await (await createClient()).checkShell()).toEqual({ status: 'up-to-date' })
+  })
+
+  it('rejects a shell of another product, and a shell without an installer for this platform', async () => {
+    await publishShell(8, { product: 'other' })
+    await server.publishPointer(undefined, { shell: { seq: 8 } })
+    expect(await (await createClient({ shellSeq: 7 })).checkShell()).toMatchObject({ error: { code: 'shell-mismatch' }, status: 'rejected' })
+
+    await publishShell(9)
+    await server.publishPointer(undefined, { issuedAt: '2026-10-23T01:00:00.000Z', shell: { seq: 9 } })
+    expect(await (await createClient({ platform: 'win32-x64', shellSeq: 7 })).checkShell()).toMatchObject({ error: { code: 'platform-mismatch' }, status: 'rejected' })
+  })
+
+  it('fetches the pointer once for a core check and a shell check in a row', async () => {
+    await publishShell(8)
+    await server.publishPointer(undefined, { shell: { seq: 8 } })
+    const client = await createClient({ shellSeq: 7 })
+    await client.check()
+    await client.checkShell()
+
+    expect(server.requests.filter(url => url.endsWith('/pointers/canary/realtime.json'))).toHaveLength(1)
   })
 })

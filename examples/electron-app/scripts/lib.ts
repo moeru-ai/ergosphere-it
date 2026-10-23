@@ -4,20 +4,22 @@ import type { ChildProcess } from 'node:child_process'
 
 import type { UpdateResult } from '@ergosphere-it/driver-electron/core'
 import type { HostApiRange, Pointer, SigningKey, TrustedKey } from '@ergosphere-it/protocol'
-import type { ComponentSpec, CoreFile, CoreRelease, TreeFile } from '@ergosphere-it/publish'
+import type { ComponentSpec, CoreFile, CoreRelease, ShellRelease, TreeFile } from '@ergosphere-it/publish'
 import type { Log } from '@guiiai/logg'
 
 import type { ExampleEvent, LoggedEvent } from '../src/events'
 
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
-import { env, kill, platform } from 'node:process'
+import { arch, env, kill, platform } from 'node:process'
 
 import electronPath from 'electron'
 
+import { createPackage } from '@electron/asar'
 import { createKeyPair } from '@ergosphere-it/protocol'
-import { buildCoreRelease, buildPointer, reissuePointer, uploadStages } from '@ergosphere-it/publish'
+import { buildCoreRelease, buildPointer, buildShellRelease, reissuePointer, uploadStages } from '@ergosphere-it/publish'
 import { MemoryTree } from '@ergosphere-it/server'
 import { build as viteBuild } from 'electron-vite'
 import { delay } from 'es-toolkit'
@@ -51,6 +53,8 @@ export interface LaunchOptions {
   capture?: string
   checkMs?: number
   debugPort?: string
+  /** Installs shells with the installer of the e2e test, which downloads and quits instead of installing. */
+  e2eInstaller?: boolean
   healthMs?: number
   show?: boolean
 }
@@ -65,6 +69,13 @@ export interface Variant {
   label: string
   mainTag?: string
   noMount?: boolean
+}
+
+export interface WorkspaceOptions {
+  /** Pack the app into `app.asar`, as installers do. */
+  asar?: boolean
+  /** Keep the tree in the work directory, so the next run continues from it. */
+  persist?: boolean
 }
 
 /**
@@ -104,21 +115,37 @@ class DiskTree extends MemoryTree {
  * A release workspace: a signing key, an update tree in memory, the builtin core of the example app, and the app event
  * log.
  *
- * `work` is a scratch directory. The builtin build goes into `out` of the example app, because Electron starts the app
- * from there. `cleanup()` removes it. With `persist`, the tree is also kept in `work`, so the next run continues from
- * it.
+ * `work` is a scratch directory. The installed app lives in `work/app`: the package manifest, the builtin build in
+ * `out`, and a link to the `node_modules` of the example. So a demo and an e2e run never share files. With `persist`,
+ * the tree is also kept in `work`, so the next run continues from it.
  */
 export class Workspace {
+  /** The directory of the installed app, as an installer would lay it out. */
+  readonly appDir: string
+  /** Pack the app into `app.asar`, as installers do, so the builtin core is read from the archive. */
+  readonly asar: boolean
   /** The JSON log file of the app. Its entries with `fields.event` are the app events. */
   readonly logFile: string
   readonly signingKey: SigningKey
   readonly tree: MemoryTree
   readonly userData: string
   readonly work: string
+  /** What Electron starts: the archive, or the app directory. */
+  get launchTarget(): string {
+    return this.asar ? join(this.appDir, 'app.asar') : this.appDir
+  }
+
   private readonly trustedKey: TrustedKey
 
-  private constructor(work: string, signingKey: SigningKey, trustedKey: TrustedKey, persist: boolean) {
+  /** The directory with the package manifest and the builtin build. With `asar`, it is packed into the app directory. */
+  private get appSource(): string {
+    return this.asar ? join(this.work, 'app-source') : this.appDir
+  }
+
+  private constructor(work: string, signingKey: SigningKey, trustedKey: TrustedKey, { asar = false, persist = false }: WorkspaceOptions) {
     this.work = work
+    this.appDir = join(work, 'app')
+    this.asar = asar
     this.signingKey = signingKey
     this.trustedKey = trustedKey
     this.logFile = join(work, 'app.log.jsonl')
@@ -126,7 +153,7 @@ export class Workspace {
     this.userData = join(work, 'user-data')
   }
 
-  static async create(work: string, { persist = false } = {}): Promise<Workspace> {
+  static async create(work: string, options: WorkspaceOptions = {}): Promise<Workspace> {
     // Keep the key of an earlier run, so the cores that the app downloaded before still verify.
     const keyFile = join(work, 'keys.json')
     const keys = existsSync(keyFile)
@@ -135,43 +162,65 @@ export class Workspace {
     mkdirSync(work, { recursive: true })
     writeFileSync(keyFile, `${JSON.stringify(keys, null, 2)}\n`)
 
-    return new Workspace(work, keys.signingKey, keys.trustedKey, persist)
+    return new Workspace(work, keys.signingKey, keys.trustedKey, options)
   }
 
   /**
    * Builds the example app with a variant and returns the release of its core.
    *
-   * The builtin build goes into `out` with the trusted key, so Electron starts it. Other builds go into `work`, and
-   * only their core is released.
+   * The builtin build goes into `app/out` with the trusted key, so Electron starts it. Other builds go into `work`,
+   * and only their core is released.
    */
   async build(seq: number, variant: Variant, { builtin = false, hostApi = { max: 1, min: 1 }, version = `1.0.0-core.${seq}` }: BuildOptions = {}): Promise<CoreRelease> {
-    const out = builtin ? join(appRoot, 'out') : join(this.work, 'builds', String(seq))
+    const out = builtin ? join(this.appSource, 'out') : join(this.work, 'builds', String(seq))
     await buildApp(out, variant, this.trustedKey)
 
     const files = readCoreFiles(join(out, 'core'))
     const release = await buildCoreRelease({ components, files, host: 'electron', hostApi, product: 'example', seq, signingKey: this.signingKey, version })
-    if (builtin)
+    if (builtin) {
       writeFileSync(join(out, 'core.json'), `${JSON.stringify(release.builtin, null, 2)}\n`)
+      await this.install()
+    }
 
     return release
   }
 
-  cleanup(): void {
-    rmSync(join(appRoot, 'out'), { force: true, recursive: true })
-  }
-
-  /** Writes the canary realtime pointer. */
-  async point(seq: number | undefined, revoked: number[] = []): Promise<void> {
+  /** Writes the canary realtime pointer. `shell` names the newest shell. */
+  async point(seq: number | undefined, revoked: number[] = [], { shell }: { shell?: number } = {}): Promise<void> {
     const current = this.canary()
     // A client ignores a pointer that is not newer than the one it accepted, so keep issue times increasing.
     const issuedAt = new Date(Math.max(Date.now(), current ? Date.parse(current.issuedAt) + 1 : 0)).toISOString()
     const core = seq === undefined ? undefined : { seq }
-    this.tree.put((await buildPointer({ cadence: 'realtime', channel: 'canary', core, issuedAt, product: 'example', revoked, signingKey: this.signingKey })).files)
+    const pointer = await buildPointer({ cadence: 'realtime', channel: 'canary', core, issuedAt, product: 'example', revoked, shell: shell === undefined ? undefined : { seq: shell }, signingKey: this.signingKey })
+    this.tree.put(pointer.files)
   }
 
   /** Builds a core and uploads it. It does not move the pointer. */
   async publish(seq: number, variant: Variant, options?: BuildOptions): Promise<CoreRelease> {
     const release = await this.build(seq, variant, options)
+    this.tree.put(uploadStages([release]).flat())
+
+    return release
+  }
+
+  /**
+   * Publishes a shell release with one installer for this platform. The installer lives in the tree, at `installers/`.
+   *
+   * `sha512` replaces the hash of the installer, to publish a manifest that does not match its file.
+   */
+  async publishShell(seq: number, { baseUrl, bytes, sha512 }: { baseUrl: string, bytes: Uint8Array<ArrayBuffer>, sha512?: string }): Promise<ShellRelease> {
+    const key = `installers/example-${seq}.zip`
+    this.tree.put([{ bytes, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/zip' }, immutable: true, key }])
+    const release = await buildShellRelease({
+      artifacts: [{ platform: `${platform}-${arch}`, sha512: sha512 ?? createHash('sha512').update(bytes).digest('base64'), size: bytes.byteLength, url: `${baseUrl}/${key}` }],
+      builtinCoreSeq: 1,
+      host: 'electron',
+      hostApi: 1,
+      product: 'example',
+      seq,
+      signingKey: this.signingKey,
+      version: `1.0.${seq}`,
+    })
     this.tree.put(uploadStages([release]).flat())
 
     return release
@@ -203,6 +252,24 @@ export class Workspace {
 
     return file && JSON.parse(new TextDecoder().decode(file.bytes)) as Pointer
   }
+
+  /**
+   * Lays out the installed app: the package manifest, the builtin build, and the dependencies.
+   *
+   * With `asar`, the manifest and the build go into `app.asar`. The dependencies stay outside, and module resolution
+   * finds them in the parent directory of the archive.
+   */
+  private async install(): Promise<void> {
+    copyFileSync(join(appRoot, 'package.json'), join(this.appSource, 'package.json'))
+    if (this.asar)
+      await createPackage(this.appSource, join(this.appDir, 'app.asar'))
+
+    mkdirSync(this.appDir, { recursive: true })
+    const modules = join(this.appDir, 'node_modules')
+    // A junction needs no rights on Windows. Other platforms ignore the type and create a directory link.
+    if (!existsSync(modules))
+      symlinkSync(join(appRoot, 'node_modules'), modules, 'junction')
+  }
 }
 
 /** Returns the result of the first update check with a status that matches, with the type of that result. */
@@ -227,13 +294,14 @@ export function findEvent<Type extends ExampleEvent['type']>(
 
 /** Starts the example app against an update server. Returns a function that stops every app process. */
 export async function launchApp(workspace: Workspace, options: LaunchOptions): Promise<() => void> {
-  const { applyMode = 'auto', baseUrl, capture, checkMs = 1000, debugPort, healthMs = 4000, show = false } = options
+  const { applyMode = 'auto', baseUrl, capture, checkMs = 1000, debugPort, e2eInstaller = false, healthMs = 4000, show = false } = options
   const { display, xvfb } = await ensureDisplay()
   const appEnv = {
     ...env,
     ...(display ? { DISPLAY: display } : {}),
     ...(capture ? { ERGOSPHERE_CAPTURE_DIR: capture } : {}),
     ...(show ? { ERGOSPHERE_SHOW_WINDOW: '1' } : {}),
+    ...(e2eInstaller ? { ERGOSPHERE_E2E_INSTALLER: '1' } : {}),
     ERGOSPHERE_APPLY_MODE: applyMode,
     ERGOSPHERE_BASE_URL: baseUrl,
     ERGOSPHERE_BOOT_HEALTH_MS: '15000',
@@ -242,7 +310,7 @@ export async function launchApp(workspace: Workspace, options: LaunchOptions): P
     ERGOSPHERE_LOG_FILE: workspace.logFile,
     ERGOSPHERE_USER_DATA: workspace.userData,
   }
-  const args = [...(platform === 'linux' ? ['--no-sandbox'] : []), ...(debugPort ? [`--remote-debugging-port=${debugPort}`] : []), appRoot]
+  const args = [...(platform === 'linux' ? ['--no-sandbox'] : []), ...(debugPort ? [`--remote-debugging-port=${debugPort}`] : []), workspace.launchTarget]
   // Stop only the processes of this launch. The event log can hold pids of earlier runs that now belong to others.
   const firstEvent = workspace.readEvents().length
   const child = spawn(electronBinary, args, { env: appEnv, stdio: ['ignore', 'pipe', 'pipe'] })

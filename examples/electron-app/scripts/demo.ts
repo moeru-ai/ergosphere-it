@@ -142,7 +142,6 @@ async function shutdown(): Promise<void> {
   clearInterval(forward)
   stopApp()
   await server.close()
-  workspace.cleanup()
   if (!keep)
     rmSync(work, { force: true, maxRetries: 5, recursive: true })
   exit(0)

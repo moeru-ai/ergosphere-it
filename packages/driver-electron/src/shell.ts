@@ -1,10 +1,14 @@
-import type { BootSelection } from '@ergosphere-it/client'
-import type { Cadence, Component, Distribution, TrustedKey } from '@ergosphere-it/protocol'
+import type { BootSelection, ShellCheckResult } from '@ergosphere-it/client'
+import type { Cadence, Component, Distribution, ErrorCode, TrustedKey } from '@ergosphere-it/protocol'
 
 import type { Core, CoreInfo, UpdateResult, UpdateStatus } from './core'
+import type { ShellInstaller } from './installer'
 
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
 import { join } from 'node:path'
 import { arch, platform } from 'node:process'
+import { pipeline } from 'node:stream/promises'
 import { pathToFileURL } from 'node:url'
 
 import { activationFor, UpdateClient } from '@ergosphere-it/client'
@@ -15,17 +19,20 @@ import { app } from 'electron'
 import { writeCore } from './global'
 import { registerCoreModuleHooks } from './module-hooks'
 
-export type { Core, CoreInfo, Updater, UpdateResult, UpdateStatus } from './core'
+export type { Activation, Core, CoreInfo, Updater, UpdateResult, UpdateStatus } from './core'
+export type { ShellInstaller, ShellInstallerUpdate } from './installer'
 
 /** Events for logs and tests. */
 export type ShellEvent
-  = | { error: string, seq: number, type: 'boot-failed' }
+  = | { code: ErrorCode, message: string, type: 'shell-rejected' }
+    | { error: string, seq: number, type: 'boot-failed' }
     | { from: number, reason: string, to: 'builtin' | number, type: 'rollback' }
     | { kind: BootSelection['kind'], rejected: { problem: string, seq: number }[], seq: number, type: 'boot' }
     | { reason: string, seq: number, type: 'restart' }
     | { result: UpdateResult, type: 'check' }
     | { seq: number, type: 'boot-unhealthy' }
     | { seq: number, type: 'healthy' }
+    | { seq: number, type: 'install' }
     | { seq: number, type: 'reload' }
 
 export interface ShellOptions {
@@ -51,12 +58,19 @@ export interface ShellOptions {
   healthTimeoutMs?: number
   /** The host API of this shell. */
   hostApi: number
+  /**
+   * Installs new shells, for example `createElectronUpdaterInstaller(autoUpdater)`. Without it, the shell does not check
+   * for shell updates.
+   */
+  installer?: ShellInstaller
   maxBootAttempts?: number
   onEvent?: (event: ShellEvent) => void
   /** Defaults to `<platform>-<arch>`, for example `darwin-arm64`. */
   platform?: string
   /** The product name in pointers and cores. Pointers and cores of another product are rejected. */
   product: string
+  /** The `seq` of this shell release, from the build. A pointer that names a newer shell offers a full update. */
+  shellSeq?: number
   trustedKeys: TrustedKey[]
 }
 
@@ -75,8 +89,12 @@ export class Shell {
   private healthTimer: ReturnType<typeof setTimeout> | undefined
   private healthy = false
   private pending: Pending | undefined
+  /** A downloaded shell that waits for `apply()`. */
+  private pendingShell: undefined | { seq: number, version: string }
   private readonly reloadListeners = new Set<(info: CoreInfo) => void>()
   private running!: BootSelection
+  /** Shells whose installer failed. The next attempt waits longer after each failure, as core downloads do. */
+  private readonly shellFailures = new Map<number, { count: number, retryAt: number }>()
   private status: UpdateStatus = { state: 'idle' }
   private readonly statusListeners = new Set<(status: UpdateStatus) => void>()
 
@@ -98,6 +116,7 @@ export class Shell {
       platform: options.platform ?? `${platform}-${arch}`,
       product: options.product,
       shellHostApi: options.hostApi,
+      shellSeq: options.installer ? options.shellSeq : undefined,
       trustedKeys: options.trustedKeys,
     })
   }
@@ -132,6 +151,14 @@ export class Shell {
   }
 
   private async apply(): Promise<UpdateResult> {
+    if (this.pendingShell && this.options.installer) {
+      const { seq, version } = this.pendingShell
+      this.setStatus({ activation: 'install', seq, state: 'applying', version })
+      this.emit({ seq, type: 'install' })
+      this.options.installer.install()
+
+      return { seq, status: 'installing' }
+    }
     if (!this.pending)
       return { status: 'nothing-staged' }
 
@@ -161,9 +188,18 @@ export class Shell {
 
     this.busy = true
     try {
-      let result = await this.checkAndStage()
+      let result = await this.checkAndStage().catch((error: unknown): UpdateResult => {
+        // A network or disk error must not leave the notice at `downloading`. The next check tries again.
+        const detail = errorMessageFrom(error) ?? 'the update check failed'
+        this.setStatus({ message: `The update check failed: ${detail}`, state: 'error' })
+
+        return { detail, status: 'failed' }
+      })
       if (result.status === 'ready' && (this.options.applyMode ?? 'prompt') === 'auto')
         result = await this.apply()
+      // An error notice stays until a check works again. A core that waits for a retry keeps it.
+      if (this.status.state === 'error' && result.status !== 'failed' && result.status !== 'retry-later')
+        this.setStatus({ state: 'idle' })
       this.emit({ result, type: 'check' })
 
       return result
@@ -174,6 +210,18 @@ export class Shell {
   }
 
   private async checkAndStage(): Promise<UpdateResult> {
+    // A new shell comes first. It ships a newer builtin core, so a core update before it is wasted.
+    if (this.pendingShell)
+      return { activation: 'install', seq: this.pendingShell.seq, status: 'ready' }
+    if (this.options.installer) {
+      const shell = await this.client.checkShell()
+      const failure = shell.status === 'available' ? this.shellFailures.get(shell.manifest.seq) : undefined
+      if (shell.status === 'available' && (!failure || Date.now() >= failure.retryAt))
+        return this.stageShell(shell, this.options.installer)
+      if (shell.status === 'rejected')
+        this.emit({ code: shell.error.code, message: shell.error.message, type: 'shell-rejected' })
+    }
+
     const checked = await this.client.check()
 
     const state = await this.client.state()
@@ -185,7 +233,7 @@ export class Shell {
 
     if (checked.status === 'rejected')
       return { code: checked.error.code, message: checked.error.message, status: 'rejected' }
-    if (checked.status === 'server-behind')
+    if (checked.status === 'server-behind' || checked.status === 'retry-later')
       return checked
     // The client counts a staged core as taken. In `prompt` mode it still waits for `apply()`.
     if (checked.status === 'up-to-date' && this.pending)
@@ -290,6 +338,27 @@ export class Shell {
       listener(next)
   }
 
+  /** Downloads a shell with the installer, and checks the file against the signed manifest before it can install. */
+  private async stageShell(shell: Extract<ShellCheckResult, { status: 'available' }>, installer: ShellInstaller): Promise<UpdateResult> {
+    const { artifact, manifest: { seq, version } } = shell
+    const file = await installer.download(
+      { feedUrl: shell.feedUrl, sha512: artifact.sha512, size: artifact.size, url: artifact.url, version },
+      (downloadedBytes, totalBytes) => this.setStatus({ downloadedBytes, seq, state: 'downloading', totalBytes, version }),
+    )
+    if (await sha512Of(file) !== artifact.sha512) {
+      const count = (this.shellFailures.get(seq)?.count ?? 0) + 1
+      this.shellFailures.set(seq, { count, retryAt: Date.now() + Math.min(30_000 * 2 ** (count - 1), 3_600_000) })
+      this.setStatus({ message: `The installer of ${version} does not match the signed shell manifest.`, state: 'error' })
+
+      return { detail: `${file} does not match sha512 ${artifact.sha512}`, status: 'failed' }
+    }
+
+    this.pendingShell = { seq, version }
+    this.setStatus({ activation: 'install', seq, state: 'ready', version })
+
+    return { activation: 'install', seq, status: 'ready' }
+  }
+
   private switchTo(next: BootSelection): void {
     this.running = next
     for (const listener of this.reloadListeners)
@@ -312,4 +381,12 @@ function entryOf(components: readonly Component[]): string {
     throw new Error('ergosphere-it: the core has no electron-main component with an entry')
 
   return main.entry
+}
+
+/** Returns the SHA-512 of a file as base64, as shell manifests and electron-updater feeds write it. */
+async function sha512Of(path: string): Promise<string> {
+  const hash = createHash('sha512')
+  await pipeline(createReadStream(path), hash)
+
+  return hash.digest('base64')
 }

@@ -21,6 +21,7 @@ allowBuilds:
 
 catalog:
   '@arethetypeswrong/core': ^0.18.5
+  '@electron/asar': ^4.3.1
   '@guiiai/logg': ^1.2.12
   '@hono/node-server': ^2.1.5
   '@moeru/eslint-config': ^0.1.0-beta.20
@@ -31,6 +32,7 @@ catalog:
   bumpp: ^12.2.1
   cspell: ^10.0.1
   electron: 43.4.1
+  electron-updater: ^6.8.9
   electron-vite: ^6.0.0
   es-toolkit: ^1.51.0
   eslint: ^10.9.0

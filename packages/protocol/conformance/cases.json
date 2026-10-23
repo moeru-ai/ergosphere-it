@@ -1,10 +1,4 @@
 {
-  "trustedKeys": [
-    {
-      "keyId": "362ff633a498ae53",
-      "publicKey": "MCowBQYDK2VwAyEAozeq+nTTpK7tLalY+wuh3B4cDTnP3+evtn1GQ3sQrbc="
-    }
-  ],
   "cases": [
     {
       "kind": "core-manifest",
@@ -490,6 +484,85 @@
       "signature": "paQWx9uxAc7v8M6/Vy4V8WvlGTmqzVwjm2LsQzEUgXJFDin3+hBRQSuotlMydqv4t5kffymlsfjepjZhLiBoDA=="
     },
     {
+      "kind": "shell-manifest",
+      "name": "shell: newer shell with an installer for this platform",
+      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI-0.13.0-arm64-mac.zip\"}],\"builtinCoreSeq\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":3,\"kind\":\"shell\",\"product\":\"airi\",\"schema\":1,\"seq\":7,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "paQWx9uxAc7v8M6/Vy4V8WvlGTmqzVwjm2LsQzEUgXJFDin3+hBRQSuotlMydqv4t5kffymlsfjepjZhLiBoDA==",
+      "context": {
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellSeq": 6
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "kind": "shell-manifest",
+      "name": "shell: another product with the same key",
+      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI-0.13.0-arm64-mac.zip\"}],\"builtinCoreSeq\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":3,\"kind\":\"shell\",\"product\":\"other\",\"schema\":1,\"seq\":7,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "4XOBXAt5rJy3L+PsPCoI880IqI+w4u2m0kvPqDuuEGqo9tPHP8QIMiqh053FdgX8WDaeWgz32JFAptzzJyDjAA==",
+      "context": {
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellSeq": 6
+      },
+      "expect": {
+        "code": "shell-mismatch",
+        "ok": false
+      }
+    },
+    {
+      "kind": "shell-manifest",
+      "name": "shell: another host",
+      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI-0.13.0-arm64-mac.zip\"}],\"builtinCoreSeq\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"kirie\",\"hostApi\":3,\"kind\":\"shell\",\"product\":\"airi\",\"schema\":1,\"seq\":7,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "jZ6OJ/5TAN9InsYdyt6zaTbEH66Q/Ydd9Qu1f3Ev1Qi662yY3cdj05HUfcz85xzHXUkubR0Cg/x5vJhJ6M6IAw==",
+      "context": {
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellSeq": 6
+      },
+      "expect": {
+        "code": "shell-mismatch",
+        "ok": false
+      }
+    },
+    {
+      "kind": "shell-manifest",
+      "name": "shell: no installer for this platform",
+      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI-0.13.0-arm64-mac.zip\"}],\"builtinCoreSeq\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":3,\"kind\":\"shell\",\"product\":\"airi\",\"schema\":1,\"seq\":7,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "paQWx9uxAc7v8M6/Vy4V8WvlGTmqzVwjm2LsQzEUgXJFDin3+hBRQSuotlMydqv4t5kffymlsfjepjZhLiBoDA==",
+      "context": {
+        "host": "electron",
+        "platform": "win32-x64",
+        "product": "airi",
+        "shellSeq": 6
+      },
+      "expect": {
+        "code": "platform-mismatch",
+        "ok": false
+      }
+    },
+    {
+      "kind": "shell-manifest",
+      "name": "shell: seq equals the installed shell",
+      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI-0.13.0-arm64-mac.zip\"}],\"builtinCoreSeq\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":3,\"kind\":\"shell\",\"product\":\"airi\",\"schema\":1,\"seq\":7,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "paQWx9uxAc7v8M6/Vy4V8WvlGTmqzVwjm2LsQzEUgXJFDin3+hBRQSuotlMydqv4t5kffymlsfjepjZhLiBoDA==",
+      "context": {
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellSeq": 7
+      },
+      "expect": {
+        "code": "not-newer",
+        "ok": false
+      }
+    },
+    {
       "kind": "pointer",
       "name": "pointer: valid canary pointer",
       "document": "{\"cadence\":\"realtime\",\"channel\":\"canary\",\"core\":{\"cohorts\":[\"alpha\",\"beta\",\"all\"],\"rollout\":{\"percentage\":25,\"salt\":\"42\"},\"seq\":42},\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"airi\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
@@ -787,6 +860,12 @@
         "min": 3
       },
       "shellHostApi": 5
+    }
+  ],
+  "trustedKeys": [
+    {
+      "keyId": "362ff633a498ae53",
+      "publicKey": "MCowBQYDK2VwAyEAozeq+nTTpK7tLalY+wuh3B4cDTnP3+evtn1GQ3sQrbc="
     }
   ]
 }

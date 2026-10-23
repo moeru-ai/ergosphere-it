@@ -1,4 +1,4 @@
-import type { Cadence, Component, ComponentType, CoreManifest, HostApiRange, Pointer, SignedDocument, SigningKey } from '@ergosphere-it/protocol'
+import type { Cadence, Component, ComponentType, CoreManifest, HostApiRange, Pointer, ShellManifest, SignedDocument, SigningKey } from '@ergosphere-it/protocol'
 
 import { contentHash, signDocument } from '@ergosphere-it/protocol'
 import { sumBy } from 'es-toolkit'
@@ -63,6 +63,8 @@ export interface PointerInput {
   issuedAt?: string
   product: string
   revoked?: number[]
+  /** The newest shell. Installs with an older shell offer a full update. */
+  shell?: { seq: number }
   signingKey: SigningKey
 }
 
@@ -84,6 +86,44 @@ export interface TreeFile {
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 const NO_STORE = 'no-store'
 const DAY = 86_400_000
+
+/** One installer of a shell release, for example the macOS zip for arm64. */
+export interface ShellArtifactInput {
+  /** The platform of the installer, for example `darwin-arm64` or `win32-x64`. */
+  platform: string
+  /** SHA-512 of the installer as base64, as electron-updater writes it. */
+  sha512: string
+  size: number
+  /** The absolute URL of the installer. Installers can live anywhere, for example on GitHub Releases. */
+  url: string
+}
+
+export interface ShellRelease {
+  /** One electron-updater feed per platform, in `shells/<seq>/feeds/<platform>/`. */
+  feeds: TreeFile[]
+  manifest: ShellManifest
+  /** The signed manifest and its signature. */
+  manifestFiles: TreeFile[]
+  seq: number
+  version: string
+}
+
+export interface ShellReleaseInput {
+  artifacts: ShellArtifactInput[]
+  /** The `seq` of the core that the installers ship. */
+  builtinCoreSeq: number
+  /** Defaults to now. */
+  createdAt?: string
+  host: string
+  hostApi: number
+  /** A hash of the shell build inputs, for the CI guard. Clients do not read it. */
+  inputsHash?: string
+  product: string
+  /** Defaults to `createSeq()`. */
+  seq?: number
+  signingKey: SigningKey
+  version: string
+}
 
 /**
  * Builds the files of a core release: one object per distinct content, the signed manifest, and the builtin descriptor.
@@ -150,12 +190,56 @@ export async function buildPointer(input: PointerInput): Promise<PointerRelease>
     product: input.product,
     revoked: input.revoked?.length ? input.revoked : undefined,
     schema: 1,
+    shell: input.shell && { seq: input.shell.seq },
   } as const
   const signed = await signDocument(pointer, input.signingKey)
 
   return {
     files: documentFiles(`pointers/${input.channel}/${input.cadence}.json`, signed, false),
     pointer: { ...pointer, signature: { alg: 'ed25519', keyId: input.signingKey.keyId } } as Pointer,
+  }
+}
+
+/**
+ * Builds the files of a shell release: the signed manifest, and one electron-updater feed for each platform.
+ *
+ * The installers are not part of the tree. Upload them first, to the URLs that the artifacts name.
+ */
+export async function buildShellRelease(input: ShellReleaseInput): Promise<ShellRelease> {
+  const seq = input.seq ?? createSeq()
+  const createdAt = input.createdAt ?? new Date().toISOString()
+  for (const artifact of input.artifacts) {
+    if (!URL.canParse(artifact.url))
+      throw new Error(`The installer URL ${artifact.url} is not absolute. electron-updater resolves a relative URL against the feed.`)
+  }
+
+  const manifest = {
+    artifacts: input.artifacts.map(({ platform, sha512, size, url }) => ({ platform, sha512, size, url })),
+    builtinCoreSeq: input.builtinCoreSeq,
+    createdAt,
+    host: input.host,
+    hostApi: input.hostApi,
+    inputsHash: input.inputsHash,
+    kind: 'shell',
+    product: input.product,
+    schema: 1,
+    seq,
+    version: input.version,
+  } as const
+  const signed = await signDocument(manifest, input.signingKey)
+  const feeds = input.artifacts.map(artifact => treeFile(
+    `shells/${seq}/feeds/${artifact.platform}/${feedFileName(artifact.platform)}`,
+    new TextEncoder().encode(feedYaml(artifact, input.version, createdAt)) as Uint8Array<ArrayBuffer>,
+    'application/x-yaml',
+    true,
+  ))
+
+  return {
+    feeds,
+    manifest: { ...manifest, signature: { alg: 'ed25519', keyId: input.signingKey.keyId } } as ShellManifest,
+    manifestFiles: documentFiles(`shells/${seq}/shell.json`, signed, true),
+    seq,
+    version: input.version,
   }
 }
 
@@ -167,6 +251,18 @@ export async function buildPointer(input: PointerInput): Promise<PointerRelease>
  */
 export function createSeq(minimum = 0, now = Date.now()): number {
   return Math.max(now, minimum + 1)
+}
+
+/** The file that electron-updater reads from a generic feed on each platform, with the default `latest` channel. */
+export function feedFileName(platform: string): string {
+  if (platform.startsWith('darwin-'))
+    return 'latest-mac.yml'
+  if (platform.startsWith('win32-'))
+    return 'latest.yml'
+  if (platform === 'linux-arm64')
+    return 'latest-linux-arm64.yml'
+
+  return 'latest-linux.yml'
 }
 
 /**
@@ -181,6 +277,7 @@ export async function reissuePointer(pointer: Pointer, signingKey: SigningKey): 
     core: pointer.core && { cohorts: pointer.core.cohorts, rollout: pointer.core.rollout?.percentage, seq: pointer.core.seq },
     product: pointer.product,
     revoked: pointer.revoked,
+    shell: pointer.shell,
     signingKey,
   })
 }
@@ -190,10 +287,11 @@ export async function reissuePointer(pointer: Pointer, signingKey: SigningKey): 
  *
  * Upload each stage completely before the next one. A client that sees a new pointer then finds every file it names.
  */
-export function uploadStages(releases: readonly CoreRelease[], pointers: readonly PointerRelease[] = []): TreeFile[][] {
-  const objects = new Map(releases.flatMap(release => release.objects).map(object => [object.key, object]))
+export function uploadStages(releases: readonly (CoreRelease | ShellRelease)[], pointers: readonly PointerRelease[] = []): TreeFile[][] {
+  const objects = new Map(releases.flatMap(release => ('objects' in release ? release.objects : [])).map(object => [object.key, object]))
+  const documents = releases.flatMap(release => ('feeds' in release ? [...release.manifestFiles, ...release.feeds] : release.manifestFiles))
 
-  return [[...objects.values()], releases.flatMap(release => release.manifestFiles), pointers.flatMap(pointer => pointer.files)].filter(stage => stage.length > 0)
+  return [[...objects.values()], documents, pointers.flatMap(pointer => pointer.files)].filter(stage => stage.length > 0)
 }
 
 function documentFiles(key: string, { bytes, signature }: SignedDocument, immutable: boolean): TreeFile[] {
@@ -201,6 +299,23 @@ function documentFiles(key: string, { bytes, signature }: SignedDocument, immuta
     treeFile(key, bytes, 'application/json', immutable),
     treeFile(`${key}.sig`, new TextEncoder().encode(signature) as Uint8Array<ArrayBuffer>, 'text/plain', immutable),
   ]
+}
+
+/** Writes an electron-updater feed with one file. JSON strings are valid YAML scalars, so no YAML library is needed. */
+function feedYaml(artifact: ShellArtifactInput, version: string, releaseDate: string): string {
+  const text = JSON.stringify
+
+  return [
+    `version: ${text(version)}`,
+    'files:',
+    `  - url: ${text(artifact.url)}`,
+    `    sha512: ${text(artifact.sha512)}`,
+    `    size: ${artifact.size}`,
+    `path: ${text(artifact.url)}`,
+    `sha512: ${text(artifact.sha512)}`,
+    `releaseDate: ${text(releaseDate)}`,
+    '',
+  ].join('\n')
 }
 
 function treeFile(key: string, bytes: Uint8Array<ArrayBuffer>, contentType: string, immutable: boolean): TreeFile {

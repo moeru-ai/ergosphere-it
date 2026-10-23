@@ -141,6 +141,12 @@ cases.push({ kind: 'core-manifest', name: 'core: seq below current', ...valid, c
 const validShell = await signed(shell)
 cases.push({ kind: 'shell-manifest', name: 'shell: valid manifest', ...validShell, expect: { ok: true } })
 cases.push({ document: validShell.document.replace('"hostApi":3', '"hostApi":9'), expect: { code: 'invalid-signature', ok: false }, kind: 'shell-manifest', name: 'shell: changed byte after signing', signature: validShell.signature })
+const shellContext = { host: 'electron', platform: 'darwin-arm64', product: 'airi', shellSeq: 6 }
+cases.push({ kind: 'shell-manifest', name: 'shell: newer shell with an installer for this platform', ...validShell, context: shellContext, expect: { ok: true } })
+cases.push({ kind: 'shell-manifest', name: 'shell: another product with the same key', ...await signed({ ...shell, product: 'other' }), context: shellContext, expect: { code: 'shell-mismatch', ok: false } })
+cases.push({ kind: 'shell-manifest', name: 'shell: another host', ...await signed({ ...shell, host: 'kirie' }), context: shellContext, expect: { code: 'shell-mismatch', ok: false } })
+cases.push({ kind: 'shell-manifest', name: 'shell: no installer for this platform', ...validShell, context: { ...shellContext, platform: 'win32-x64' }, expect: { code: 'platform-mismatch', ok: false } })
+cases.push({ kind: 'shell-manifest', name: 'shell: seq equals the installed shell', ...validShell, context: { ...shellContext, shellSeq: 7 }, expect: { code: 'not-newer', ok: false } })
 
 const now = '2026-10-24T00:00:00.000Z'
 const target = { cadence: 'realtime', channel: 'canary', product: 'airi' }

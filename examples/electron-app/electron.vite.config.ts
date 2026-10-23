@@ -17,6 +17,7 @@ const define = {
   __EXAMPLE_LABEL__: JSON.stringify(label),
   __EXAMPLE_MAIN_TAG__: JSON.stringify(env.EXAMPLE_MAIN_TAG ?? '1'),
   __EXAMPLE_NO_MOUNT__: JSON.stringify(env.EXAMPLE_NO_MOUNT === '1'),
+  __EXAMPLE_SHELL_SEQ__: JSON.stringify(Number(env.EXAMPLE_SHELL_SEQ ?? 1)),
   __EXAMPLE_TRUSTED_KEY__: env.EXAMPLE_TRUSTED_KEY ?? 'null',
 }
 
