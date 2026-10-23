@@ -21,7 +21,6 @@ catalog:
   '@types/node': ^26.2.0
   '@vitest/coverage-v8': ^5.0.0
   bumpp: ^12.2.1
-  cac: ^7.0.0
   cspell: ^10.0.1
   electron: 43.4.1
   es-toolkit: ^1.51.0

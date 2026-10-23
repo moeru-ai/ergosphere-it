@@ -5,7 +5,7 @@ import type { Fetch } from './io'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { canonicalJson, contentHash, signBytes } from '@ergosphere-it/protocol'
+import { contentHash, signDocument } from '@ergosphere-it/protocol'
 import { sumBy } from 'es-toolkit'
 
 interface TestKey { keyId: string, privateKey: string, publicKey: string }
@@ -81,9 +81,9 @@ export class FakeServer {
   }
 
   async signed(path: string, document: Record<string, unknown>, key: TestKey = keys.trusted): Promise<void> {
-    const text = canonicalJson({ ...document, signature: { alg: 'ed25519', keyId: key.keyId } })
-    this.files.set(path, encode(text))
-    this.files.set(`${path}.sig`, encode(await signBytes(encode(text), key.privateKey)))
+    const { bytes, signature } = await signDocument(document, key)
+    this.files.set(path, bytes)
+    this.files.set(`${path}.sig`, encode(signature))
   }
 }
 

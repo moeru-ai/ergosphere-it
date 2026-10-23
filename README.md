@@ -19,11 +19,17 @@ ergosphere-it works the same way: every install follows its channel to the newes
 | Package | Content |
 | --- | --- |
 | [`@ergosphere-it/protocol`](packages/protocol) | Schemas, canonical JSON, signatures, verification rules, and conformance test vectors |
-| `@ergosphere-it/client` (planned) | The update state machine. The host injects the network, file system, and clock. |
+| [`@ergosphere-it/publish`](packages/publish) | Builds signed releases and pointers as files in memory. Upload them to any backend. |
+| [`@ergosphere-it/client`](packages/client) | The update state machine. The host injects the network and the file system. |
+| [`@ergosphere-it/driver-electron`](packages/driver-electron) | The Electron driver: `Shell` in the shell entry, `getCore()` in the core |
+| [`@ergosphere-it/server`](packages/server) | A tree server in memory and a release console, for tests and demos |
 | `@ergosphere-it/web` (planned) | The page side: health signals and update status |
-| `@ergosphere-it/driver-electron` (planned) | The Electron driver |
-| `@ergosphere-it/server` (planned) | Static test server |
-| `ergosphere-it` (planned) | Publish CLI |
+
+Each host gets one `driver-*` package. Version 1 has only the Electron driver.
+
+There is no publish CLI. Publish from CI: build the release with `@ergosphere-it/publish`, then upload the stages of `uploadStages` in order. [The API design](docs/api.md) lists every export.
+
+[The example Electron app](examples/electron-app) runs a demo with a release console, and an end-to-end test.
 
 Each host gets one `driver-*` package. Version 1 has only the Electron driver.
 

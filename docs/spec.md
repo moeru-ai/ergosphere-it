@@ -26,7 +26,7 @@ The user made these decisions:
 3. Steam and Flathub builds disable both update layers. The store updates the app.
 4. The updater is one system for both layers. It does not depend on the AIRI release process or build output.
    - Channel, cadence, and cohort are client subscriptions plus server pointers. Installers do not contain them.
-   - Promotion rules and release cadence belong to CI. CI only calls the publish CLI.
+   - Promotion rules and release cadence belong to CI. CI calls the publish API and uploads its files. CI keeps no state between runs.
 5. AIRI does not ship special migration packages for old versions. Old versions get the first new shell through their existing updater.
 6. Kirie (Godot plus CEF) is a future host. The protocol must not depend on Electron.
 
@@ -49,15 +49,15 @@ Merged prerequisites: #3078, #3079, #3080, #3081, #3082, #3083.
 
 ### Layers
 
-1. **Shell layer.** The platform installer performs the install: electron-updater with Squirrel.Mac, NSIS, or AppImage for Electron. Kirie selects its installer later. The protocol only describes shell artifacts and their pointers. The publish CLI generates each installer's native feed, for example `latest-arm64-mac.yml`, from the protocol data.
+1. **Shell layer.** The platform installer performs the install: electron-updater with Squirrel.Mac, NSIS, or AppImage for Electron. Kirie selects its installer later. The protocol only describes shell artifacts and their pointers. The publish API can generate each installer's native feed, for example `latest-arm64-mac.yml`, from the protocol data.
 2. **Core layer.** The client SDK does all of the work: discover, download, verify, stage, activate, check health, and roll back.
 
 One trusted Ed25519 key signs both layers. The shell contains the public key. The client never fetches a key at runtime.
 
 ### Release identity
 
-- Each release has a `seq`, an integer that never decreases. The publish CLI assigns it. One counter serves all channels, so a release keeps its `seq` when it is promoted from canary to stable.
-- A `seq` must not depend on the state of the server. The publish CLI uses the current time in milliseconds, or one more than the largest `seq` in the tree if that is larger. When the server loses releases or goes back to a backup, the next release still gets a `seq` above every `seq` that a client already has.
+- Each release has a `seq`, an integer that never decreases. The publish API assigns it. One counter serves all channels, so a release keeps its `seq` when it is promoted from canary to stable.
+- A `seq` must not depend on the state of the server. `createSeq(minimum)` gives the current time in milliseconds, or `minimum + 1` if that is larger. CI does not read the server to get it. When the server loses releases or goes back to a backup, the next release still gets a `seq` above every `seq` that a client already has.
 - A `seq` is never used for two releases. Do not pass a `seq` by hand unless you are sure no client has seen it.
 - Each release also has a display version, for example `0.13.0-core.42`. Clients never compare display versions. This avoids the semver problem that T-196 found: `0.12.0.core.1` is not semver, and `0.12.0-core.1` sorts before `0.12.0`.
 - The builtin core of each installer records its `seq`. The client rejects an external core with a `seq` that is not greater than the builtin `seq`. So after a full update, old OTA cores do not come back.
@@ -98,8 +98,8 @@ The server is static files on R2 or S3. Any static server works, including the t
 ```
 
 - `channel` is `stable` or `canary`. `alpha` and `beta` are cohorts inside canary.
-- `cadence` is `realtime` or `nightly`. Nightly is a pointer that the publish CLI moves once a day to the newest canary release that passed the smoke test. Nightly is not a separate build.
-- A release gets published in this order: objects, then manifests, then pointers. The publish CLI refuses to move a pointer to a lower `seq`, unless the operator gives an explicit rollback flag.
+- `cadence` is `realtime` or `nightly`. Nightly is a pointer that CI moves once a day to the newest canary release that passed the smoke test. Nightly is not a separate build.
+- A release gets published in this order: objects, then manifests, then pointers. `uploadStages` returns the files in these three stages. Upload each stage completely before the next one.
 
 ### Core manifest
 
@@ -210,7 +210,7 @@ A client can run a release that the server no longer has, for example after the 
 
 After the server goes back to a backup, do these steps:
 
-1. Sign the pointers again (`ergosphere-it reissue`), so that clients accept them.
+1. Sign the pointers again with `reissuePointer`, so that clients accept them.
 2. Publish a new release. Its `seq` is higher than every `seq` that clients have, so all clients take it.
 3. To remove a bad release that the server lost, revoke its `seq`.
 
@@ -262,7 +262,7 @@ A core switch must not change the origin of the renderer pages. Otherwise localS
 
 ### Verification results
 
-A verifier returns `ok` or one reason code. Every client implementation uses the same codes, and the conformance test vectors check them.
+A verifier returns the verified document, or fails with one reason code. The TypeScript verifiers throw an `ErgosphereError` subclass with the code. Every client implementation uses the same codes, and the conformance test vectors check them.
 
 | Code | Meaning |
 | --- | --- |
@@ -289,9 +289,9 @@ The updater is one project with four parts. AIRI connects to it only through dep
 | Part | Content | Built from |
 | --- | --- | --- |
 | Specification | This document, the JSON schemas (Valibot), and conformance test vectors | New |
-| Publish CLI | Pack a core, sign it, upload objects, write manifests, move pointers, promote, revoke, generate native feeds | `ota-update-server` store and core modules |
+| Publish API | Build a core release and pointers as files in memory, and order the uploads. The caller uploads them to any backend. | `ota-update-server` store and core modules |
 | Client SDK (TypeScript) | Pointer check, download, content store, staging, boot selection, activation diff, health, rollback | `ota-lab` shell modules, plus the PoC tests |
-| Test server | Static server with fault injection and a control page | `ota-update-server` |
+| Test server | Tree server in memory with fault injection and a release console | `ota-update-server` |
 
 The PoC files `feed.ts` and `pack-core.ts`, the PoC CI workflows, and the `ota-lab` test bench shell are not used.
 
@@ -302,9 +302,9 @@ The project lives in its own repository, `moeru-ai/ergosphere-it`. Packages that
 | `@ergosphere-it/protocol` | Schemas, canonical JSON, signatures, verification rules, and conformance test vectors |
 | `@ergosphere-it/client` | The update state machine for TypeScript hosts. The host injects the network, file system, and clock. `@ergosphere-it/client/node` gives a Node.js file system. |
 | `@ergosphere-it/web` | The page side: health signals and update status. The host injects the transport. |
-| `@ergosphere-it/driver-electron` | The Electron driver: bootloader, shell updates through electron-updater, window reload, and quit for install |
-| `@ergosphere-it/server` | Static test server with fault injection |
-| `ergosphere-it` | Publish CLI. The command is `ergosphere-it`. |
+| `@ergosphere-it/publish` | Builds signed core releases and pointers as files in memory. It does no I/O. |
+| `@ergosphere-it/driver-electron` | The Electron driver: `Shell` boots the core in the shell entry, and `getCore()` gives the core its updater. Shell updates through electron-updater come later. |
+| `@ergosphere-it/server` | Tree server in memory with fault injection and a release console, for tests and demos |
 
 Version 1 has only the Electron driver. A Kirie driver (`driver-kirie`, with a C# client) and a Tauri driver (`driver-tauri`) can follow. They use the same protocol and pass the same conformance test vectors.
 
@@ -314,7 +314,7 @@ Conformance test vectors: valid and tampered manifests, bad signatures, unknown 
 
 Kirie runs AIRI pages in CEF inside Godot. AIRI host services in Kirie are C#. This section records the plan for a later `driver-kirie`.
 
-- The protocol, server, and publish CLI work without change.
+- The protocol, server, and publish API work without change.
 - The core of Kirie is the `web` component and, as an option, a `godot-pck` component that Godot loads with `ProjectSettings.load_resource_pack`. C# assemblies are part of the shell, because Godot .NET cannot unload assemblies safely.
 - This is the main design rule for Kirie: **keep host services thin, and keep business logic in the web layer.** Every C# change needs a full update.
 - Kirie needs these changes, as a Kirie plugin:

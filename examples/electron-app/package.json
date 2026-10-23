@@ -13,6 +13,7 @@
     "@ergosphere-it/driver-electron": "workspace:*"
   },
   "devDependencies": {
+    "@ergosphere-it/protocol": "workspace:*",
     "@ergosphere-it/publish": "workspace:*",
     "@ergosphere-it/server": "workspace:*",
     "@moeru/std": "catalog:",

@@ -1,52 +1,102 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import type { SigningKey, TrustedKey } from '@ergosphere-it/protocol'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { contentHash, createKeyPair, verifyCoreManifest, verifyPointer } from '@ergosphere-it/protocol'
+import { beforeAll, describe, expect, it } from 'vitest'
 
-import { keygen, loadSigningKey, nextSeq, reissuePointers, writePointer } from './index'
+import { buildCoreRelease, buildPointer, createSeq, reissuePointer, uploadStages } from './index'
 
-let root: string
+const encode = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>
+const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
 
-beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'ergosphere-publish-'))
+let signingKey: SigningKey
+let trustedKey: TrustedKey
+
+beforeAll(async () => {
+  ({ signingKey, trustedKey } = await createKeyPair())
 })
 
-afterEach(async () => {
-  await rm(root, { force: true, recursive: true })
-})
+const components = [
+  { dir: 'main', entry: 'main/index.mjs', type: 'electron-main' as const },
+  { dir: 'renderer', entry: 'renderer/index.html', type: 'web' as const },
+]
 
-async function addCore(seq: number): Promise<void> {
-  await mkdir(join(root, 'tree', 'cores', String(seq)), { recursive: true })
-  await writeFile(join(root, 'tree', 'cores', String(seq), 'manifest.json'), JSON.stringify({ components: [], seq, version: String(seq) }))
+function release(files: Record<string, string>, seq = 100) {
+  return buildCoreRelease({
+    components,
+    files: Object.entries(files).map(([path, text]) => ({ bytes: encode(text), path })),
+    host: 'electron',
+    hostApi: { max: 1, min: 1 },
+    product: 'app',
+    seq,
+    signingKey,
+    version: '1.0.0',
+  })
 }
 
-describe('nextSeq', () => {
-  it('uses the current time, so a tree that lost releases still gives a seq above every earlier one', async () => {
-    expect(await nextSeq(join(root, 'tree'), 1_000_000)).toBe(1_000_000)
+describe('buildCoreRelease', () => {
+  it('builds a manifest that a client verifies, with one object per distinct content', async () => {
+    const built = await release({ 'main/index.mjs': 'main', 'renderer/a.js': 'same', 'renderer/b.js': 'same', 'renderer/index.html': 'page' })
+    const [manifest, signature] = built.manifestFiles
 
-    await addCore(5)
-    expect(await nextSeq(join(root, 'tree'), 1_000_000)).toBe(1_000_000)
+    const verified = await verifyCoreManifest(manifest!.bytes, decode(signature!.bytes), [trustedKey])
+
+    expect(verified).toMatchObject({ product: 'app', seq: 100, totalSize: 16, version: '1.0.0' })
+    expect(built.objects).toHaveLength(3)
+    expect(built.objects.map(object => object.key)).toContain(`objects/sha256/${(await contentHash(encode('same'))).slice(0, 2)}/${await contentHash(encode('same'))}`)
+    expect(built.objects.every(object => object.immutable && object.headers['Cache-Control'].includes('immutable'))).toBe(true)
+    expect(built.builtin).toEqual({ components: verified.components, seq: 100, version: '1.0.0' })
   })
 
-  it('goes above the largest seq in the tree when the clock is behind it', async () => {
-    await addCore(2_000_000)
+  it('gives the same manifest bytes for the same input in any file order', async () => {
+    const files = { 'main/index.mjs': 'main', 'renderer/index.html': 'page' }
+    const reversed = Object.fromEntries(Object.entries(files).reverse())
+    const createdAt = '2026-10-24T00:00:00.000Z'
+    const a = await buildCoreRelease({ components, createdAt, files: Object.entries(files).map(([path, text]) => ({ bytes: encode(text), path })), host: 'electron', hostApi: { max: 1, min: 1 }, product: 'app', seq: 1, signingKey, version: '1' })
+    const b = await buildCoreRelease({ components, createdAt, files: Object.entries(reversed).map(([path, text]) => ({ bytes: encode(text), path })), host: 'electron', hostApi: { max: 1, min: 1 }, product: 'app', seq: 1, signingKey, version: '1' })
 
-    expect(await nextSeq(join(root, 'tree'), 1_000_000)).toBe(2_000_001)
+    expect(decode(a.manifestFiles[0]!.bytes)).toBe(decode(b.manifestFiles[0]!.bytes))
+  })
+
+  it('rejects a file outside every component', async () => {
+    await expect(release({ 'other/file.txt': 'x' })).rejects.toThrow('in no component')
   })
 })
 
-describe('reissuePointers', () => {
-  it('signs every pointer again with a later issue time and the same content', async () => {
-    await keygen(join(root, 'keys'))
-    const key = await loadSigningKey(join(root, 'keys', 'signing-key.json'))
-    const tree = join(root, 'tree')
-    await writePointer({ cadence: 'realtime', channel: 'canary', coreSeq: 7, issuedAt: '2026-01-01T00:00:00.000Z', key, product: 'test', revoked: [5], tree })
+describe('buildPointer', () => {
+  it('builds a pointer that a client verifies for its target', async () => {
+    const built = await buildPointer({ cadence: 'realtime', channel: 'canary', core: { rollout: 25, seq: 100 }, product: 'app', revoked: [90], signingKey })
+    const [pointer, signature] = built.files
+    const context = { cadence: 'realtime', channel: 'canary', now: new Date(), product: 'app' }
 
-    const [pointer] = await reissuePointers({ key, product: 'test', tree })
-    const stored = JSON.parse(await readFile(join(tree, 'pointers', 'canary', 'realtime.json'), 'utf8'))
+    expect(pointer!.key).toBe('pointers/canary/realtime.json')
+    expect(pointer!.headers['Cache-Control']).toBe('no-store')
+    expect(await verifyPointer(pointer!.bytes, decode(signature!.bytes), [trustedKey], context)).toMatchObject({ core: { rollout: { percentage: 25, salt: '100' }, seq: 100 }, revoked: [90] })
+  })
 
-    expect(Date.parse(pointer!.issuedAt)).toBeGreaterThan(Date.parse('2026-01-01T00:00:00.000Z'))
-    expect(stored).toMatchObject({ core: { seq: 7 }, revoked: [5] })
+  it('signs a pointer again later with the same content', async () => {
+    const first = await buildPointer({ cadence: 'realtime', channel: 'canary', core: { seq: 100 }, issuedAt: '2026-01-01T00:00:00.000Z', product: 'app', revoked: [90], signingKey })
+    const again = await reissuePointer(first.pointer, signingKey)
+
+    expect(Date.parse(again.pointer.issuedAt)).toBeGreaterThan(Date.parse(first.pointer.issuedAt))
+    expect(again.pointer).toMatchObject({ core: { seq: 100 }, revoked: [90] })
+  })
+})
+
+describe('uploadStages', () => {
+  it('puts objects first, manifests next, and pointers last, without duplicate objects', async () => {
+    const a = await release({ 'main/index.mjs': 'main', 'renderer/index.html': 'page' }, 100)
+    const b = await release({ 'main/index.mjs': 'main', 'renderer/index.html': 'page 2' }, 101)
+    const pointer = await buildPointer({ cadence: 'realtime', channel: 'canary', core: { seq: 101 }, product: 'app', signingKey })
+
+    const stages = uploadStages([a, b], [pointer])
+
+    expect(stages.map(stage => stage.map(file => file.key.split('/')[0]))).toEqual([['objects', 'objects', 'objects'], ['cores', 'cores', 'cores', 'cores'], ['pointers', 'pointers']])
+  })
+})
+
+describe('createSeq', () => {
+  it('uses the clock, or goes above a minimum when the clock is behind it', () => {
+    expect(createSeq(0, 1_000)).toBe(1_000)
+    expect(createSeq(5_000, 1_000)).toBe(5_001)
   })
 })

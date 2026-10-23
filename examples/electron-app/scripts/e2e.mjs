@@ -1,6 +1,6 @@
 // End-to-end test of the example app.
 //
-// It publishes cores to a local static server and drives one real Electron install through these scenarios:
+// It publishes cores to an update tree in memory and drives one real Electron install through these scenarios:
 //   1. a page-only core reloads in place, and the process stays the same
 //   2. a main-code core restarts the app
 //   3. a core that crashes at boot falls back after three attempts and is blocked
@@ -14,14 +14,14 @@
 // --show shows the window. --pause waits after each step, so a person can watch. --capture saves a screenshot of the
 // window after each page loads.
 
-import { cpSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { argv, exit, platform } from 'node:process'
 import { parseArgs } from 'node:util'
 
-import { nextSeq, reissuePointers } from '@ergosphere-it/publish'
-import { createStaticServer } from '@ergosphere-it/server'
+import { createSeq } from '@ergosphere-it/publish'
+import { createTreeServer } from '@ergosphere-it/server'
 import { errorMessageFrom } from '@moeru/std/error'
 import { delay } from 'es-toolkit'
 
@@ -72,7 +72,7 @@ try {
   workspace = await createWorkspace(work)
   await publish(1, ['--label', 'v1', '--main-tag', '1'], { builtin: true })
   await point(undefined)
-  server = await createStaticServer({ onRequest: request => requests.push(request), root: workspace.tree })
+  server = await createTreeServer({ onRequest: request => requests.push(request), tree: workspace.tree })
   console.info(`work dir ${work}, server ${server.url}, platform ${platform}`)
 
   stopApp = await launchApp(workspace, { baseUrl: server.url, capture: options.capture, show: options.show })
@@ -129,39 +129,38 @@ try {
   mark = lastIndex()
   await publish(7, ['--label', 'v7', '--main-tag', '4'], { hostApi: { max: 2, min: 2 } })
   await point(7)
-  const rejected = await waitFor('rejected core 7', list => since(mark)(list).find(e => e.type === 'check' && e.outcome.status === 'rejected'))
+  const rejected = await waitFor('rejected core 7', list => since(mark)(list).find(e => e.type === 'check' && e.result.status === 'rejected'))
   await delay(3000)
   const moved = since(mark)(readEvents()).some(e => e.type === 'boot' || e.type === 'reload')
-  await step('6. core for a newer host API is not taken', rejected.outcome.reason === 'host-api-incompatible' && !moved, rejected.outcome.reason)
+  await step('6. core for a newer host API is not taken', rejected.result.code === 'host-api-incompatible' && !moved, rejected.result.code)
 
   // 7. the server goes back to a backup after a release reached the app
-  const backup = join(work, 'tree-backup')
-  cpSync(workspace.tree, backup, { recursive: true })
+  const backup = workspace.tree.snapshot()
   mark = lastIndex()
-  const lost = await nextSeq(workspace.tree)
+  const lost = createSeq(7)
   await publish(lost, ['--label', 'v8-lost', '--main-tag', '2'])
   await point(lost)
   await waitFor('page v8-lost', list => since(mark)(list).find(e => e.type === 'page-mounted' && e.label === 'v8-lost'))
 
   mark = lastIndex()
-  rmSync(workspace.tree, { force: true, recursive: true })
-  cpSync(backup, workspace.tree, { recursive: true })
-  const replayed = await waitFor('ignored old pointer', list => since(mark)(list).find(e => e.type === 'check' && e.outcome.reason === 'pointer-replayed'))
+  workspace.tree.restore(backup)
+  const replayed = await waitFor('ignored old pointer', list => since(mark)(list).find(e => e.type === 'check' && e.result.code === 'pointer-replayed'))
 
   mark = lastIndex()
-  await reissuePointers({ key: workspace.key, product: 'example', tree: workspace.tree })
-  const behind = await waitFor('server behind', list => since(mark)(list).find(e => e.type === 'check' && e.outcome.status === 'server-behind'))
+  await workspace.reissue()
+  const behind = await waitFor('server behind', list => since(mark)(list).find(e => e.type === 'check' && e.result.status === 'server-behind'))
   const wentBack = since(mark)(readEvents()).some(e => e.type === 'boot' || e.type === 'reload' || e.type === 'rollback')
 
   mark = lastIndex()
-  const fix = await nextSeq(workspace.tree)
+  // The server does not know the lost release. A seq from the clock is still above it.
+  const fix = createSeq()
   await publish(fix, ['--label', 'v9-fix', '--main-tag', '2'])
   await point(fix)
   const fixed = await waitFor('page v9-fix', list => since(mark)(list).find(e => e.type === 'page-mounted' && e.label === 'v9-fix'))
   await step(
     '7. server back to a backup: the app stays, then takes the next release',
-    Boolean(replayed) && behind.outcome.current === lost && !wentBack && fix > lost && fixed.seq === fix,
-    `ignored the old pointer, reported server-behind (app ${behind.outcome.current} > server ${behind.outcome.seq}), took ${fix}`,
+    Boolean(replayed) && behind.result.current === lost && !wentBack && fix > lost && fixed.seq === fix,
+    `ignored the old pointer, reported server-behind (app ${behind.result.current} > server ${behind.result.seq}), took ${fix}`,
   )
 }
 catch (error) {

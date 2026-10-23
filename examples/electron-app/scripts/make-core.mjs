@@ -56,10 +56,10 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { env, pid } from 'node:process'
 
-import { getRuntime } from '@ergosphere-it/driver-electron/runtime'
+import { getCore } from '@ergosphere-it/driver-electron/core'
 import { app, BrowserWindow, ipcMain } from 'electron'
 
-const runtime = getRuntime()
+const core = getCore()
 const MAIN_TAG = ${JSON.stringify(values['main-tag'])}
 
 function log(event) {
@@ -67,7 +67,7 @@ function log(event) {
     appendFileSync(env.ERGOSPHERE_EVENT_LOG, JSON.stringify({ time: Date.now(), pid, ...event }) + '\\n')
 }
 
-log({ type: 'core-main', seq: runtime.core.seq, kind: runtime.core.kind, mainTag: MAIN_TAG })
+log({ type: 'core-main', seq: core.info.seq, kind: core.info.kind, mainTag: MAIN_TAG })
 
 app.whenReady().then(() => {
   const window = new BrowserWindow({
@@ -75,39 +75,39 @@ app.whenReady().then(() => {
     height: 420,
     show: env.ERGOSPHERE_SHOW_WINDOW === '1',
     title: 'ergosphere-it example',
-    webPreferences: { preload: runtime.resolve('preload', 'index.cjs'), sandbox: true, contextIsolation: true },
+    webPreferences: { preload: core.resolve('preload', 'index.cjs'), sandbox: true, contextIsolation: true },
   })
-  const loadPage = () => window.loadFile(runtime.resolve('renderer', 'index.html'), {
-    query: { seq: String(runtime.core.seq), kind: runtime.core.kind, pid: String(pid), mainTag: MAIN_TAG },
+  const loadPage = () => window.loadFile(core.resolve('renderer', 'index.html'), {
+    query: { seq: String(core.info.seq), kind: core.info.kind, pid: String(pid), mainTag: MAIN_TAG },
   })
 
   // The page shows the update notice. It gets every status change and asks main to apply the update.
   const sendStatus = status => !window.isDestroyed() && window.webContents.send('example:status', status)
-  runtime.onStatus(sendStatus)
-  window.webContents.on('did-finish-load', () => sendStatus(runtime.status))
-  ipcMain.handle('example:apply', () => runtime.applyUpdate())
+  core.updater.onStatus(sendStatus)
+  window.webContents.on('did-finish-load', () => sendStatus(core.updater.status))
+  ipcMain.handle('example:apply', () => core.updater.apply())
 
   ipcMain.on('example:mounted', (_event, page) => {
-    log({ type: 'page-mounted', seq: runtime.core.seq, ...page })
-    runtime.markHealthy()
+    log({ type: 'page-mounted', seq: core.info.seq, ...page })
+    core.markHealthy()
     if (env.ERGOSPHERE_CAPTURE_DIR) {
       setTimeout(async () => {
         const image = await window.webContents.capturePage()
         mkdirSync(env.ERGOSPHERE_CAPTURE_DIR, { recursive: true })
-        writeFileSync(join(env.ERGOSPHERE_CAPTURE_DIR, Date.now() + '-core' + runtime.core.seq + '-' + page.label + '.png'), image.toPNG())
+        writeFileSync(join(env.ERGOSPHERE_CAPTURE_DIR, Date.now() + '-core' + core.info.seq + '-' + page.label + '.png'), image.toPNG())
       }, 300)
     }
   })
 
   loadPage()
-  runtime.onReload((core) => {
-    log({ type: 'page-reload', seq: core.seq })
+  core.onReload((info) => {
+    log({ type: 'page-reload', seq: info.seq })
     loadPage()
   })
 
   const interval = Number(env.ERGOSPHERE_CHECK_MS ?? 0)
   if (interval > 0) {
-    const tick = () => runtime.checkForUpdate().catch(error => log({ type: 'check-error', error: String(error) }))
+    const tick = () => core.updater.check().catch(error => log({ type: 'check-error', error: String(error) }))
     setInterval(tick, interval)
   }
 })

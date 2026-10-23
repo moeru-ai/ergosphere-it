@@ -41,7 +41,7 @@ if (options['reset-server']) {
   rmSync(join(work, 'tree'), { force: true, recursive: true })
   rmSync(historyFile, { force: true })
 }
-const workspace = await createWorkspace(work)
+const workspace = await createWorkspace(work, { persist: keep })
 
 // The main tag of the newest healthy main code. A page-only release keeps it, so the app reloads in place.
 // It survives a server reset: it describes the app code, not the server.
@@ -49,9 +49,7 @@ let mainTag = existsSync(demoStateFile) ? JSON.parse(readFileSync(demoStateFile,
 const saveDemoState = () => writeFileSync(demoStateFile, `${JSON.stringify({ mainTag })}\n`)
 // Each version carries a page asset, so a release has something to download and the progress bar has time to move.
 const ASSET = ['--asset-mb', '4']
-await workspace.publish(1, ['--label', '1.0.0', '--main-tag', '1', ...ASSET], { builtin: true })
-if (!existsSync(join(workspace.tree, 'pointers')))
-  await workspace.point(undefined)
+await workspace.publish(1, ['--label', '1.0.0', '--main-tag', '1', ...ASSET], { builtin: true, version: '1.0.0' })
 
 const changes = {
   'crash': { flags: () => ['--main-tag', `${mainTag}-crash`, '--crash'], label: 'Crashes at start' },
@@ -64,20 +62,24 @@ const changes = {
 const server = await createDevServer({
   channels: ['canary', 'stable'],
   faults: { bytesPerSecond: 1.5 * 1024 * 1024 },
-  key: workspace.key,
   port: Number(options.port),
   product: 'example',
   release: {
-    changes: ['page', 'main', 'crash', 'unhealthy', 'newer-shell'].map(id => ({ id, label: changes[id].label })),
-    history: [{ change: 'page', channel: 'canary', publishedAt: new Date().toISOString(), rollout: 100, seq: 1, version: '1.0.0' }],
-    historyFile: keep ? historyFile : undefined,
-    async publish({ change, seq, version }) {
+    async build({ change, seq, version }) {
       const { flags, hostApi } = changes[change]
-      await workspace.publish(seq, ['--label', version, ...ASSET, ...flags()], { hostApi, version })
+      const release = await workspace.build(seq, ['--label', version, ...ASSET, ...flags()], { hostApi, version })
       saveDemoState()
+
+      return release
     },
+    changes: ['page', 'main', 'crash', 'unhealthy', 'newer-shell'].map(id => ({ id, label: changes[id].label })),
+    history: existsSync(historyFile)
+      ? JSON.parse(readFileSync(historyFile, 'utf8'))
+      : [{ change: 'page', channel: 'canary', publishedAt: new Date().toISOString(), rollout: 100, seq: 1, version: '1.0.0' }],
+    onHistoryChange: history => keep && writeFileSync(historyFile, `${JSON.stringify(history, null, 2)}\n`),
   },
-  root: workspace.tree,
+  signingKey: workspace.signingKey,
+  tree: workspace.tree,
 })
 
 const stopApp = await launchApp(workspace, { applyMode: 'prompt', baseUrl: server.url, checkMs: 2000, debugPort: options['debug-port'], healthMs: 5000, show: true })
@@ -106,8 +108,8 @@ const forward = setInterval(() => {
       running = event.to === 'builtin' ? 1 : event.to
     if (event.type === 'shell-start')
       pid = event.pid
-    if (event.type === 'check' && event.outcome.status !== 'busy')
-      lastCheck = event.outcome
+    if (event.type === 'check' && event.result.status !== 'busy')
+      lastCheck = event.result
   }
   seen = events.length
 

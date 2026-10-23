@@ -33,7 +33,7 @@ async function createClient(overrides: Partial<ConstructorParameters<typeof Upda
 
   return new UpdateClient({
     baseUrl: server.baseUrl,
-    builtin: { components: await buildComponents(builtinFiles), dir: builtinDir, seq: 10 },
+    builtin: { components: await buildComponents(builtinFiles), dir: builtinDir, seq: 10, version: '1.0.0' },
     cadence: 'realtime',
     channel: 'canary',
     dataDir: join(root, 'updates'),
@@ -88,17 +88,17 @@ describe('updateClient check', () => {
     const client = await createClient()
 
     await server.publishPointer(11, { channel: 'stable' }, '/pointers/canary/realtime.json')
-    expect(await client.check()).toMatchObject({ reason: 'pointer-mismatch', status: 'rejected' })
+    expect(await client.check()).toMatchObject({ error: { code: 'pointer-mismatch' }, status: 'rejected' })
 
     await server.publishPointer(11, { issuedAt: '2026-10-23T01:00:00.000Z', product: 'other' })
-    expect(await client.check()).toMatchObject({ reason: 'pointer-mismatch', status: 'rejected' })
+    expect(await client.check()).toMatchObject({ error: { code: 'pointer-mismatch' }, status: 'rejected' })
   })
 
   it('rejects a validly signed core of another product', async () => {
     await server.publishCore(11, builtinFiles, { product: 'other' })
     await server.publishPointer(11)
 
-    expect(await (await createClient()).check()).toMatchObject({ reason: 'core-mismatch', status: 'rejected' })
+    expect(await (await createClient()).check()).toMatchObject({ error: { code: 'core-mismatch' }, status: 'rejected' })
   })
 
   it('reports up to date when the pointer is not newer than the builtin core', async () => {
@@ -114,7 +114,7 @@ describe('updateClient check', () => {
     await client.check()
     await server.publishPointer(undefined, { issuedAt: '2026-10-23T00:00:00.000Z' })
 
-    expect(await client.check()).toMatchObject({ reason: 'pointer-replayed', status: 'rejected' })
+    expect(await client.check()).toMatchObject({ error: { code: 'pointer-replayed' }, status: 'rejected' })
   })
 
   it('rejects a core for another host API and does not stage it', async () => {
@@ -122,7 +122,7 @@ describe('updateClient check', () => {
     await server.publishPointer(11)
     const client = await createClient()
 
-    expect(await client.check()).toMatchObject({ reason: 'host-api-incompatible', status: 'rejected' })
+    expect(await client.check()).toMatchObject({ error: { code: 'host-api-incompatible' }, status: 'rejected' })
     expect((await client.state()).deferred).toBeUndefined()
   })
 
@@ -149,7 +149,7 @@ describe('updateClient stage and boot', () => {
     expect(staged).toMatchObject({ downloadedBytes: 'app v2'.length, seq: 11, status: 'staged' })
     expect(server.requests.filter(url => url.includes('/objects/'))).toHaveLength(1)
 
-    const boot = await client.selectBoot()
+    const boot = await client.boot()
     expect(boot).toMatchObject({ kind: 'external', rejected: [], seq: 11 })
     expect(activationFor(await buildComponents(builtinFiles), manifest.components)).toBe('reload')
   })
@@ -200,7 +200,7 @@ describe('updateClient stage and boot', () => {
     await checkAndStage(client)
     await writeFile(join(client.coreDir(11), 'main', 'index.js'), 'main v9')
 
-    const boot = await client.selectBoot()
+    const boot = await client.boot()
 
     expect(boot.kind).toBe('builtin')
     expect(boot.rejected).toEqual([{ problem: 'file main/index.js does not match its hash', seq: 11 }])
@@ -214,9 +214,9 @@ describe('updateClient stage and boot', () => {
     await checkAndStage(client)
 
     for (let attempt = 0; attempt < 3; attempt++)
-      expect((await client.selectBoot()).kind).toBe('external')
+      expect((await client.boot()).kind).toBe('external')
 
-    expect((await client.selectBoot()).kind).toBe('builtin')
+    expect((await client.boot()).kind).toBe('builtin')
   })
 
   it('keeps booting a core that reports healthy', async () => {
@@ -226,7 +226,7 @@ describe('updateClient stage and boot', () => {
     await checkAndStage(client)
 
     for (let attempt = 0; attempt < 5; attempt++) {
-      const boot = await client.selectBoot()
+      const boot = await client.boot()
       expect(boot.kind).toBe('external')
       await client.markHealthy(boot)
     }
@@ -237,17 +237,17 @@ describe('updateClient stage and boot', () => {
     await server.publishCore(11, { ...builtinFiles, web: { 'renderer/index.html': '<html>v2</html>' } })
     await server.publishPointer(11)
     await checkAndStage(client)
-    await client.markHealthy(await client.selectBoot())
+    await client.markHealthy(await client.boot())
 
     await server.publishCore(12, { ...builtinFiles, web: { 'renderer/index.html': '<html>v3</html>' } })
     await server.publishPointer(12, { issuedAt: '2026-10-23T01:00:00.000Z' })
     await checkAndStage(client)
-    expect(await client.selectBoot()).toMatchObject({ kind: 'external', seq: 12 })
+    expect(await client.boot()).toMatchObject({ kind: 'external', seq: 12 })
 
     expect(await client.rollback(12)).toBe(11)
-    expect(await client.selectBoot()).toMatchObject({ kind: 'external', seq: 11 })
+    expect(await client.boot()).toMatchObject({ kind: 'external', seq: 11 })
     const manifestRequests = server.requests.filter(url => url.includes('/cores/12/')).length
-    expect(await client.check()).toMatchObject({ reason: 'blocked', status: 'rejected' })
+    expect(await client.check()).toMatchObject({ error: { code: 'blocked' }, status: 'rejected' })
     expect(server.requests.filter(url => url.includes('/cores/12/'))).toHaveLength(manifestRequests)
   })
 
@@ -257,13 +257,13 @@ describe('updateClient stage and boot', () => {
     await server.publishCore(12, { ...builtinFiles, web: { 'renderer/index.html': '<html>v3</html>' } })
     await server.publishPointer(12)
     await checkAndStage(client)
-    await client.markHealthy(await client.selectBoot())
+    await client.markHealthy(await client.boot())
 
     // The server goes back to a backup that serves 11, and signs its pointer again.
     await server.publishPointer(11, { issuedAt: '2026-10-23T01:00:00.000Z' })
 
     expect(await client.check()).toEqual({ current: 12, seq: 11, status: 'server-behind' })
-    expect(await client.selectBoot()).toMatchObject({ kind: 'external', seq: 12 })
+    expect(await client.boot()).toMatchObject({ kind: 'external', seq: 12 })
   })
 
   it('leaves a core that a pointer revokes', async () => {
@@ -271,12 +271,12 @@ describe('updateClient stage and boot', () => {
     await server.publishCore(11, { ...builtinFiles, web: { 'renderer/index.html': '<html>v2</html>' } })
     await server.publishPointer(11)
     await checkAndStage(client)
-    await client.markHealthy(await client.selectBoot())
+    await client.markHealthy(await client.boot())
 
     await server.publishPointer(undefined, { issuedAt: '2026-10-23T01:00:00.000Z', revoked: [11] })
     await client.check()
 
-    expect((await client.selectBoot()).kind).toBe('builtin')
+    expect((await client.boot()).kind).toBe('builtin')
   })
 
   it('replaces a damaged object in the local store instead of reusing it', async () => {
@@ -295,7 +295,7 @@ describe('updateClient stage and boot', () => {
     await server.publishPointer(12, { issuedAt: '2026-10-23T01:00:00.000Z' })
 
     expect(await checkAndStage(client)).toMatchObject({ seq: 12, status: 'staged' })
-    expect((await client.selectBoot()).kind).toBe('external')
+    expect((await client.boot()).kind).toBe('external')
   })
 
   it('removes cores and objects that no kept core uses', async () => {
@@ -304,7 +304,7 @@ describe('updateClient stage and boot', () => {
       await server.publishCore(seq, { ...builtinFiles, web: { 'renderer/index.html': `<html>v${seq}</html>` } })
       await server.publishPointer(seq, { issuedAt: `2026-10-23T0${seq - 10}:00:00.000Z` })
       await checkAndStage(client)
-      await client.markHealthy(await client.selectBoot())
+      await client.markHealthy(await client.boot())
     }
     await client.collectGarbage()
 

@@ -38,7 +38,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@moeru/std": "catalog:",
     "valibot": "catalog:"
   }
 }

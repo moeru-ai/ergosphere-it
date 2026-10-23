@@ -2,13 +2,14 @@ import type { GenericSchema, InferOutput } from 'valibot'
 
 import type { CoreManifest, HostApiRange, Pointer, ShellManifest, TrustedKey } from './schema'
 
-import { errorMessageFrom } from '@moeru/std/error'
-import { safeParse } from 'valibot'
+import { safeParse, ValiError } from 'valibot'
 
+import { CandidateError, DocumentError, PointerError, SignatureError } from './errors'
 import { isSafeManifestPath } from './path'
 import { coreManifestSchema, pointerSchema, shellManifestSchema } from './schema'
 import { decodeBase64, verifyBytes } from './signature'
 
+/** What an install is, to decide if it can take a verified core. */
 export interface CoreCandidateContext {
   blocked?: readonly number[]
   builtinSeq: number
@@ -36,51 +37,28 @@ export interface PointerContext {
   product: string
 }
 
-/** Reason codes of the specification. Every client implementation returns the same codes. */
-export type VerifyReason
-  = | 'blocked'
-    | 'core-mismatch'
-    | 'duplicate-path'
-    | 'host-api-incompatible'
-    | 'invalid-json'
-    | 'invalid-schema'
-    | 'invalid-signature'
-    | 'not-newer'
-    | 'platform-mismatch'
-    | 'pointer-expired'
-    | 'pointer-mismatch'
-    | 'pointer-replayed'
-    | 'revoked'
-    | 'unsafe-path'
-    | 'untrusted-key'
-
-export type VerifyResult<T>
-  = | { detail?: string, ok: false, reason: VerifyReason }
-    | { ok: true, value: T }
-
 /**
- * Decides if a verified core manifest can run on this install.
+ * Throws a `CandidateError` when this install cannot take a verified core.
  *
- * The checks run in a fixed order, so every implementation reports the same reason for the same input:
+ * The checks run in a fixed order, so every implementation reports the same code for the same input:
  * product and host, platform, host API, revoked, blocked, then not newer.
  */
-export function evaluateCoreCandidate(manifest: CoreManifest, context: CoreCandidateContext): VerifyResult<CoreManifest> {
+export function checkCoreCandidate(manifest: CoreManifest, context: CoreCandidateContext): void {
+  const { seq } = manifest
   if (manifest.product !== context.product || manifest.host !== context.host)
-    return fail('core-mismatch', `core for ${manifest.product} on ${manifest.host}, install is ${context.product} on ${context.host}`)
+    throw new CandidateError('core-mismatch', `Core ${seq} is for ${manifest.product} on ${manifest.host}, and this install is ${context.product} on ${context.host}.`, seq)
   if (manifest.platform !== 'any' && manifest.platform !== context.platform)
-    return fail('platform-mismatch', `${manifest.platform} is not ${context.platform}`)
+    throw new CandidateError('platform-mismatch', `Core ${seq} is for ${manifest.platform}, and this install is ${context.platform}.`, seq)
   if (!isHostApiCompatible(context.shellHostApi, manifest.hostApi))
-    return fail('host-api-incompatible', `shell ${context.shellHostApi} is outside ${manifest.hostApi.min}..${manifest.hostApi.max}`)
-  if (context.revoked?.includes(manifest.seq))
-    return fail('revoked', String(manifest.seq))
-  if (context.blocked?.includes(manifest.seq))
-    return fail('blocked', String(manifest.seq))
+    throw new CandidateError('host-api-incompatible', `Core ${seq} needs host API ${manifest.hostApi.min}..${manifest.hostApi.max}, and this shell has ${context.shellHostApi}.`, seq)
+  if (context.revoked?.includes(seq))
+    throw new CandidateError('revoked', `Core ${seq} is revoked.`, seq)
+  if (context.blocked?.includes(seq))
+    throw new CandidateError('blocked', `Core ${seq} is blocked on this install.`, seq)
 
   const floor = Math.max(context.builtinSeq, context.currentSeq ?? 0)
-  if (manifest.seq <= floor)
-    return fail('not-newer', `${manifest.seq} is not greater than ${floor}`)
-
-  return { ok: true, value: manifest }
+  if (seq <= floor)
+    throw new CandidateError('not-newer', `Core ${seq} is not newer than ${floor}.`, seq)
 }
 
 /** A shell accepts a core when its host API is inside the core range. */
@@ -88,124 +66,60 @@ export function isHostApiCompatible(shellHostApi: number, range: HostApiRange): 
   return range.min <= shellHostApi && shellHostApi <= range.max
 }
 
-/** Verifies the signature, schema, and file list of a core manifest. */
-export async function verifyCoreManifest(
-  bytes: Uint8Array<ArrayBuffer>,
-  signatureBase64: string,
-  trustedKeys: readonly TrustedKey[],
-): Promise<VerifyResult<CoreManifest>> {
-  const result = await verifySignedDocument(bytes, signatureBase64, trustedKeys, coreManifestSchema)
-  if (!result.ok)
-    return result
+/** Verifies the signature, schema, and file list of a core manifest. Throws an `ErgosphereError` subclass. */
+export async function verifyCoreManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<CoreManifest> {
+  const manifest = await verifySignedDocument(bytes, signature, trustedKeys, coreManifestSchema)
+  checkFiles(manifest)
 
-  return checkFiles(result.value)
+  return manifest
 }
 
-/** Verifies a pointer, then rejects expired and replayed pointers. */
-export async function verifyPointer(
-  bytes: Uint8Array<ArrayBuffer>,
-  signatureBase64: string,
-  trustedKeys: readonly TrustedKey[],
-  context: PointerContext,
-): Promise<VerifyResult<Pointer>> {
-  const result = await verifySignedDocument(bytes, signatureBase64, trustedKeys, pointerSchema)
-  if (!result.ok)
-    return result
-
-  const pointer = result.value
+/** Verifies a pointer, then rejects pointers of another target, expired pointers, and replayed pointers. */
+export async function verifyPointer(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[], context: PointerContext): Promise<Pointer> {
+  const pointer = await verifySignedDocument(bytes, signature, trustedKeys, pointerSchema)
   const issuedAt = Date.parse(pointer.issuedAt)
   const expiresAt = Date.parse(pointer.expiresAt)
 
   if (pointer.product !== context.product || pointer.channel !== context.channel || pointer.cadence !== context.cadence)
-    return fail('pointer-mismatch', `pointer for ${pointer.product} ${pointer.channel}/${pointer.cadence}, asked for ${context.product} ${context.channel}/${context.cadence}`)
+    throw new PointerError('pointer-mismatch', `The pointer is for ${pointer.product} ${pointer.channel}/${pointer.cadence}, and the client asked for ${context.product} ${context.channel}/${context.cadence}.`)
   if (expiresAt <= issuedAt)
-    return fail('invalid-schema', 'expiresAt is not after issuedAt')
+    throw new DocumentError('invalid-schema', 'The pointer expiresAt is not after its issuedAt.')
   if (context.now.getTime() > expiresAt)
-    return fail('pointer-expired', pointer.expiresAt)
+    throw new PointerError('pointer-expired', `The pointer expired at ${pointer.expiresAt}.`)
   if (context.lastIssuedAt !== undefined && issuedAt < Date.parse(context.lastIssuedAt))
-    return fail('pointer-replayed', `${pointer.issuedAt} is older than ${context.lastIssuedAt}`)
+    throw new PointerError('pointer-replayed', `The pointer was issued at ${pointer.issuedAt}, before the pointer that the client accepted at ${context.lastIssuedAt}.`)
 
-  return result
+  return pointer
 }
 
-/** Verifies the signature and schema of a shell manifest. */
-export async function verifyShellManifest(
-  bytes: Uint8Array<ArrayBuffer>,
-  signatureBase64: string,
-  trustedKeys: readonly TrustedKey[],
-): Promise<VerifyResult<ShellManifest>> {
-  return verifySignedDocument(bytes, signatureBase64, trustedKeys, shellManifestSchema)
+/** Verifies the signature and schema of a shell manifest. Throws an `ErgosphereError` subclass. */
+export async function verifyShellManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<ShellManifest> {
+  return verifySignedDocument(bytes, signature, trustedKeys, shellManifestSchema)
 }
 
-/**
- * Verifies a signed document and parses it with a schema.
- *
- * The JSON is parsed first only to read `signature.keyId`. No other field is used before the signature over the
- * raw bytes verifies with that trusted key.
- */
-export async function verifySignedDocument<TSchema extends GenericSchema>(
-  bytes: Uint8Array<ArrayBuffer>,
-  signatureBase64: string,
-  trustedKeys: readonly TrustedKey[],
-  schema: TSchema,
-): Promise<VerifyResult<InferOutput<TSchema>>> {
-  const signature = decodeBase64(signatureBase64)
-  if (!signature)
-    return fail('invalid-signature', 'signature is not base64')
-
-  let document: unknown
-  try {
-    document = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
-  }
-  catch (error) {
-    return fail('invalid-json', errorMessageFrom(error))
-  }
-
-  const keyId = readKeyId(document)
-  const key = trustedKeys.find(candidate => candidate.keyId === keyId)
-  if (!key)
-    return fail('untrusted-key', keyId === undefined ? 'signature.keyId is missing' : `keyId ${keyId} is not trusted`)
-
-  if (!await verifyBytes(bytes, signature, key))
-    return fail('invalid-signature', `signature does not verify with key ${key.keyId}`)
-
-  const parsed = safeParse(schema, document)
-  if (!parsed.success)
-    return fail('invalid-schema', parsed.issues.map(issue => issue.message).join('; '))
-
-  return { ok: true, value: parsed.output }
-}
-
-function checkFiles(manifest: CoreManifest): VerifyResult<CoreManifest> {
+function checkFiles(manifest: CoreManifest): void {
   const seen = new Set<string>()
   let totalSize = 0
 
   for (const component of manifest.components) {
     for (const file of component.files) {
       if (!isSafeManifestPath(file.path))
-        return fail('unsafe-path', file.path)
+        throw new DocumentError('unsafe-path', `The path ${JSON.stringify(file.path)} is not safe.`, file.path)
       if (seen.has(file.path))
-        return fail('duplicate-path', file.path)
+        throw new DocumentError('duplicate-path', `The path ${file.path} appears twice.`, file.path)
 
       seen.add(file.path)
       totalSize += file.size
     }
 
     if (component.entry !== undefined && !component.files.some(file => file.path === component.entry))
-      return fail('invalid-schema', `entry ${component.entry} is not a file of its component`)
+      throw new DocumentError('invalid-schema', `The entry ${component.entry} is not a file of its component.`, component.entry)
   }
 
   if (totalSize !== manifest.totalSize)
-    return fail('invalid-schema', `totalSize ${manifest.totalSize} does not match the files (${totalSize})`)
-
+    throw new DocumentError('invalid-schema', `totalSize is ${manifest.totalSize}, and the files add up to ${totalSize}.`)
   if (manifest.hostApi.min > manifest.hostApi.max)
-    return fail('invalid-schema', 'hostApi.min is greater than hostApi.max')
-
-  return { ok: true, value: manifest }
-}
-
-function fail(reason: VerifyReason, detail?: string): { detail?: string, ok: false, reason: VerifyReason } {
-  return detail === undefined ? { ok: false, reason } : { detail, ok: false, reason }
+    throw new DocumentError('invalid-schema', 'hostApi.min is greater than hostApi.max.')
 }
 
 function readKeyId(document: unknown): string | undefined {
@@ -219,4 +133,42 @@ function readKeyId(document: unknown): string | undefined {
   const keyId = (signature as { keyId?: unknown }).keyId
 
   return typeof keyId === 'string' ? keyId : undefined
+}
+
+/**
+ * Verifies a signed document and parses it with a schema.
+ *
+ * The JSON is parsed first only to read `signature.keyId`. No other field is used before the signature over the
+ * raw bytes verifies with that trusted key.
+ */
+async function verifySignedDocument<TSchema extends GenericSchema>(
+  bytes: Uint8Array<ArrayBuffer>,
+  signature: string,
+  trustedKeys: readonly TrustedKey[],
+  schema: TSchema,
+): Promise<InferOutput<TSchema>> {
+  const signatureBytes = decodeBase64(signature)
+  if (!signatureBytes)
+    throw new SignatureError('invalid-signature', 'The signature is not base64.')
+
+  let document: unknown
+  try {
+    document = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+  }
+  catch (error) {
+    throw new DocumentError('invalid-json', 'The document is not UTF-8 JSON.', undefined, { cause: error })
+  }
+
+  const keyId = readKeyId(document)
+  const key = trustedKeys.find(candidate => candidate.keyId === keyId)
+  if (!key)
+    throw new SignatureError('untrusted-key', keyId === undefined ? 'The document names no signing key.' : `The key ${keyId} is not trusted.`, keyId)
+  if (!await verifyBytes(bytes, signatureBytes, key))
+    throw new SignatureError('invalid-signature', `The signature does not verify with the key ${key.keyId}.`, key.keyId)
+
+  const parsed = safeParse(schema, document)
+  if (!parsed.success)
+    throw new DocumentError('invalid-schema', parsed.issues.map(issue => issue.message).join('; '), undefined, { cause: new ValiError(parsed.issues) })
+
+  return parsed.output
 }

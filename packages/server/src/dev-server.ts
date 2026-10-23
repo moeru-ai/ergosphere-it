@@ -1,18 +1,18 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-import type { Cadence } from '@ergosphere-it/protocol'
-import type { SigningKey } from '@ergosphere-it/publish'
+import type { Pointer, SigningKey } from '@ergosphere-it/protocol'
+import type { CoreRelease } from '@ergosphere-it/publish'
 
-import type { Faults, StaticServer } from './index'
+import type { MemoryTree } from './tree'
+import type { Faults, TreeServer } from './tree-server'
 
 import { Buffer } from 'node:buffer'
-import { readFile, writeFile } from 'node:fs/promises'
 
-import { nextSeq, readPointer, readTree, reissuePointers, writePointer } from '@ergosphere-it/publish'
+import { buildPointer, createSeq, uploadStages } from '@ergosphere-it/publish'
 import { errorMessageFrom } from '@moeru/std/error'
 
 import { consolePage } from './console-page'
-import { createStaticServer, NO_FAULTS } from './index'
+import { createTreeServer, NO_FAULTS } from './tree-server'
 
 /** What the host reports about the app. The console uses it to show desyncs between the app and the server. */
 export interface ClientReport {
@@ -27,7 +27,7 @@ export interface ClientReport {
   runningVersion?: string
 }
 
-export interface DevServer extends StaticServer {
+export interface DevServer extends TreeServer {
   /** The URL of the console page. */
   consoleUrl: string
   /** Shows the state of a client in the console, for example the core it runs and the cores it blocked. */
@@ -40,20 +40,20 @@ export interface DevServerOptions {
   /** Faults to inject from the start, for example a bandwidth limit that makes download progress visible. */
   faults?: Partial<Faults>
   host?: string
-  key: SigningKey
   port?: number
   product: string
-  /** How the console publishes. Without it, the console can still serve and revoke what the tree holds. */
+  /** How the console publishes. Without it, the console can still revoke what the tree holds. */
   release?: {
+    /** Builds a release. The server uploads its files and moves the channel pointer. */
+    build: (release: { change: string, seq: number, version: string }) => Promise<CoreRelease>
     changes: ReleaseChange[]
     /** Releases that exist before the console starts, for example the builtin core. */
     history?: ReleaseEntry[]
-    /** Keeps the history in this file, so it survives a restart of the server. */
-    historyFile?: string
-    /** Writes the core of a release into the tree. The server then moves the channel pointer. */
-    publish: (release: { change: string, seq: number, version: string }) => Promise<void>
+    /** Called after the history changes, so the host can keep it. */
+    onHistoryChange?: (history: ReleaseEntry[]) => void
   }
-  root: string
+  signingKey: SigningKey
+  tree: MemoryTree
 }
 
 /** One kind of release that the console offers, for example a page-only change. */
@@ -72,25 +72,21 @@ export interface ReleaseEntry {
   version: string
 }
 
-const CADENCE: Cadence = 'realtime'
+const CADENCE = 'realtime'
 
 /**
- * Serves an update tree with a small release console for local tests and demos.
+ * Serves a tree in memory with a small release console for local tests and demos.
  *
- * The console publishes a release to a channel, serves an earlier release again, and revokes a release. It lists the
- * history and shows what the app runs.
+ * The console publishes a release to a channel and revokes a release. It lists the history and shows what the app
+ * runs, including releases that the server does not know.
  */
 export async function createDevServer(options: DevServerOptions): Promise<DevServer> {
+  const { product, signingKey, tree } = options
   let faults: Faults = { ...NO_FAULTS, ...options.faults }
   let clientState: ClientReport | undefined
   const streams = new Set<ServerResponse>()
   const channels = options.channels ?? ['canary', 'stable']
-  const historyFile = options.release?.historyFile
-  const history: ReleaseEntry[] = await readHistory(historyFile) ?? [...options.release?.history ?? []]
-  const saveHistory = async () => {
-    if (historyFile)
-      await writeFile(historyFile, `${JSON.stringify(history, null, 2)}\n`)
-  }
+  const history: ReleaseEntry[] = [...options.release?.history ?? []]
 
   const broadcast = (event: string, data: unknown) => {
     const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
@@ -98,29 +94,38 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
       stream.write(message)
   }
 
-  const snapshot = async () => ({
+  const pointerOf = (channel: string): Pointer | undefined => {
+    const file = tree.get(`pointers/${channel}/${CADENCE}.json`)
+
+    return file && JSON.parse(new TextDecoder().decode(file.bytes)) as Pointer
+  }
+  const pointers = () => channels.map(pointerOf).filter((pointer): pointer is Pointer => pointer !== undefined)
+
+  const snapshot = () => ({
     changes: options.release?.changes ?? [],
     channels,
     clientState,
     history,
     nextVersion: suggestVersion(history, clientState),
-    pointers: (await readTree(options.root)).pointers,
+    pointers: pointers(),
   })
 
-  const updatePointer = async (channel: string, change: (pointer: { core?: number, revoked: number[], rollout?: number }) => void) => {
-    const current = await readPointer(options.root, channel, CADENCE)
+  /** Builds a channel pointer again from its current content after `change` edits it. */
+  const writePointer = async (channel: string, change: (pointer: { core?: number, revoked: number[], rollout?: number }) => void) => {
+    const current = pointerOf(channel)
     const next = { core: current?.core?.seq, revoked: [...current?.revoked ?? []], rollout: current?.core?.rollout?.percentage }
     change(next)
-    await writePointer({
+    const built = await buildPointer({
       cadence: CADENCE,
       channel,
-      coreSeq: next.core,
-      key: options.key,
-      product: options.product,
+      core: next.core === undefined ? undefined : { cohorts: current?.core?.cohorts, rollout: next.rollout, seq: next.core },
+      // A client rejects a pointer older than one it accepted, so keep issue times increasing.
+      issuedAt: new Date(Math.max(Date.now(), current ? Date.parse(current.issuedAt) + 1 : 0)).toISOString(),
+      product,
       revoked: next.revoked,
-      rollout: next.core !== undefined && next.rollout !== undefined && next.rollout < 100 ? { percentage: next.rollout, salt: String(next.core) } : undefined,
-      tree: options.root,
+      signingKey,
     })
+    tree.put(built.files)
   }
 
   const handlers = {
@@ -129,75 +134,50 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
 
       return faults
     },
-    /** Low-level pointer write, for tests and scripts. */
-    async pointer(body: { cadence: Cadence, channel: string, cohorts?: string[], core?: number, revoked?: number[], rollout?: number }) {
-      await writePointer({
-        cadence: body.cadence,
-        channel: body.channel,
-        cohorts: body.cohorts?.length ? body.cohorts : undefined,
-        coreSeq: body.core,
-        key: options.key,
-        product: options.product,
-        revoked: body.revoked,
-        rollout: body.core !== undefined && body.rollout !== undefined && body.rollout < 100 ? { percentage: body.rollout, salt: String(body.core) } : undefined,
-        tree: options.root,
-      })
-    },
     async publish(body: { change: string, channel?: string, rollout?: number, version: string }) {
       if (!options.release)
-        throw new Error('this server has no publish function')
+        throw new Error('This server has no build function.')
       if (!options.release.changes.some(change => change.id === body.change))
-        throw new Error(`unknown change ${body.change}`)
+        throw new Error(`Unknown change ${body.change}.`)
 
       const version = body.version.trim()
       if (!version)
-        throw new Error('the version is empty')
+        throw new Error('The version is empty.')
       if (history.some(entry => entry.version === version))
-        throw new Error(`version ${version} is already published`)
+        throw new Error(`Version ${version} is already published.`)
 
       const channel = body.channel ?? channels[0]!
       const rollout = body.rollout ?? 100
-      // The history can hold releases that are not in the tree, for example the builtin core.
-      const seq = Math.max(await nextSeq(options.root), ...history.map(entry => entry.seq + 1))
-      await options.release.publish({ change: body.change, seq, version })
-      await updatePointer(channel, (pointer) => {
-        pointer.core = seq
+      // The history can hold releases that the tree lost, for example after a restore.
+      const seq = createSeq(Math.max(0, ...history.map(entry => entry.seq)))
+      const release = await options.release.build({ change: body.change, seq, version })
+      tree.put(uploadStages([release]).flat())
+      await writePointer(channel, (pointer) => {
+        pointer.core = release.seq
         pointer.rollout = rollout
       })
-      history.push({ change: body.change, channel, publishedAt: new Date().toISOString(), rollout, seq, version })
-      await saveHistory()
+      history.push({ change: body.change, channel, publishedAt: new Date().toISOString(), rollout, seq: release.seq, version })
+      options.release.onHistoryChange?.(history)
 
-      return { seq, version }
+      return { seq: release.seq, version }
     },
     /** Signs every pointer again, for example after the tree went back to a backup and clients ignore its pointers. */
     async reissue() {
-      return reissuePointers({ key: options.key, product: options.product, tree: options.root })
+      for (const pointer of pointers())
+        await writePointer(pointer.channel, () => {})
     },
     async revoke(body: { seq: number }) {
-      for (const channel of channels) {
-        if (!await readPointer(options.root, channel, CADENCE))
-          continue
-
-        await updatePointer(channel, (pointer) => {
-          if (!pointer.revoked.includes(body.seq))
-            pointer.revoked.push(body.seq)
-          if (pointer.core === body.seq) {
+      for (const pointer of pointers()) {
+        await writePointer(pointer.channel, (next) => {
+          if (!next.revoked.includes(body.seq))
+            next.revoked.push(body.seq)
+          if (next.core === body.seq) {
             // Serve the newest earlier release that is not revoked, or no core.
-            pointer.core = history
-              .filter(entry => entry.seq < body.seq && !pointer.revoked.includes(entry.seq))
-              .at(-1)
-              ?.seq
-            pointer.rollout = 100
+            next.core = history.filter(entry => entry.seq < body.seq && !next.revoked.includes(entry.seq)).at(-1)?.seq
+            next.rollout = 100
           }
         })
       }
-    },
-    async serve(body: { channel: string, seq: number }) {
-      await updatePointer(body.channel, (pointer) => {
-        pointer.core = body.seq
-        pointer.rollout = 100
-        pointer.revoked = pointer.revoked.filter(seq => seq !== body.seq)
-      })
     },
   }
 
@@ -213,7 +193,7 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
     const name = path.slice('/_api/'.length)
     try {
       if (name === 'state' && request.method === 'GET') {
-        sendJson(response, 200, await snapshot())
+        sendJson(response, 200, snapshot())
       }
       else if (name === 'events' && request.method === 'GET') {
         response.writeHead(200, { 'Cache-Control': 'no-store', 'Connection': 'keep-alive', 'Content-Type': 'text/event-stream' })
@@ -225,21 +205,24 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
         // The body comes from the console page. Each handler reads the fields it needs.
         const handle = handlers[name as keyof typeof handlers] as (body: unknown) => Promise<unknown>
         const result = await handle(await readBody(request))
-        broadcast('state', await snapshot())
+        broadcast('state', snapshot())
         sendJson(response, 200, { ok: true, result })
       }
       else {
-        sendJson(response, 404, { error: 'no such route' })
+        sendJson(response, 404, { error: 'No such route.' })
       }
     }
     catch (error) {
-      sendJson(response, 400, { error: errorMessageFrom(error) ?? 'request failed' })
+      sendJson(response, 400, { error: errorMessageFrom(error) ?? 'The request failed.' })
     }
 
     return true
   }
 
-  const server = await createStaticServer({ faults: () => faults, host: options.host, port: options.port, root: options.root, routes })
+  if (!pointerOf(channels[0]!))
+    await writePointer(channels[0]!, () => {})
+
+  const server = await createTreeServer({ faults: () => faults, host: options.host, port: options.port, routes, tree })
 
   return {
     ...server,
@@ -262,18 +245,6 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
     chunks.push(chunk as Buffer)
 
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
-}
-
-async function readHistory(file: string | undefined): Promise<ReleaseEntry[] | undefined> {
-  if (!file)
-    return undefined
-
-  try {
-    return JSON.parse(await readFile(file, 'utf8')) as ReleaseEntry[]
-  }
-  catch {
-    return undefined
-  }
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {

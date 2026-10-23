@@ -1,4 +1,5 @@
-import type { CoreCandidateContext, VerifyReason } from './verify'
+import type { ErrorCode } from './errors'
+import type { CoreCandidateContext } from './verify'
 
 import vectorFile from '../vectors/vectors.json' with { type: 'json' }
 
@@ -16,7 +17,7 @@ export interface ConformanceVectorFile {
   vectors: ConformanceVector[]
 }
 
-export type Expectation = { ok: false, reason: VerifyReason } | { ok: true }
+export type Expectation = { code: ErrorCode, ok: false } | { ok: true }
 
 /** Conformance test vectors. Every client implementation must give the expected result for each vector. */
 export const conformanceVectors = vectorFile as ConformanceVectorFile

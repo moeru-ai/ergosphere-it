@@ -8,7 +8,6 @@ export default defineConfig({
       'packages/client',
       'packages/driver-electron',
       'packages/server',
-      'packages/cli',
       'packages/publish',
     ],
   },

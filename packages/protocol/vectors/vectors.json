@@ -49,7 +49,7 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":43,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "expect": {
         "ok": false,
-        "reason": "invalid-signature"
+        "code": "invalid-signature"
       },
       "kind": "core-manifest",
       "name": "core: changed byte after signing",
@@ -66,7 +66,7 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "expect": {
         "ok": false,
-        "reason": "invalid-signature"
+        "code": "invalid-signature"
       },
       "kind": "core-manifest",
       "name": "core: signature is not base64",
@@ -86,7 +86,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "untrusted-key"
+        "code": "untrusted-key"
       }
     },
     {
@@ -103,7 +103,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "invalid-signature"
+        "code": "invalid-signature"
       }
     },
     {
@@ -117,7 +117,7 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "expect": {
         "ok": false,
-        "reason": "untrusted-key"
+        "code": "untrusted-key"
       },
       "kind": "core-manifest",
       "name": "core: missing keyId",
@@ -134,7 +134,7 @@
       "document": "{\"schema\":1,",
       "expect": {
         "ok": false,
-        "reason": "invalid-json"
+        "code": "invalid-json"
       },
       "kind": "core-manifest",
       "name": "core: not JSON",
@@ -154,7 +154,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "invalid-schema"
+        "code": "invalid-schema"
       }
     },
     {
@@ -171,7 +171,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "invalid-schema"
+        "code": "invalid-schema"
       }
     },
     {
@@ -188,7 +188,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "invalid-schema"
+        "code": "invalid-schema"
       }
     },
     {
@@ -205,7 +205,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "unsafe-path"
+        "code": "unsafe-path"
       }
     },
     {
@@ -222,7 +222,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "unsafe-path"
+        "code": "unsafe-path"
       }
     },
     {
@@ -239,7 +239,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "unsafe-path"
+        "code": "unsafe-path"
       }
     },
     {
@@ -256,7 +256,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "unsafe-path"
+        "code": "unsafe-path"
       }
     },
     {
@@ -273,7 +273,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "unsafe-path"
+        "code": "unsafe-path"
       }
     },
     {
@@ -290,7 +290,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "unsafe-path"
+        "code": "unsafe-path"
       }
     },
     {
@@ -307,7 +307,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "duplicate-path"
+        "code": "duplicate-path"
       }
     },
     {
@@ -324,7 +324,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "core-mismatch"
+        "code": "core-mismatch"
       }
     },
     {
@@ -341,7 +341,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "core-mismatch"
+        "code": "core-mismatch"
       }
     },
     {
@@ -358,7 +358,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "platform-mismatch"
+        "code": "platform-mismatch"
       }
     },
     {
@@ -375,7 +375,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "host-api-incompatible"
+        "code": "host-api-incompatible"
       }
     },
     {
@@ -392,7 +392,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "host-api-incompatible"
+        "code": "host-api-incompatible"
       }
     },
     {
@@ -412,7 +412,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "revoked"
+        "code": "revoked"
       }
     },
     {
@@ -432,7 +432,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "blocked"
+        "code": "blocked"
       }
     },
     {
@@ -449,7 +449,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "not-newer"
+        "code": "not-newer"
       }
     },
     {
@@ -467,7 +467,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "not-newer"
+        "code": "not-newer"
       }
     },
     {
@@ -483,7 +483,7 @@
       "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI-0.13.0-arm64-mac.zip\"}],\"builtinCoreSeq\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":9,\"kind\":\"shell\",\"product\":\"airi\",\"schema\":1,\"seq\":7,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
       "expect": {
         "ok": false,
-        "reason": "invalid-signature"
+        "code": "invalid-signature"
       },
       "kind": "shell-manifest",
       "name": "shell: changed byte after signing",
@@ -532,7 +532,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "pointer-mismatch"
+        "code": "pointer-mismatch"
       }
     },
     {
@@ -548,7 +548,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "pointer-mismatch"
+        "code": "pointer-mismatch"
       }
     },
     {
@@ -564,7 +564,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "pointer-mismatch"
+        "code": "pointer-mismatch"
       }
     },
     {
@@ -580,7 +580,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "pointer-expired"
+        "code": "pointer-expired"
       }
     },
     {
@@ -597,7 +597,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "pointer-replayed"
+        "code": "pointer-replayed"
       }
     },
     {
@@ -629,7 +629,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "invalid-schema"
+        "code": "invalid-schema"
       }
     },
     {
@@ -645,7 +645,7 @@
       },
       "expect": {
         "ok": false,
-        "reason": "invalid-schema"
+        "code": "invalid-schema"
       }
     },
     {

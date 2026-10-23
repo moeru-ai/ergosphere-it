@@ -2,9 +2,9 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   clean: true,
+  deps: { neverBundle: ['electron'] },
   dts: true,
-  entry: { index: 'src/index.ts', runtime: 'src/runtime.ts' },
-  external: ['electron'],
+  entry: { core: 'src/core.ts', shell: 'src/shell.ts' },
   format: 'esm',
   sourcemap: true,
 })

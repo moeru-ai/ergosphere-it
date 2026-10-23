@@ -24,9 +24,6 @@ catalogs:
     bumpp:
       specifier: ^12.2.1
       version: 12.3.0
-    cac:
-      specifier: ^7.0.0
-      version: 7.1.0
     cspell:
       specifier: ^10.0.1
       version: 10.4.0
@@ -129,6 +126,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/driver-electron
     devDependencies:
+      '@ergosphere-it/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@ergosphere-it/publish':
         specifier: workspace:*
         version: link:../../packages/publish
@@ -144,21 +144,6 @@ importers:
       es-toolkit:
         specifier: 'catalog:'
         version: 1.52.0
-
-  packages/cli:
-    dependencies:
-      '@ergosphere-it/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@ergosphere-it/publish':
-        specifier: workspace:*
-        version: link:../publish
-      '@ergosphere-it/server':
-        specifier: workspace:*
-        version: link:../server
-      cac:
-        specifier: 'catalog:'
-        version: 7.1.0
 
   packages/client:
     dependencies:
@@ -193,9 +178,6 @@ importers:
 
   packages/protocol:
     dependencies:
-      '@moeru/std':
-        specifier: 'catalog:'
-        version: 0.1.0-beta.20
       valibot:
         specifier: 'catalog:'
         version: 1.5.0(typescript@6.0.3)

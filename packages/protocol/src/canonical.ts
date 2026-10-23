@@ -1,8 +1,3 @@
-/** Encodes a value as canonical JSON bytes. */
-export function canonicalBytes(value: unknown): Uint8Array {
-  return new TextEncoder().encode(canonicalJson(value))
-}
-
 /**
  * Serializes a value as canonical JSON: keys sorted by code point at every level and no insignificant whitespace.
  *

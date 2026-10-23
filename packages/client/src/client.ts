@@ -1,9 +1,9 @@
-import type { Cadence, Component, CoreManifest, Distribution, TrustedKey, VerifyReason } from '@ergosphere-it/protocol'
+import type { Cadence, Component, CoreManifest, Distribution, TrustedKey } from '@ergosphere-it/protocol'
 
 import type { Fetch, UpdateFileSystem } from './io'
 import type { ClientState } from './state'
 
-import { contentHash, evaluateCoreCandidate, isInRollout, verifyCoreManifest, verifyPointer } from '@ergosphere-it/protocol'
+import { CandidateError, checkCoreCandidate, contentHash, DocumentError, ErgosphereError, isInRollout, verifyCoreManifest, verifyPointer } from '@ergosphere-it/protocol'
 import { errorMessageFrom } from '@moeru/std/error'
 import { sumBy } from 'es-toolkit'
 
@@ -11,24 +11,30 @@ import { loadState, saveState } from './state'
 import { ObjectStore } from './store'
 
 export type BootSelection
-  = | { components: Component[], dir: string, kind: 'builtin', seq: number }
-    | { components: Component[], dir: string, kind: 'external', seq: number }
+  = | { components: Component[], dir: string, kind: 'builtin' | 'external', seq: number, version: string }
 
 /** The core that ships inside the installer. The installer is signed, so the client trusts it without a signature. */
 export interface BuiltinCore {
   components: Component[]
   dir: string
   seq: number
+  version: string
 }
 
+/**
+ * The result of an update check.
+ *
+ * `server-behind` means the channel serves an older core than this install runs, for example after the server went
+ * back to a backup. `rejected` means the protocol rejected the pointer or the core, and `error.code` comes from the
+ * specification.
+ */
 export type CheckResult
   = | { current: number, seq: number, status: 'server-behind' }
-    | { detail?: string, reason: VerifyReason, status: 'rejected' }
     | { distribution: Distribution, status: 'disabled' }
+    | { error: ErgosphereError, status: 'rejected' }
     | { manifest: CoreManifest, manifestBytes: Uint8Array<ArrayBuffer>, signature: string, status: 'available' }
     | { seq: number, status: 'not-in-cohort' }
     | { seq: number, status: 'not-in-rollout' }
-    /** The channel serves an older core than this install runs, for example after the server went back to a backup. */
     | { seq: number, status: 'up-to-date' }
     | { status: 'no-core' }
 
@@ -117,76 +123,66 @@ export class UpdateClient {
     })
   }
 
-  /** Checks the channel pointer and returns a verified core that this install can take. */
-  async check(): Promise<CheckResult> {
-    const { baseUrl, cadence, channel, distribution, trustedKeys } = this.options
-    if (distribution !== 'direct')
-      return { distribution, status: 'disabled' }
-
+  /**
+   * Selects the core to boot: staged, then current, then previous, then builtin.
+   *
+   * It counts the boot attempt of the selected core. The host must call `markHealthy` when the app works.
+   */
+  async boot(): Promise<BootSelection & { rejected: { problem: string, seq: number }[] }> {
     const state = await this.state()
-    const pointerUrl = `${baseUrl}/pointers/${channel}/${cadence}.json`
-    const pointerResult = await verifyPointer(
-      await this.fetchBytes(pointerUrl),
-      await this.fetchText(`${pointerUrl}.sig`),
-      trustedKeys,
-      { cadence, channel, lastIssuedAt: state.lastPointerIssuedAt, now: this.now(), product: this.options.product },
-    )
-    if (!pointerResult.ok)
-      return { detail: pointerResult.detail, reason: pointerResult.reason, status: 'rejected' }
+    const rejected: { problem: string, seq: number }[] = []
+    const accepted: { manifest: CoreManifest, seq: number }[] = []
+    const seen = new Set<number>()
 
-    const pointer = pointerResult.value
-    await this.update((next) => {
-      next.lastPointerIssuedAt = pointer.issuedAt
-      for (const seq of pointer.revoked ?? []) {
-        if (!next.blocked.includes(seq))
-          next.blocked.push(seq)
+    for (const seq of [state.staged, state.current, state.previous]) {
+      if (seq === undefined || seen.has(seq))
+        continue
+
+      seen.add(seq)
+      const result = await this.inspect(seq, state)
+      if (result.problem === undefined && result.manifest) {
+        accepted.push({ manifest: result.manifest, seq })
+        continue
       }
-    })
 
-    if (!pointer.core)
-      return { status: 'no-core' }
+      rejected.push({ problem: result.problem ?? 'unknown', seq })
+      if (result.permanent && !state.blocked.includes(seq))
+        state.blocked.push(seq)
+      if (!result.permanent && seq === state.staged)
+        state.deferred = seq
+    }
 
-    const target = pointer.core.seq
-    // A client never moves back. When the channel serves less than this install has, it reports that and waits for a
-    // newer release.
-    const ahead = Math.max(state.current ?? 0, state.staged ?? 0)
-    if (target < ahead)
-      return { current: ahead, seq: target, status: 'server-behind' }
+    const chosen = accepted[0]
+    state.staged = undefined
+    state.current = chosen?.seq
+    state.previous = accepted[1]?.seq
+    const key = chosen ? String(chosen.seq) : BUILTIN_KEY
+    state.bootAttempts[key] = (state.bootAttempts[key] ?? 0) + 1
+    await saveState(this.fs, this.statePath, state)
 
-    const floor = Math.max(this.options.builtin.seq, ahead)
-    if (target <= floor)
-      return { seq: Math.max(target, floor), status: 'up-to-date' }
-    if (pointer.core.cohorts && !pointer.core.cohorts.includes(this.options.cohort ?? 'all'))
-      return { seq: target, status: 'not-in-cohort' }
-    if (!await isInRollout(pointer.core.rollout, state.installId))
-      return { seq: target, status: 'not-in-rollout' }
-    // A blocked core stays blocked, so skip its manifest. Otherwise every check downloads it again to reject it.
-    if (state.blocked.includes(target) || pointer.revoked?.includes(target))
-      return { detail: String(target), reason: state.blocked.includes(target) ? 'blocked' : 'revoked', status: 'rejected' }
+    if (chosen)
+      return { components: chosen.manifest.components, dir: this.coreDir(chosen.seq), kind: 'external', rejected, seq: chosen.seq, version: chosen.manifest.version }
 
-    const manifestUrl = `${baseUrl}/cores/${target}/manifest.json`
-    const manifestBytes = await this.fetchBytes(manifestUrl)
-    const signature = await this.fetchText(`${manifestUrl}.sig`)
-    const manifestResult = await verifyCoreManifest(manifestBytes, signature, trustedKeys)
-    if (!manifestResult.ok)
-      return { detail: manifestResult.detail, reason: manifestResult.reason, status: 'rejected' }
-    if (manifestResult.value.seq !== target)
-      return { detail: `manifest seq ${manifestResult.value.seq} is not the pointer seq ${target}`, reason: 'invalid-schema', status: 'rejected' }
+    const { builtin } = this.options
 
-    const candidate = evaluateCoreCandidate(manifestResult.value, {
-      blocked: state.blocked,
-      builtinSeq: this.options.builtin.seq,
-      currentSeq: Math.max(state.current ?? 0, state.staged ?? 0) || undefined,
-      host: this.options.host,
-      platform: this.options.platform,
-      product: this.options.product,
-      revoked: pointer.revoked,
-      shellHostApi: this.options.shellHostApi,
-    })
-    if (!candidate.ok)
-      return { detail: candidate.detail, reason: candidate.reason, status: 'rejected' }
+    return { components: builtin.components, dir: builtin.dir, kind: 'builtin', rejected, seq: builtin.seq, version: builtin.version }
+  }
 
-    return { manifest: candidate.value, manifestBytes, signature, status: 'available' }
+  /**
+   * Checks the channel pointer and returns a verified core that this install can take.
+   *
+   * A rejection by the protocol is a result, not an error. Network and file system errors throw.
+   */
+  async check(): Promise<CheckResult> {
+    try {
+      return await this.checkPointer()
+    }
+    catch (error) {
+      if (error instanceof ErgosphereError)
+        return { error, status: 'rejected' }
+
+      throw error
+    }
   }
 
   /** Removes cores and objects that no kept core uses. */
@@ -247,51 +243,6 @@ export class UpdateClient {
     })
 
     return state.current
-  }
-
-  /**
-   * Selects the core to boot: staged, then current, then previous, then builtin.
-   *
-   * It counts the boot attempt of the selected core. The host must call `markHealthy` when the app works.
-   */
-  async selectBoot(): Promise<BootSelection & { rejected: { problem: string, seq: number }[] }> {
-    const state = await this.state()
-    const rejected: { problem: string, seq: number }[] = []
-    const accepted: { manifest: CoreManifest, seq: number }[] = []
-    const seen = new Set<number>()
-
-    for (const seq of [state.staged, state.current, state.previous]) {
-      if (seq === undefined || seen.has(seq))
-        continue
-
-      seen.add(seq)
-      const result = await this.inspect(seq, state)
-      if (result.problem === undefined && result.manifest) {
-        accepted.push({ manifest: result.manifest, seq })
-        continue
-      }
-
-      rejected.push({ problem: result.problem ?? 'unknown', seq })
-      if (result.permanent && !state.blocked.includes(seq))
-        state.blocked.push(seq)
-      if (!result.permanent && seq === state.staged)
-        state.deferred = seq
-    }
-
-    const chosen = accepted[0]
-    state.staged = undefined
-    state.current = chosen?.seq
-    state.previous = accepted[1]?.seq
-    const key = chosen ? String(chosen.seq) : BUILTIN_KEY
-    state.bootAttempts[key] = (state.bootAttempts[key] ?? 0) + 1
-    await saveState(this.fs, this.statePath, state)
-
-    if (chosen)
-      return { components: chosen.manifest.components, dir: this.coreDir(chosen.seq), kind: 'external', rejected, seq: chosen.seq }
-
-    const { builtin } = this.options
-
-    return { components: builtin.components, dir: builtin.dir, kind: 'builtin', rejected, seq: builtin.seq }
   }
 
   /** Downloads the missing objects of a checked core, builds its directory, and marks it as staged. */
@@ -375,7 +326,72 @@ export class UpdateClient {
   async storedCore(seq: number): Promise<BootSelection | undefined> {
     const manifest = await this.readStoredManifest(seq)
 
-    return manifest ? { components: manifest.components, dir: this.coreDir(seq), kind: 'external', seq } : undefined
+    return manifest ? { components: manifest.components, dir: this.coreDir(seq), kind: 'external', seq, version: manifest.version } : undefined
+  }
+
+  private async checkPointer(): Promise<CheckResult> {
+    const { baseUrl, cadence, channel, distribution, trustedKeys } = this.options
+    if (distribution !== 'direct')
+      return { distribution, status: 'disabled' }
+
+    const state = await this.state()
+    const pointerUrl = `${baseUrl}/pointers/${channel}/${cadence}.json`
+    const pointer = await verifyPointer(
+      await this.fetchBytes(pointerUrl),
+      await this.fetchText(`${pointerUrl}.sig`),
+      trustedKeys,
+      { cadence, channel, lastIssuedAt: state.lastPointerIssuedAt, now: this.now(), product: this.options.product },
+    )
+    await this.update((next) => {
+      next.lastPointerIssuedAt = pointer.issuedAt
+      for (const seq of pointer.revoked ?? []) {
+        if (!next.blocked.includes(seq))
+          next.blocked.push(seq)
+      }
+    })
+
+    if (!pointer.core)
+      return { status: 'no-core' }
+
+    const target = pointer.core.seq
+    // A client never moves back. When the channel serves less than this install has, it reports that and waits for a
+    // newer release.
+    const ahead = Math.max(state.current ?? 0, state.staged ?? 0)
+    if (target < ahead)
+      return { current: ahead, seq: target, status: 'server-behind' }
+
+    const floor = Math.max(this.options.builtin.seq, ahead)
+    if (target <= floor)
+      return { seq: Math.max(target, floor), status: 'up-to-date' }
+    if (pointer.core.cohorts && !pointer.core.cohorts.includes(this.options.cohort ?? 'all'))
+      return { seq: target, status: 'not-in-cohort' }
+    if (!await isInRollout(pointer.core.rollout, state.installId))
+      return { seq: target, status: 'not-in-rollout' }
+    // A blocked core stays blocked, so skip its manifest. Otherwise every check downloads it again to reject it.
+    if (pointer.revoked?.includes(target))
+      throw new CandidateError('revoked', `Core ${target} is revoked.`, target)
+    if (state.blocked.includes(target))
+      throw new CandidateError('blocked', `Core ${target} is blocked on this install.`, target)
+
+    const manifestUrl = `${baseUrl}/cores/${target}/manifest.json`
+    const manifestBytes = await this.fetchBytes(manifestUrl)
+    const signature = await this.fetchText(`${manifestUrl}.sig`)
+    const manifest = await verifyCoreManifest(manifestBytes, signature, trustedKeys)
+    if (manifest.seq !== target)
+      throw new DocumentError('invalid-schema', `The manifest seq ${manifest.seq} is not the pointer seq ${target}.`)
+
+    checkCoreCandidate(manifest, {
+      blocked: state.blocked,
+      builtinSeq: this.options.builtin.seq,
+      currentSeq: Math.max(state.current ?? 0, state.staged ?? 0) || undefined,
+      host: this.options.host,
+      platform: this.options.platform,
+      product: this.options.product,
+      revoked: pointer.revoked,
+      shellHostApi: this.options.shellHostApi,
+    })
+
+    return { manifest, manifestBytes, signature, status: 'available' }
   }
 
   private async fetchBytes(url: string, onBytes?: (received: number) => void): Promise<Uint8Array<ArrayBuffer>> {
@@ -414,16 +430,22 @@ export class UpdateClient {
     if (!manifest)
       return { permanent: true, problem: 'manifest is missing or does not verify' }
 
-    const candidate = evaluateCoreCandidate(manifest, {
-      blocked: state.blocked,
-      builtinSeq: this.options.builtin.seq,
-      host: this.options.host,
-      platform: this.options.platform,
-      product: this.options.product,
-      shellHostApi: this.options.shellHostApi,
-    })
-    if (!candidate.ok)
-      return { manifest, permanent: candidate.reason !== 'host-api-incompatible', problem: candidate.reason }
+    try {
+      checkCoreCandidate(manifest, {
+        blocked: state.blocked,
+        builtinSeq: this.options.builtin.seq,
+        host: this.options.host,
+        platform: this.options.platform,
+        product: this.options.product,
+        shellHostApi: this.options.shellHostApi,
+      })
+    }
+    catch (error) {
+      if (!(error instanceof CandidateError))
+        throw error
+
+      return { manifest, permanent: error.code !== 'host-api-incompatible', problem: error.code }
+    }
 
     const dir = this.coreDir(seq)
     for (const component of manifest.components) {
@@ -491,9 +513,15 @@ export class UpdateClient {
     if (!bytes || !signature)
       return undefined
 
-    const result = await verifyCoreManifest(bytes, new TextDecoder().decode(signature), this.options.trustedKeys)
+    try {
+      return await verifyCoreManifest(bytes, new TextDecoder().decode(signature), this.options.trustedKeys)
+    }
+    catch (error) {
+      if (error instanceof ErgosphereError)
+        return undefined
 
-    return result.ok ? result.value : undefined
+      throw error
+    }
   }
 
   private async update(change: (state: ClientState) => void): Promise<ClientState> {
