@@ -1,0 +1,50 @@
+{
+  "name": "@ergosphere-it/driver-electron",
+  "type": "module",
+  "version": "0.0.0",
+  "description": "The Electron driver of ergosphere-it: bootloader, core module resolution, reload, restart, and rollback",
+  "author": {
+    "name": "Moeru AI Project AIRI Team",
+    "email": "airi@moeru.ai",
+    "url": "https://github.com/moeru-ai"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/moeru-ai/ergosphere-it",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moeru-ai/ergosphere-it.git",
+    "directory": "packages/driver-electron"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.mts",
+      "default": "./dist/runtime.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "electron": ">=38"
+  },
+  "dependencies": {
+    "@ergosphere-it/client": "workspace:*",
+    "@ergosphere-it/protocol": "workspace:*",
+    "@moeru/std": "catalog:"
+  },
+  "devDependencies": {
+    "electron": "catalog:"
+  }
+}

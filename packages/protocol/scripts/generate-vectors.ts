@@ -3,37 +3,36 @@
 
 import type { ConformanceVector, ConformanceVectorFile } from '../src/vectors'
 
-import { createHash, generateKeyPairSync } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { canonicalJson, keyIdOf, signBytes } from '../src'
-import { base64ToBytes } from '../src/encoding'
 
-interface TestKey { keyId: string, publicKey: string, privateKey: string }
+interface TestKey { keyId: string, privateKey: string, publicKey: string }
 
 const root = join(import.meta.dirname, '..', 'vectors')
 const keysPath = join(root, 'test-keys.json')
 
 async function createKey(): Promise<TestKey> {
-  const { publicKey, privateKey } = generateKeyPairSync('ed25519')
-  const spki = publicKey.export({ type: 'spki', format: 'der' }).toString('base64')
-  const pkcs8 = privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')
+  const pair = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']) as CryptoKeyPair
+  const spki = new Uint8Array(await crypto.subtle.exportKey('spki', pair.publicKey))
+  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey))
 
-  return { keyId: await keyIdOf(base64ToBytes(spki)!), publicKey: spki, privateKey: pkcs8 }
+  return { keyId: await keyIdOf(spki), privateKey: pkcs8.toBase64(), publicKey: spki.toBase64() }
 }
 
-async function loadKeys(): Promise<{ trusted: TestKey, other: TestKey }> {
+async function loadKeys(): Promise<{ other: TestKey, trusted: TestKey }> {
   if (existsSync(keysPath))
     return JSON.parse(readFileSync(keysPath, 'utf8'))
 
-  const keys = { trusted: await createKey(), other: await createKey() }
+  const keys = { other: await createKey(), trusted: await createKey() }
   writeFileSync(keysPath, `${JSON.stringify(keys, null, 2)}\n`)
 
   return keys
 }
 
-const { trusted, other } = await loadKeys()
+const { other, trusted } = await loadKeys()
 const encode = (text: string) => new TextEncoder().encode(text)
 
 async function signed(document: Record<string, unknown>, key: TestKey = trusted, keyId = key.keyId) {
@@ -46,119 +45,125 @@ const sha = (char: string) => char.repeat(64)
 
 function core(overrides: Record<string, unknown> = {}) {
   const components = [
-    { type: 'electron-main', entry: 'main/index.js', files: [{ path: 'main/index.js', sha256: sha('a'), size: 100 }] },
-    { type: 'web', entry: 'renderer/index.html', files: [
+    { entry: 'main/index.js', files: [{ path: 'main/index.js', sha256: sha('a'), size: 100 }], type: 'electron-main' },
+    { entry: 'renderer/index.html', files: [
       { path: 'renderer/index.html', sha256: sha('b'), size: 20 },
       { path: 'renderer/assets/app.js', sha256: sha('c'), size: 300 },
-    ] },
+    ], type: 'web' },
   ]
 
   return {
-    schema: 1,
-    kind: 'core',
-    product: 'airi',
-    seq: 42,
-    version: '0.13.0-core.42',
+    components,
     createdAt: '2026-10-23T00:00:00.000Z',
     host: 'electron',
+    hostApi: { max: 4, min: 3 },
+    kind: 'core',
     platform: 'darwin-arm64',
-    hostApi: { min: 3, max: 4 },
-    components,
+    product: 'airi',
+    schema: 1,
+    seq: 42,
     totalSize: 420,
+    version: '0.13.0-core.42',
     ...overrides,
   }
 }
 
-const context = { shellHostApi: 3, platform: 'darwin-arm64', builtinSeq: 10 }
+const context = { builtinSeq: 10, host: 'electron', platform: 'darwin-arm64', product: 'airi', shellHostApi: 3 }
 
 function pointer(overrides: Record<string, unknown> = {}) {
   return {
-    schema: 1,
+    cadence: 'realtime',
+    channel: 'canary',
+    core: { cohorts: ['alpha', 'beta', 'all'], rollout: { percentage: 25, salt: '42' }, seq: 42 },
+    expiresAt: '2026-11-06T00:00:00.000Z',
+    issuedAt: '2026-10-23T00:00:00.000Z',
     kind: 'pointer',
     product: 'airi',
-    channel: 'canary',
-    cadence: 'realtime',
-    issuedAt: '2026-10-23T00:00:00.000Z',
-    expiresAt: '2026-11-06T00:00:00.000Z',
-    core: { seq: 42, rollout: { percentage: 25, salt: '42' }, cohorts: ['alpha', 'beta', 'all'] },
-    shell: { seq: 7 },
     revoked: [40, 41],
+    schema: 1,
+    shell: { seq: 7 },
     ...overrides,
   }
 }
 
 const shell = {
-  schema: 1,
-  kind: 'shell',
-  product: 'airi',
-  seq: 7,
-  version: '0.13.0',
+  artifacts: [{ platform: 'darwin-arm64', sha512: 'c2hhNTEy', size: 1024, url: 'AIRI-0.13.0-arm64-mac.zip' }],
+  builtinCoreSeq: 10,
   createdAt: '2026-10-23T00:00:00.000Z',
   host: 'electron',
   hostApi: 3,
-  builtinCoreSeq: 10,
-  artifacts: [{ platform: 'darwin-arm64', url: 'AIRI-0.13.0-arm64-mac.zip', sha512: 'c2hhNTEy', size: 1024 }],
+  kind: 'shell',
+  product: 'airi',
+  schema: 1,
+  seq: 7,
+  version: '0.13.0',
 }
 
 const vectors: ConformanceVector[] = []
 
 const valid = await signed(core())
-vectors.push({ name: 'core: valid manifest', kind: 'core-manifest', ...valid, context, expect: { ok: true } })
-vectors.push({ name: 'core: valid manifest for any platform', kind: 'core-manifest', ...await signed(core({ platform: 'any' })), context, expect: { ok: true } })
-vectors.push({ name: 'core: changed byte after signing', kind: 'core-manifest', document: valid.document.replace('"seq":42', '"seq":43'), signature: valid.signature, context, expect: { ok: false, reason: 'invalid-signature' } })
-vectors.push({ name: 'core: signature is not base64', kind: 'core-manifest', document: valid.document, signature: 'not base64!', context, expect: { ok: false, reason: 'invalid-signature' } })
-vectors.push({ name: 'core: signed by an untrusted key', kind: 'core-manifest', ...await signed(core(), other), context, expect: { ok: false, reason: 'untrusted-key' } })
-vectors.push({ name: 'core: trusted keyId but signed by another key', kind: 'core-manifest', ...await signed(core(), other, trusted.keyId), context, expect: { ok: false, reason: 'invalid-signature' } })
-vectors.push({ name: 'core: missing keyId', kind: 'core-manifest', document: canonicalJson(core()), signature: valid.signature, context, expect: { ok: false, reason: 'untrusted-key' } })
-vectors.push({ name: 'core: not JSON', kind: 'core-manifest', document: '{"schema":1,', signature: valid.signature, context, expect: { ok: false, reason: 'invalid-json' } })
-vectors.push({ name: 'core: seq is zero', kind: 'core-manifest', ...await signed(core({ seq: 0 })), context, expect: { ok: false, reason: 'invalid-schema' } })
-vectors.push({ name: 'core: totalSize does not match files', kind: 'core-manifest', ...await signed(core({ totalSize: 1 })), context, expect: { ok: false, reason: 'invalid-schema' } })
-vectors.push({ name: 'core: hostApi min above max', kind: 'core-manifest', ...await signed(core({ hostApi: { min: 5, max: 4 } })), context, expect: { ok: false, reason: 'invalid-schema' } })
+vectors.push({ kind: 'core-manifest', name: 'core: valid manifest', ...valid, context, expect: { ok: true } })
+vectors.push({ kind: 'core-manifest', name: 'core: valid manifest for any platform', ...await signed(core({ platform: 'any' })), context, expect: { ok: true } })
+vectors.push({ context, document: valid.document.replace('"seq":42', '"seq":43'), expect: { ok: false, reason: 'invalid-signature' }, kind: 'core-manifest', name: 'core: changed byte after signing', signature: valid.signature })
+vectors.push({ context, document: valid.document, expect: { ok: false, reason: 'invalid-signature' }, kind: 'core-manifest', name: 'core: signature is not base64', signature: 'not base64!' })
+vectors.push({ kind: 'core-manifest', name: 'core: signed by an untrusted key', ...await signed(core(), other), context, expect: { ok: false, reason: 'untrusted-key' } })
+vectors.push({ kind: 'core-manifest', name: 'core: trusted keyId but signed by another key', ...await signed(core(), other, trusted.keyId), context, expect: { ok: false, reason: 'invalid-signature' } })
+vectors.push({ context, document: canonicalJson(core()), expect: { ok: false, reason: 'untrusted-key' }, kind: 'core-manifest', name: 'core: missing keyId', signature: valid.signature })
+vectors.push({ context, document: '{"schema":1,', expect: { ok: false, reason: 'invalid-json' }, kind: 'core-manifest', name: 'core: not JSON', signature: valid.signature })
+vectors.push({ kind: 'core-manifest', name: 'core: seq is zero', ...await signed(core({ seq: 0 })), context, expect: { ok: false, reason: 'invalid-schema' } })
+vectors.push({ kind: 'core-manifest', name: 'core: totalSize does not match files', ...await signed(core({ totalSize: 1 })), context, expect: { ok: false, reason: 'invalid-schema' } })
+vectors.push({ kind: 'core-manifest', name: 'core: hostApi min above max', ...await signed(core({ hostApi: { max: 4, min: 5 } })), context, expect: { ok: false, reason: 'invalid-schema' } })
 
 for (const [label, path] of [['parent segment', '../escape.js'], ['absolute path', '/etc/passwd'], ['drive letter', 'C:/x.js'], ['backslash', 'main\\index.js'], ['dot segment', 'main/./index.js'], ['empty segment', 'main//index.js']]) {
-  const manifest = core({ components: [{ type: 'web', files: [{ path, sha256: sha('d'), size: 1 }] }], totalSize: 1 })
-  vectors.push({ name: `core: unsafe path, ${label}`, kind: 'core-manifest', ...await signed(manifest), context, expect: { ok: false, reason: 'unsafe-path' } })
+  const manifest = core({ components: [{ files: [{ path, sha256: sha('d'), size: 1 }], type: 'web' }], totalSize: 1 })
+  vectors.push({ kind: 'core-manifest', name: `core: unsafe path, ${label}`, ...await signed(manifest), context, expect: { ok: false, reason: 'unsafe-path' } })
 }
 
 const duplicate = core({
   components: [
-    { type: 'electron-main', files: [{ path: 'shared.js', sha256: sha('a'), size: 1 }] },
-    { type: 'web', files: [{ path: 'shared.js', sha256: sha('b'), size: 1 }] },
+    { files: [{ path: 'shared.js', sha256: sha('a'), size: 1 }], type: 'electron-main' },
+    { files: [{ path: 'shared.js', sha256: sha('b'), size: 1 }], type: 'web' },
   ],
   totalSize: 2,
 })
-vectors.push({ name: 'core: same path in two components', kind: 'core-manifest', ...await signed(duplicate), context, expect: { ok: false, reason: 'duplicate-path' } })
+vectors.push({ kind: 'core-manifest', name: 'core: same path in two components', ...await signed(duplicate), context, expect: { ok: false, reason: 'duplicate-path' } })
 
-vectors.push({ name: 'core: other platform', kind: 'core-manifest', ...valid, context: { ...context, platform: 'win32-x64' }, expect: { ok: false, reason: 'platform-mismatch' } })
-vectors.push({ name: 'core: shell host API below range', kind: 'core-manifest', ...valid, context: { ...context, shellHostApi: 2 }, expect: { ok: false, reason: 'host-api-incompatible' } })
-vectors.push({ name: 'core: shell host API above range', kind: 'core-manifest', ...valid, context: { ...context, shellHostApi: 5 }, expect: { ok: false, reason: 'host-api-incompatible' } })
-vectors.push({ name: 'core: revoked seq', kind: 'core-manifest', ...valid, context: { ...context, revoked: [42] }, expect: { ok: false, reason: 'revoked' } })
-vectors.push({ name: 'core: blocked seq', kind: 'core-manifest', ...valid, context: { ...context, blocked: [42] }, expect: { ok: false, reason: 'blocked' } })
-vectors.push({ name: 'core: seq equals builtin', kind: 'core-manifest', ...valid, context: { ...context, builtinSeq: 42 }, expect: { ok: false, reason: 'not-newer' } })
-vectors.push({ name: 'core: seq below current', kind: 'core-manifest', ...valid, context: { ...context, currentSeq: 50 }, expect: { ok: false, reason: 'not-newer' } })
+vectors.push({ kind: 'core-manifest', name: 'core: another product with the same key', ...await signed(core({ product: 'other' })), context, expect: { ok: false, reason: 'core-mismatch' } })
+vectors.push({ kind: 'core-manifest', name: 'core: another host', ...await signed(core({ host: 'kirie' })), context, expect: { ok: false, reason: 'core-mismatch' } })
+vectors.push({ kind: 'core-manifest', name: 'core: other platform', ...valid, context: { ...context, platform: 'win32-x64' }, expect: { ok: false, reason: 'platform-mismatch' } })
+vectors.push({ kind: 'core-manifest', name: 'core: shell host API below range', ...valid, context: { ...context, shellHostApi: 2 }, expect: { ok: false, reason: 'host-api-incompatible' } })
+vectors.push({ kind: 'core-manifest', name: 'core: shell host API above range', ...valid, context: { ...context, shellHostApi: 5 }, expect: { ok: false, reason: 'host-api-incompatible' } })
+vectors.push({ kind: 'core-manifest', name: 'core: revoked seq', ...valid, context: { ...context, revoked: [42] }, expect: { ok: false, reason: 'revoked' } })
+vectors.push({ kind: 'core-manifest', name: 'core: blocked seq', ...valid, context: { ...context, blocked: [42] }, expect: { ok: false, reason: 'blocked' } })
+vectors.push({ kind: 'core-manifest', name: 'core: seq equals builtin', ...valid, context: { ...context, builtinSeq: 42 }, expect: { ok: false, reason: 'not-newer' } })
+vectors.push({ kind: 'core-manifest', name: 'core: seq below current', ...valid, context: { ...context, currentSeq: 50 }, expect: { ok: false, reason: 'not-newer' } })
 
 const validShell = await signed(shell)
-vectors.push({ name: 'shell: valid manifest', kind: 'shell-manifest', ...validShell, expect: { ok: true } })
-vectors.push({ name: 'shell: changed byte after signing', kind: 'shell-manifest', document: validShell.document.replace('"hostApi":3', '"hostApi":9'), signature: validShell.signature, expect: { ok: false, reason: 'invalid-signature' } })
+vectors.push({ kind: 'shell-manifest', name: 'shell: valid manifest', ...validShell, expect: { ok: true } })
+vectors.push({ document: validShell.document.replace('"hostApi":3', '"hostApi":9'), expect: { ok: false, reason: 'invalid-signature' }, kind: 'shell-manifest', name: 'shell: changed byte after signing', signature: validShell.signature })
 
 const now = '2026-10-24T00:00:00.000Z'
-vectors.push({ name: 'pointer: valid canary pointer', kind: 'pointer', ...await signed(pointer()), context: { now }, expect: { ok: true } })
+const target = { cadence: 'realtime', channel: 'canary', product: 'airi' }
+vectors.push({ kind: 'pointer', name: 'pointer: valid canary pointer', ...await signed(pointer()), context: { ...target, now }, expect: { ok: true } })
 const { core: _core, ...stable } = pointer({ channel: 'stable' })
-vectors.push({ name: 'pointer: valid stable pointer without a core', kind: 'pointer', ...await signed(stable), context: { now }, expect: { ok: true } })
-vectors.push({ name: 'pointer: expired', kind: 'pointer', ...await signed(pointer()), context: { now: '2026-11-07T00:00:00.000Z' }, expect: { ok: false, reason: 'pointer-expired' } })
-vectors.push({ name: 'pointer: older than the last accepted pointer', kind: 'pointer', ...await signed(pointer()), context: { now, lastIssuedAt: '2026-10-23T12:00:00.000Z' }, expect: { ok: false, reason: 'pointer-replayed' } })
-vectors.push({ name: 'pointer: same issuedAt as the last accepted pointer', kind: 'pointer', ...await signed(pointer()), context: { now, lastIssuedAt: '2026-10-23T00:00:00.000Z' }, expect: { ok: true } })
-vectors.push({ name: 'pointer: expiresAt before issuedAt', kind: 'pointer', ...await signed(pointer({ expiresAt: '2026-10-22T00:00:00.000Z' })), context: { now: '2026-10-21T00:00:00.000Z' }, expect: { ok: false, reason: 'invalid-schema' } })
-vectors.push({ name: 'pointer: rollout above 100', kind: 'pointer', ...await signed(pointer({ core: { seq: 42, rollout: { percentage: 101, salt: '42' } } })), context: { now }, expect: { ok: false, reason: 'invalid-schema' } })
+vectors.push({ kind: 'pointer', name: 'pointer: valid stable pointer without a core', ...await signed(stable), context: { ...target, channel: 'stable', now }, expect: { ok: true } })
+vectors.push({ kind: 'pointer', name: 'pointer: another channel at the asked path', ...await signed(stable), context: { ...target, now }, expect: { ok: false, reason: 'pointer-mismatch' } })
+vectors.push({ kind: 'pointer', name: 'pointer: another cadence', ...await signed(pointer({ cadence: 'nightly' })), context: { ...target, now }, expect: { ok: false, reason: 'pointer-mismatch' } })
+vectors.push({ kind: 'pointer', name: 'pointer: another product with the same key', ...await signed(pointer({ product: 'other' })), context: { ...target, now }, expect: { ok: false, reason: 'pointer-mismatch' } })
+vectors.push({ kind: 'pointer', name: 'pointer: expired', ...await signed(pointer()), context: { ...target, now: '2026-11-07T00:00:00.000Z' }, expect: { ok: false, reason: 'pointer-expired' } })
+vectors.push({ kind: 'pointer', name: 'pointer: older than the last accepted pointer', ...await signed(pointer()), context: { ...target, lastIssuedAt: '2026-10-23T12:00:00.000Z', now }, expect: { ok: false, reason: 'pointer-replayed' } })
+vectors.push({ kind: 'pointer', name: 'pointer: same issuedAt as the last accepted pointer', ...await signed(pointer()), context: { ...target, lastIssuedAt: '2026-10-23T00:00:00.000Z', now }, expect: { ok: true } })
+vectors.push({ kind: 'pointer', name: 'pointer: expiresAt before issuedAt', ...await signed(pointer({ expiresAt: '2026-10-22T00:00:00.000Z' })), context: { ...target, now: '2026-10-21T00:00:00.000Z' }, expect: { ok: false, reason: 'invalid-schema' } })
+vectors.push({ kind: 'pointer', name: 'pointer: rollout above 100', ...await signed(pointer({ core: { rollout: { percentage: 101, salt: '42' }, seq: 42 } })), context: { ...target, now }, expect: { ok: false, reason: 'invalid-schema' } })
 
 for (const [path, expect] of [['main/index.js', true], ['renderer/assets/a b.js', true], ['', false], ['/abs', false], ['../x', false], ['a/../b', false], ['a/./b', false], ['a//b', false], ['a\\b', false], ['C:/x', false], ['c:x', false], ['a\0b', false]] as const)
-  vectors.push({ name: `path: ${JSON.stringify(path)}`, kind: 'path', path, expect })
+  vectors.push({ expect, kind: 'path', name: `path: ${JSON.stringify(path)}`, path })
 
 for (const [salt, installId] of [['42', 'install-a'], ['42', 'install-b'], ['43', 'install-a'], ['seq-1', '00000000-0000-4000-8000-000000000000']])
-  vectors.push({ name: `rollout: ${salt}:${installId}`, kind: 'rollout', salt, installId, bucket: createHash('sha256').update(`${salt}:${installId}`).digest().readUInt32BE(0) % 100 })
+  vectors.push({ bucket: createHash('sha256').update(`${salt}:${installId}`).digest().readUInt32BE(0) % 100, installId, kind: 'rollout', name: `rollout: ${salt}:${installId}`, salt })
 
 for (const [shellHostApi, min, max, expect] of [[3, 3, 3, true], [3, 1, 5, true], [2, 3, 4, false], [5, 3, 4, false]] as const)
-  vectors.push({ name: `host-api: ${shellHostApi} in ${min}..${max}`, kind: 'host-api', shellHostApi, range: { min, max }, expect })
+  vectors.push({ expect, kind: 'host-api', name: `host-api: ${shellHostApi} in ${min}..${max}`, range: { max, min }, shellHostApi })
 
 const file: ConformanceVectorFile = {
   trustedKeys: [{ keyId: trusted.keyId, publicKey: trusted.publicKey }],

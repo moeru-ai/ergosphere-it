@@ -57,6 +57,8 @@ One trusted Ed25519 key signs both layers. The shell contains the public key. Th
 ### Release identity
 
 - Each release has a `seq`, an integer that never decreases. The publish CLI assigns it. One counter serves all channels, so a release keeps its `seq` when it is promoted from canary to stable.
+- A `seq` must not depend on the state of the server. The publish CLI uses the current time in milliseconds, or one more than the largest `seq` in the tree if that is larger. When the server loses releases or goes back to a backup, the next release still gets a `seq` above every `seq` that a client already has.
+- A `seq` is never used for two releases. Do not pass a `seq` by hand unless you are sure no client has seen it.
 - Each release also has a display version, for example `0.13.0-core.42`. Clients never compare display versions. This avoids the semver problem that T-196 found: `0.12.0.core.1` is not semver, and `0.12.0-core.1` sorts before `0.12.0`.
 - The builtin core of each installer records its `seq`. The client rejects an external core with a `seq` that is not greater than the builtin `seq`. So after a full update, old OTA cores do not come back.
 
@@ -66,7 +68,7 @@ One trusted Ed25519 key signs both layers. The shell contains the public key. Th
 - The signature is Ed25519 over the exact bytes of the document file. It is stored as base64 in a detached `<file>.sig` file.
 - `keyId` is the first 16 hex characters of the SHA-256 of the public key in SPKI DER form.
 - A client parses the JSON only to read `signature.keyId`, and finds that key in its trusted list. It verifies the signature over the raw bytes before it uses any other field.
-- Implementations use WebCrypto Ed25519, so the same code runs in Node.js, Electron, and browsers.
+- Implementations use WebCrypto Ed25519 and the built-in `Uint8Array` base64 and hex methods, so the same code runs in Node.js 26 or later, Electron 43 or later, and current browsers.
 
 ### Compatibility
 
@@ -194,6 +196,24 @@ boot.json                         # boot attempts and last healthy seq
 
 LobeHub also uses packs with zstd frames, HTTP Range reads, and binary patches. Version 1 of this protocol does not. The design leaves room for a `packs` field in a later schema.
 
+### Server desync
+
+A client can run a release that the server no longer has, for example after the server goes back to a backup. A client never goes back to an older release. The server fixes a desync by publishing a newer release.
+
+| What the client sees | What the client does |
+| --- | --- |
+| A pointer that is older than one it accepted | It rejects the pointer with `pointer-replayed` and keeps its core. |
+| A pointer to a `seq` lower than its current or staged `seq` | It reports `server-behind` and keeps its core. |
+| A pointer without a core | It keeps its core. |
+| A pointer that revokes its current `seq` | It leaves the core: previous, then builtin. The server can revoke a `seq` that its history does not hold. |
+| A pointer to a `seq` higher than its current `seq` | It takes the release as usual. |
+
+After the server goes back to a backup, do these steps:
+
+1. Sign the pointers again (`ergosphere-it reissue`), so that clients accept them.
+2. Publish a new release. Its `seq` is higher than every `seq` that clients have, so all clients take it.
+3. To remove a bad release that the server lost, revoke its `seq`.
+
 ### Activation
 
 The SDK compares the file hashes of the staged core and the running core, component by component:
@@ -259,6 +279,8 @@ A verifier returns `ok` or one reason code. Every client implementation uses the
 | `blocked` | The client blocked this `seq` after failures. |
 | `pointer-replayed` | The pointer `issuedAt` is older than the newest pointer that the client has seen. |
 | `pointer-expired` | The current time is after the pointer `expiresAt`. |
+| `pointer-mismatch` | The pointer is for another product, channel, or cadence than the client asked for. A valid signature proves who signed a document, not which document it is. |
+| `core-mismatch` | The core is for another product or host. |
 
 ### Project shape
 

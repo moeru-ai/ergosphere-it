@@ -2,21 +2,21 @@ import type { CoreCandidateContext, VerifyReason } from './verify'
 
 import vectorFile from '../vectors/vectors.json' with { type: 'json' }
 
-export type Expectation = { ok: true } | { ok: false, reason: VerifyReason }
-
 export type ConformanceVector
-  = | { name: string, kind: 'core-manifest', document: string, signature: string, context?: CoreCandidateContext, expect: Expectation }
-    | { name: string, kind: 'shell-manifest', document: string, signature: string, expect: Expectation }
-    | { name: string, kind: 'pointer', document: string, signature: string, context: { now: string, lastIssuedAt?: string }, expect: Expectation }
-    | { name: string, kind: 'path', path: string, expect: boolean }
-    | { name: string, kind: 'rollout', salt: string, installId: string, bucket: number }
-    | { name: string, kind: 'host-api', shellHostApi: number, range: { min: number, max: number }, expect: boolean }
+  = | { bucket: number, installId: string, kind: 'rollout', name: string, salt: string }
+    | { context: { cadence: string, channel: string, lastIssuedAt?: string, now: string, product: string }, document: string, expect: Expectation, kind: 'pointer', name: string, signature: string }
+    | { context?: CoreCandidateContext, document: string, expect: Expectation, kind: 'core-manifest', name: string, signature: string }
+    | { document: string, expect: Expectation, kind: 'shell-manifest', name: string, signature: string }
+    | { expect: boolean, kind: 'host-api', name: string, range: { max: number, min: number }, shellHostApi: number }
+    | { expect: boolean, kind: 'path', name: string, path: string }
 
 export interface ConformanceVectorFile {
   /** The only key that the vectors trust. It is a test key and never signs real releases. */
   trustedKeys: { keyId: string, publicKey: string }[]
   vectors: ConformanceVector[]
 }
+
+export type Expectation = { ok: false, reason: VerifyReason } | { ok: true }
 
 /** Conformance test vectors. Every client implementation must give the expected result for each vector. */
 export const conformanceVectors = vectorFile as ConformanceVectorFile

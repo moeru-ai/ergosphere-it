@@ -8,13 +8,13 @@ import { evaluateCoreCandidate, isHostApiCompatible, verifyCoreManifest, verifyP
 const encode = (text: string) => new TextEncoder().encode(text)
 const { trustedKeys, vectors } = conformanceVectors
 
-function outcome(result: { ok: true } | { ok: false, reason: string }) {
+function outcome(result: { ok: false, reason: string } | { ok: true }) {
   return result.ok ? { ok: true } : { ok: false, reason: result.reason }
 }
 
 describe('conformance vectors', () => {
   it('has vectors for every kind', () => {
-    expect(new Set(vectors.map(vector => vector.kind))).toEqual(new Set(['core-manifest', 'shell-manifest', 'pointer', 'path', 'rollout', 'host-api']))
+    expect(new Set(vectors.map(vector => vector.kind))).toEqual(new Set(['core-manifest', 'host-api', 'path', 'pointer', 'rollout', 'shell-manifest']))
   })
 
   for (const vector of vectors) {
@@ -26,22 +26,22 @@ describe('conformance vectors', () => {
           expect(outcome(result)).toEqual(vector.expect)
           break
         }
-        case 'shell-manifest':
-          expect(outcome(await verifyShellManifest(encode(vector.document), vector.signature, trustedKeys))).toEqual(vector.expect)
+        case 'host-api':
+          expect(isHostApiCompatible(vector.shellHostApi, vector.range)).toBe(vector.expect)
           break
-        case 'pointer': {
-          const context = { now: new Date(vector.context.now), lastIssuedAt: vector.context.lastIssuedAt }
-          expect(outcome(await verifyPointer(encode(vector.document), vector.signature, trustedKeys, context))).toEqual(vector.expect)
-          break
-        }
         case 'path':
           expect(isSafeManifestPath(vector.path)).toBe(vector.expect)
           break
+        case 'pointer': {
+          const context = { ...vector.context, now: new Date(vector.context.now) }
+          expect(outcome(await verifyPointer(encode(vector.document), vector.signature, trustedKeys, context))).toEqual(vector.expect)
+          break
+        }
         case 'rollout':
           expect(await rolloutBucket(vector.salt, vector.installId)).toBe(vector.bucket)
           break
-        case 'host-api':
-          expect(isHostApiCompatible(vector.shellHostApi, vector.range)).toBe(vector.expect)
+        case 'shell-manifest':
+          expect(outcome(await verifyShellManifest(encode(vector.document), vector.signature, trustedKeys))).toEqual(vector.expect)
           break
       }
     })

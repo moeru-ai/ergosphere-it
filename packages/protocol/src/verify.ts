@@ -2,48 +2,139 @@ import type { GenericSchema, InferOutput } from 'valibot'
 
 import type { CoreManifest, HostApiRange, Pointer, ShellManifest, TrustedKey } from './schema'
 
+import { errorMessageFrom } from '@moeru/std/error'
 import { safeParse } from 'valibot'
 
-import { base64ToBytes } from './encoding'
 import { isSafeManifestPath } from './path'
 import { coreManifestSchema, pointerSchema, shellManifestSchema } from './schema'
-import { verifyBytes } from './signature'
+import { decodeBase64, verifyBytes } from './signature'
+
+export interface CoreCandidateContext {
+  blocked?: readonly number[]
+  builtinSeq: number
+  currentSeq?: number
+  /** The host that runs the core, for example `electron`. */
+  host: string
+  /** The platform of this install, for example `darwin-arm64`. */
+  platform: string
+  /** The product of this install. A core of another product is rejected even when its signature is valid. */
+  product: string
+  revoked?: readonly number[]
+  shellHostApi: number
+}
+
+/**
+ * What the client asked for. A valid signature proves who signed a pointer, not which pointer it is, so the client
+ * also checks that the pointer is for its product, channel, and cadence.
+ */
+export interface PointerContext {
+  cadence: string
+  channel: string
+  /** The newest `issuedAt` that this client accepted before. */
+  lastIssuedAt?: string
+  now: Date
+  product: string
+}
 
 /** Reason codes of the specification. Every client implementation returns the same codes. */
 export type VerifyReason
-  = | 'invalid-signature'
-    | 'untrusted-key'
-    | 'invalid-json'
-    | 'invalid-schema'
-    | 'unsafe-path'
+  = | 'blocked'
+    | 'core-mismatch'
     | 'duplicate-path'
     | 'host-api-incompatible'
-    | 'platform-mismatch'
+    | 'invalid-json'
+    | 'invalid-schema'
+    | 'invalid-signature'
     | 'not-newer'
-    | 'revoked'
-    | 'blocked'
-    | 'pointer-replayed'
+    | 'platform-mismatch'
     | 'pointer-expired'
+    | 'pointer-mismatch'
+    | 'pointer-replayed'
+    | 'revoked'
+    | 'unsafe-path'
+    | 'untrusted-key'
 
 export type VerifyResult<T>
-  = | { ok: true, value: T }
-    | { ok: false, reason: VerifyReason, detail?: string }
+  = | { detail?: string, ok: false, reason: VerifyReason }
+    | { ok: true, value: T }
 
-function fail(reason: VerifyReason, detail?: string): { ok: false, reason: VerifyReason, detail?: string } {
-  return detail === undefined ? { ok: false, reason } : { ok: false, reason, detail }
+/**
+ * Decides if a verified core manifest can run on this install.
+ *
+ * The checks run in a fixed order, so every implementation reports the same reason for the same input:
+ * product and host, platform, host API, revoked, blocked, then not newer.
+ */
+export function evaluateCoreCandidate(manifest: CoreManifest, context: CoreCandidateContext): VerifyResult<CoreManifest> {
+  if (manifest.product !== context.product || manifest.host !== context.host)
+    return fail('core-mismatch', `core for ${manifest.product} on ${manifest.host}, install is ${context.product} on ${context.host}`)
+  if (manifest.platform !== 'any' && manifest.platform !== context.platform)
+    return fail('platform-mismatch', `${manifest.platform} is not ${context.platform}`)
+  if (!isHostApiCompatible(context.shellHostApi, manifest.hostApi))
+    return fail('host-api-incompatible', `shell ${context.shellHostApi} is outside ${manifest.hostApi.min}..${manifest.hostApi.max}`)
+  if (context.revoked?.includes(manifest.seq))
+    return fail('revoked', String(manifest.seq))
+  if (context.blocked?.includes(manifest.seq))
+    return fail('blocked', String(manifest.seq))
+
+  const floor = Math.max(context.builtinSeq, context.currentSeq ?? 0)
+  if (manifest.seq <= floor)
+    return fail('not-newer', `${manifest.seq} is not greater than ${floor}`)
+
+  return { ok: true, value: manifest }
 }
 
-function readKeyId(document: unknown): string | undefined {
-  if (typeof document !== 'object' || document === null)
-    return undefined
+/** A shell accepts a core when its host API is inside the core range. */
+export function isHostApiCompatible(shellHostApi: number, range: HostApiRange): boolean {
+  return range.min <= shellHostApi && shellHostApi <= range.max
+}
 
-  const signature = (document as { signature?: unknown }).signature
-  if (typeof signature !== 'object' || signature === null)
-    return undefined
+/** Verifies the signature, schema, and file list of a core manifest. */
+export async function verifyCoreManifest(
+  bytes: Uint8Array<ArrayBuffer>,
+  signatureBase64: string,
+  trustedKeys: readonly TrustedKey[],
+): Promise<VerifyResult<CoreManifest>> {
+  const result = await verifySignedDocument(bytes, signatureBase64, trustedKeys, coreManifestSchema)
+  if (!result.ok)
+    return result
 
-  const keyId = (signature as { keyId?: unknown }).keyId
+  return checkFiles(result.value)
+}
 
-  return typeof keyId === 'string' ? keyId : undefined
+/** Verifies a pointer, then rejects expired and replayed pointers. */
+export async function verifyPointer(
+  bytes: Uint8Array<ArrayBuffer>,
+  signatureBase64: string,
+  trustedKeys: readonly TrustedKey[],
+  context: PointerContext,
+): Promise<VerifyResult<Pointer>> {
+  const result = await verifySignedDocument(bytes, signatureBase64, trustedKeys, pointerSchema)
+  if (!result.ok)
+    return result
+
+  const pointer = result.value
+  const issuedAt = Date.parse(pointer.issuedAt)
+  const expiresAt = Date.parse(pointer.expiresAt)
+
+  if (pointer.product !== context.product || pointer.channel !== context.channel || pointer.cadence !== context.cadence)
+    return fail('pointer-mismatch', `pointer for ${pointer.product} ${pointer.channel}/${pointer.cadence}, asked for ${context.product} ${context.channel}/${context.cadence}`)
+  if (expiresAt <= issuedAt)
+    return fail('invalid-schema', 'expiresAt is not after issuedAt')
+  if (context.now.getTime() > expiresAt)
+    return fail('pointer-expired', pointer.expiresAt)
+  if (context.lastIssuedAt !== undefined && issuedAt < Date.parse(context.lastIssuedAt))
+    return fail('pointer-replayed', `${pointer.issuedAt} is older than ${context.lastIssuedAt}`)
+
+  return result
+}
+
+/** Verifies the signature and schema of a shell manifest. */
+export async function verifyShellManifest(
+  bytes: Uint8Array<ArrayBuffer>,
+  signatureBase64: string,
+  trustedKeys: readonly TrustedKey[],
+): Promise<VerifyResult<ShellManifest>> {
+  return verifySignedDocument(bytes, signatureBase64, trustedKeys, shellManifestSchema)
 }
 
 /**
@@ -58,7 +149,7 @@ export async function verifySignedDocument<TSchema extends GenericSchema>(
   trustedKeys: readonly TrustedKey[],
   schema: TSchema,
 ): Promise<VerifyResult<InferOutput<TSchema>>> {
-  const signature = base64ToBytes(signatureBase64)
+  const signature = decodeBase64(signatureBase64)
   if (!signature)
     return fail('invalid-signature', 'signature is not base64')
 
@@ -67,7 +158,7 @@ export async function verifySignedDocument<TSchema extends GenericSchema>(
     document = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
   }
   catch (error) {
-    return fail('invalid-json', error instanceof Error ? error.message : undefined)
+    return fail('invalid-json', errorMessageFrom(error))
   }
 
   const keyId = readKeyId(document)
@@ -113,93 +204,19 @@ function checkFiles(manifest: CoreManifest): VerifyResult<CoreManifest> {
   return { ok: true, value: manifest }
 }
 
-/** Verifies the signature, schema, and file list of a core manifest. */
-export async function verifyCoreManifest(
-  bytes: Uint8Array<ArrayBuffer>,
-  signatureBase64: string,
-  trustedKeys: readonly TrustedKey[],
-): Promise<VerifyResult<CoreManifest>> {
-  const result = await verifySignedDocument(bytes, signatureBase64, trustedKeys, coreManifestSchema)
-  if (!result.ok)
-    return result
-
-  return checkFiles(result.value)
+function fail(reason: VerifyReason, detail?: string): { detail?: string, ok: false, reason: VerifyReason } {
+  return detail === undefined ? { ok: false, reason } : { detail, ok: false, reason }
 }
 
-/** Verifies the signature and schema of a shell manifest. */
-export async function verifyShellManifest(
-  bytes: Uint8Array<ArrayBuffer>,
-  signatureBase64: string,
-  trustedKeys: readonly TrustedKey[],
-): Promise<VerifyResult<ShellManifest>> {
-  return verifySignedDocument(bytes, signatureBase64, trustedKeys, shellManifestSchema)
-}
+function readKeyId(document: unknown): string | undefined {
+  if (typeof document !== 'object' || document === null)
+    return undefined
 
-export interface PointerContext {
-  now: Date
-  /** The newest `issuedAt` that this client accepted before. */
-  lastIssuedAt?: string
-}
+  const signature = (document as { signature?: unknown }).signature
+  if (typeof signature !== 'object' || signature === null)
+    return undefined
 
-/** Verifies a pointer, then rejects expired and replayed pointers. */
-export async function verifyPointer(
-  bytes: Uint8Array<ArrayBuffer>,
-  signatureBase64: string,
-  trustedKeys: readonly TrustedKey[],
-  context: PointerContext,
-): Promise<VerifyResult<Pointer>> {
-  const result = await verifySignedDocument(bytes, signatureBase64, trustedKeys, pointerSchema)
-  if (!result.ok)
-    return result
+  const keyId = (signature as { keyId?: unknown }).keyId
 
-  const pointer = result.value
-  const issuedAt = Date.parse(pointer.issuedAt)
-  const expiresAt = Date.parse(pointer.expiresAt)
-
-  if (expiresAt <= issuedAt)
-    return fail('invalid-schema', 'expiresAt is not after issuedAt')
-  if (context.now.getTime() > expiresAt)
-    return fail('pointer-expired', pointer.expiresAt)
-  if (context.lastIssuedAt !== undefined && issuedAt < Date.parse(context.lastIssuedAt))
-    return fail('pointer-replayed', `${pointer.issuedAt} is older than ${context.lastIssuedAt}`)
-
-  return result
-}
-
-/** A shell accepts a core when its host API is inside the core range. */
-export function isHostApiCompatible(shellHostApi: number, range: HostApiRange): boolean {
-  return range.min <= shellHostApi && shellHostApi <= range.max
-}
-
-export interface CoreCandidateContext {
-  shellHostApi: number
-  /** The platform of this install, for example `darwin-arm64`. */
-  platform: string
-  builtinSeq: number
-  currentSeq?: number
-  blocked?: readonly number[]
-  revoked?: readonly number[]
-}
-
-/**
- * Decides if a verified core manifest can run on this install.
- *
- * The checks run in a fixed order, so every implementation reports the same reason for the same input:
- * platform, host API, revoked, blocked, then not newer.
- */
-export function evaluateCoreCandidate(manifest: CoreManifest, context: CoreCandidateContext): VerifyResult<CoreManifest> {
-  if (manifest.platform !== 'any' && manifest.platform !== context.platform)
-    return fail('platform-mismatch', `${manifest.platform} is not ${context.platform}`)
-  if (!isHostApiCompatible(context.shellHostApi, manifest.hostApi))
-    return fail('host-api-incompatible', `shell ${context.shellHostApi} is outside ${manifest.hostApi.min}..${manifest.hostApi.max}`)
-  if (context.revoked?.includes(manifest.seq))
-    return fail('revoked', String(manifest.seq))
-  if (context.blocked?.includes(manifest.seq))
-    return fail('blocked', String(manifest.seq))
-
-  const floor = Math.max(context.builtinSeq, context.currentSeq ?? 0)
-  if (manifest.seq <= floor)
-    return fail('not-newer', `${manifest.seq} is not greater than ${floor}`)
-
-  return { ok: true, value: manifest }
+  return typeof keyId === 'string' ? keyId : undefined
 }

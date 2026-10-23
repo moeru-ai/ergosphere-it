@@ -1,0 +1,16 @@
+root = true
+
+[*.md]
+# double whitespace at end of line
+# denotes a line break in Markdown
+trim_trailing_whitespace = false
+
+[*.{js,mjs,cjs,ts,html,css,json,yaml,yml}]
+indent_size = 2
+indent_style = space
+trim_trailing_whitespace = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true

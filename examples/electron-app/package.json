@@ -1,0 +1,22 @@
+{
+  "name": "ergosphere-example-electron",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A minimal Electron app that updates its core with ergosphere-it",
+  "main": "shell/index.mjs",
+  "scripts": {
+    "demo": "node scripts/demo.mjs",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "dependencies": {
+    "@ergosphere-it/driver-electron": "workspace:*"
+  },
+  "devDependencies": {
+    "@ergosphere-it/publish": "workspace:*",
+    "@ergosphere-it/server": "workspace:*",
+    "@moeru/std": "catalog:",
+    "electron": "catalog:",
+    "es-toolkit": "catalog:"
+  }
+}

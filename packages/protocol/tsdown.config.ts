@@ -1,11 +1,12 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
+  clean: true,
+  dts: true,
   entry: {
     index: 'src/index.ts',
     vectors: 'src/vectors.ts',
   },
-  dts: true,
+  format: 'esm',
   sourcemap: true,
-  fixedExtension: true,
 })

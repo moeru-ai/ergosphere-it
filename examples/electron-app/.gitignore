@@ -1,0 +1,4 @@
+# Written by scripts/e2e.mjs
+core/
+core.json
+shell/trusted-key.json

@@ -13,25 +13,9 @@ let tempCounter = 0
 /** A file system for Node.js hosts, for example the Electron main process. */
 export function createNodeFileSystem(): UpdateFileSystem {
   return {
-    join,
-    async readFile(path) {
-      try {
-        const buffer = await readFile(path)
-
-        return new Uint8Array(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer)
-      }
-      catch (error) {
-        if (isMissing(error))
-          return undefined
-
-        throw error
-      }
-    },
-    async writeFileAtomic(path, data) {
-      await mkdir(dirname(path), { recursive: true })
-      const temporary = `${path}.${pid}.${tempCounter++}.tmp`
-      await writeFile(temporary, data)
-      await rename(temporary, path)
+    async copyFile(from, to) {
+      await mkdir(dirname(to), { recursive: true })
+      await copyFile(from, to)
     },
     async fileSize(path) {
       try {
@@ -46,16 +30,7 @@ export function createNodeFileSystem(): UpdateFileSystem {
         throw error
       }
     },
-    async rename(from, to) {
-      await mkdir(dirname(to), { recursive: true })
-      await rename(from, to)
-    },
-    async mkdir(path) {
-      await mkdir(path, { recursive: true })
-    },
-    async remove(path) {
-      await rm(path, { recursive: true, force: true, maxRetries: 3 })
-    },
+    join,
     async list(path) {
       try {
         return await readdir(path)
@@ -67,9 +42,34 @@ export function createNodeFileSystem(): UpdateFileSystem {
         throw error
       }
     },
-    async copyFile(from, to) {
+    async mkdir(path) {
+      await mkdir(path, { recursive: true })
+    },
+    async readFile(path) {
+      try {
+        const buffer = await readFile(path)
+
+        return new Uint8Array(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer)
+      }
+      catch (error) {
+        if (isMissing(error))
+          return undefined
+
+        throw error
+      }
+    },
+    async remove(path) {
+      await rm(path, { force: true, maxRetries: 3, recursive: true })
+    },
+    async rename(from, to) {
       await mkdir(dirname(to), { recursive: true })
-      await copyFile(from, to)
+      await rename(from, to)
+    },
+    async writeFileAtomic(path, data) {
+      await mkdir(dirname(path), { recursive: true })
+      const temporary = `${path}.${pid}.${tempCounter++}.tmp`
+      await writeFile(temporary, data)
+      await rename(temporary, path)
     },
   }
 }

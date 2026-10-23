@@ -7,72 +7,82 @@
   ],
   "vectors": [
     {
-      "name": "core: valid manifest",
       "kind": "core-manifest",
+      "name": "core: valid manifest",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": true
       }
     },
     {
-      "name": "core: valid manifest for any platform",
       "kind": "core-manifest",
+      "name": "core: valid manifest for any platform",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"any\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "RjnBkG0o33WO6jG4iv+BWw5iZsjqu6XJt3z46/lwTi9Rh+8LF7K+BqnbWCNfAeCJotcB02VApL6UPAnh2ulXDQ==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": true
       }
     },
     {
-      "name": "core: changed byte after signing",
-      "kind": "core-manifest",
+      "context": {
+        "builtinSeq": 10,
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellHostApi": 3
+      },
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":43,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
-      "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
-      "context": {
-        "shellHostApi": 3,
-        "platform": "darwin-arm64",
-        "builtinSeq": 10
-      },
       "expect": {
         "ok": false,
         "reason": "invalid-signature"
-      }
+      },
+      "kind": "core-manifest",
+      "name": "core: changed byte after signing",
+      "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA=="
     },
     {
-      "name": "core: signature is not base64",
-      "kind": "core-manifest",
+      "context": {
+        "builtinSeq": 10,
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellHostApi": 3
+      },
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
-      "signature": "not base64!",
-      "context": {
-        "shellHostApi": 3,
-        "platform": "darwin-arm64",
-        "builtinSeq": 10
-      },
       "expect": {
         "ok": false,
         "reason": "invalid-signature"
-      }
+      },
+      "kind": "core-manifest",
+      "name": "core: signature is not base64",
+      "signature": "not base64!"
     },
     {
-      "name": "core: signed by an untrusted key",
       "kind": "core-manifest",
+      "name": "core: signed by an untrusted key",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"e2a9fce76b8ca8b6\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "72g3EcFpcgZmRw7gvsZX6iXhI4JS8ci4Tl3EzkrhX+fwt7zoU+pmOL5Sf5O3HgfhwkKt97WW8S47MTLiA194Bg==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -80,14 +90,16 @@
       }
     },
     {
-      "name": "core: trusted keyId but signed by another key",
       "kind": "core-manifest",
+      "name": "core: trusted keyId but signed by another key",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "ubQ59wXPboo2xg9F0izeu1N2LkfmYI+k2CakH5MwvOCCDUCyarCeGs+JhDJCm9w/Vx88QybI4U+QOrJIt1TbAA==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -95,44 +107,50 @@
       }
     },
     {
-      "name": "core: missing keyId",
-      "kind": "core-manifest",
-      "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
-      "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
+      "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "expect": {
         "ok": false,
         "reason": "untrusted-key"
-      }
+      },
+      "kind": "core-manifest",
+      "name": "core: missing keyId",
+      "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA=="
     },
     {
-      "name": "core: not JSON",
-      "kind": "core-manifest",
-      "document": "{\"schema\":1,",
-      "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
+      "document": "{\"schema\":1,",
       "expect": {
         "ok": false,
         "reason": "invalid-json"
-      }
+      },
+      "kind": "core-manifest",
+      "name": "core: not JSON",
+      "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA=="
     },
     {
-      "name": "core: seq is zero",
       "kind": "core-manifest",
+      "name": "core: seq is zero",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":0,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "nXqIChfKSKsNd7MF/iiErHDM1YRLERI5z4lmbdpVN/oOkaZwF1vV0HYcgh2PJytc7Muwsz0yM+BUOxLodudgCw==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -140,14 +158,16 @@
       }
     },
     {
-      "name": "core: totalSize does not match files",
       "kind": "core-manifest",
+      "name": "core: totalSize does not match files",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-core.42\"}",
       "signature": "Vf1LIz46rmOWSkSIlHKH0bguMWR9Pbm5gQx2hAasFjpnMuXGeBaPGGCbMVpRygk9IwdWg3FKzJvnhEMnluUnAA==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -155,14 +175,16 @@
       }
     },
     {
-      "name": "core: hostApi min above max",
       "kind": "core-manifest",
+      "name": "core: hostApi min above max",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":5},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "drq2O37kDb8Ta6l03swINN92k4x4ZJnaytBtpc6zvZ26O5v4EW7sYdq+HIrBoYAEejzmFPzIjeV7Fd3rG94hDA==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -170,14 +192,16 @@
       }
     },
     {
-      "name": "core: unsafe path, parent segment",
       "kind": "core-manifest",
+      "name": "core: unsafe path, parent segment",
       "document": "{\"components\":[{\"files\":[{\"path\":\"../escape.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-core.42\"}",
       "signature": "18E7Zr0oQs+UeUGlg26MV6rSpOBYEwPiwWw414M7voc2xunqgBfbTOGRMG8RH6mQKH2833DRMgp03iLA7yTmDw==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -185,14 +209,16 @@
       }
     },
     {
-      "name": "core: unsafe path, absolute path",
       "kind": "core-manifest",
+      "name": "core: unsafe path, absolute path",
       "document": "{\"components\":[{\"files\":[{\"path\":\"/etc/passwd\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-core.42\"}",
       "signature": "wbHVICWChoOYnygfCMA4H7u8ahKNnr2dsIV9O0P6OPmoBv02EsKSeZiz//ZVW+p9QGQA1wJcng+jvuIkg49UAw==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -200,14 +226,16 @@
       }
     },
     {
-      "name": "core: unsafe path, drive letter",
       "kind": "core-manifest",
+      "name": "core: unsafe path, drive letter",
       "document": "{\"components\":[{\"files\":[{\"path\":\"C:/x.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-core.42\"}",
       "signature": "Yk0a3CtjACT43MY5lXq7ITD3/aWlNLftzt3IntBwKmmU9Oz/G1trVtYzysXVSAWRsUD+M063N5aQ10gfkGW3DA==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -215,14 +243,16 @@
       }
     },
     {
-      "name": "core: unsafe path, backslash",
       "kind": "core-manifest",
+      "name": "core: unsafe path, backslash",
       "document": "{\"components\":[{\"files\":[{\"path\":\"main\\\\index.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-core.42\"}",
       "signature": "lG/ccrzdsAYmTxOCrEBONkEfgU89uac7pTyQ+fsY425ywT7swuqMQ52oIthhAw9ZbDAwGXsW/efT6dbzfGWqBA==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -230,14 +260,16 @@
       }
     },
     {
-      "name": "core: unsafe path, dot segment",
       "kind": "core-manifest",
+      "name": "core: unsafe path, dot segment",
       "document": "{\"components\":[{\"files\":[{\"path\":\"main/./index.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-core.42\"}",
       "signature": "8kmw3GnVgoH7U0x5wo6P01kUJS10yXl5U6Z2E1PM6zXQpUdGz2s0JzgRUznOeHFpTDigjAnTtHqqhaJKhAYyDQ==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -245,14 +277,16 @@
       }
     },
     {
-      "name": "core: unsafe path, empty segment",
       "kind": "core-manifest",
+      "name": "core: unsafe path, empty segment",
       "document": "{\"components\":[{\"files\":[{\"path\":\"main//index.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-core.42\"}",
       "signature": "obYKmjD9tj2yzEgho2btZFNlyLzMyMb2LhZNgJVyWEHEYup73dA7HGZaXxhDV44CRI+2muIPTPHZxMeFIH8mBw==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -260,14 +294,16 @@
       }
     },
     {
-      "name": "core: same path in two components",
       "kind": "core-manifest",
+      "name": "core: same path in two components",
       "document": "{\"components\":[{\"files\":[{\"path\":\"shared.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":1}],\"type\":\"electron-main\"},{\"files\":[{\"path\":\"shared.js\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":2,\"version\":\"0.13.0-core.42\"}",
       "signature": "JO5JSPk5qv7r9d5AHOgD3I2BzrUGGApS7+pWONHDbbZSohquNP8XS7+M/DEaK2h+guKMCvKnCIEbg64WrkwzBg==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -275,14 +311,50 @@
       }
     },
     {
-      "name": "core: other platform",
       "kind": "core-manifest",
+      "name": "core: another product with the same key",
+      "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"other\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
+      "signature": "S4CAqGva+mDY2ubJcjeq+uWSN/3YE7i1eAOHipE+PbjcLTXGetSEmh6ZO8Opj8aWUfyWi7znxtPXodv27JXNBQ==",
+      "context": {
+        "builtinSeq": 10,
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellHostApi": 3
+      },
+      "expect": {
+        "ok": false,
+        "reason": "core-mismatch"
+      }
+    },
+    {
+      "kind": "core-manifest",
+      "name": "core: another host",
+      "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"kirie\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
+      "signature": "TJKxcwYmQILjNs6JdExSmQ6nJf1ngxOOnKH5cL1cwrvgkkZBuIiv+tWlf6TjFdT5t2jQTuZ19bRM4NVtwOQmAQ==",
+      "context": {
+        "builtinSeq": 10,
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellHostApi": 3
+      },
+      "expect": {
+        "ok": false,
+        "reason": "core-mismatch"
+      }
+    },
+    {
+      "kind": "core-manifest",
+      "name": "core: other platform",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 10,
+        "host": "electron",
         "platform": "win32-x64",
-        "builtinSeq": 10
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -290,44 +362,50 @@
       }
     },
     {
+      "kind": "core-manifest",
       "name": "core: shell host API below range",
-      "kind": "core-manifest",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
       "context": {
-        "shellHostApi": 2,
-        "platform": "darwin-arm64",
-        "builtinSeq": 10
-      },
-      "expect": {
-        "ok": false,
-        "reason": "host-api-incompatible"
-      }
-    },
-    {
-      "name": "core: shell host API above range",
-      "kind": "core-manifest",
-      "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
-      "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
-      "context": {
-        "shellHostApi": 5,
-        "platform": "darwin-arm64",
-        "builtinSeq": 10
-      },
-      "expect": {
-        "ok": false,
-        "reason": "host-api-incompatible"
-      }
-    },
-    {
-      "name": "core: revoked seq",
-      "kind": "core-manifest",
-      "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
-      "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
-      "context": {
-        "shellHostApi": 3,
-        "platform": "darwin-arm64",
         "builtinSeq": 10,
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellHostApi": 2
+      },
+      "expect": {
+        "ok": false,
+        "reason": "host-api-incompatible"
+      }
+    },
+    {
+      "kind": "core-manifest",
+      "name": "core: shell host API above range",
+      "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
+      "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
+      "context": {
+        "builtinSeq": 10,
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellHostApi": 5
+      },
+      "expect": {
+        "ok": false,
+        "reason": "host-api-incompatible"
+      }
+    },
+    {
+      "kind": "core-manifest",
+      "name": "core: revoked seq",
+      "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
+      "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
+      "context": {
+        "builtinSeq": 10,
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellHostApi": 3,
         "revoked": [
           42
         ]
@@ -338,14 +416,16 @@
       }
     },
     {
-      "name": "core: blocked seq",
       "kind": "core-manifest",
+      "name": "core: blocked seq",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
       "context": {
-        "shellHostApi": 3,
-        "platform": "darwin-arm64",
         "builtinSeq": 10,
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellHostApi": 3,
         "blocked": [
           42
         ]
@@ -356,14 +436,16 @@
       }
     },
     {
-      "name": "core: seq equals builtin",
       "kind": "core-manifest",
+      "name": "core: seq equals builtin",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
       "context": {
-        "shellHostApi": 3,
+        "builtinSeq": 42,
+        "host": "electron",
         "platform": "darwin-arm64",
-        "builtinSeq": 42
+        "product": "airi",
+        "shellHostApi": 3
       },
       "expect": {
         "ok": false,
@@ -371,14 +453,16 @@
       }
     },
     {
-      "name": "core: seq below current",
       "kind": "core-manifest",
+      "name": "core: seq below current",
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":{\"max\":4,\"min\":3},\"kind\":\"core\",\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"schema\":1,\"seq\":42,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-core.42\"}",
       "signature": "o+H/QBXhhPm+RQsIZEOkVb1JP9LSV7zdbsjBMJ9MhaVVGzEKd/Kd2dJR9iN9eB83OtpdY8VO5MMhwZefmlU4DA==",
       "context": {
-        "shellHostApi": 3,
-        "platform": "darwin-arm64",
         "builtinSeq": 10,
+        "host": "electron",
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "shellHostApi": 3,
         "currentSeq": 50
       },
       "expect": {
@@ -387,8 +471,8 @@
       }
     },
     {
-      "name": "shell: valid manifest",
       "kind": "shell-manifest",
+      "name": "shell: valid manifest",
       "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI-0.13.0-arm64-mac.zip\"}],\"builtinCoreSeq\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":3,\"kind\":\"shell\",\"product\":\"airi\",\"schema\":1,\"seq\":7,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
       "signature": "paQWx9uxAc7v8M6/Vy4V8WvlGTmqzVwjm2LsQzEUgXJFDin3+hBRQSuotlMydqv4t5kffymlsfjepjZhLiBoDA==",
       "expect": {
@@ -396,21 +480,24 @@
       }
     },
     {
-      "name": "shell: changed byte after signing",
-      "kind": "shell-manifest",
       "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI-0.13.0-arm64-mac.zip\"}],\"builtinCoreSeq\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"hostApi\":9,\"kind\":\"shell\",\"product\":\"airi\",\"schema\":1,\"seq\":7,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
-      "signature": "paQWx9uxAc7v8M6/Vy4V8WvlGTmqzVwjm2LsQzEUgXJFDin3+hBRQSuotlMydqv4t5kffymlsfjepjZhLiBoDA==",
       "expect": {
         "ok": false,
         "reason": "invalid-signature"
-      }
+      },
+      "kind": "shell-manifest",
+      "name": "shell: changed byte after signing",
+      "signature": "paQWx9uxAc7v8M6/Vy4V8WvlGTmqzVwjm2LsQzEUgXJFDin3+hBRQSuotlMydqv4t5kffymlsfjepjZhLiBoDA=="
     },
     {
-      "name": "pointer: valid canary pointer",
       "kind": "pointer",
+      "name": "pointer: valid canary pointer",
       "document": "{\"cadence\":\"realtime\",\"channel\":\"canary\",\"core\":{\"cohorts\":[\"alpha\",\"beta\",\"all\"],\"rollout\":{\"percentage\":25,\"salt\":\"42\"},\"seq\":42},\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"airi\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
       "signature": "s+KYARikrQEU/LKTUzqd/VsLCLvwWfexGfKlswgnkBhCWm1OgjMxZ4xg76gIykiKui7Fw6kei8Qim7g6RBAmCw==",
       "context": {
+        "cadence": "realtime",
+        "channel": "canary",
+        "product": "airi",
         "now": "2026-10-24T00:00:00.000Z"
       },
       "expect": {
@@ -418,11 +505,14 @@
       }
     },
     {
-      "name": "pointer: valid stable pointer without a core",
       "kind": "pointer",
+      "name": "pointer: valid stable pointer without a core",
       "document": "{\"cadence\":\"realtime\",\"channel\":\"stable\",\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"airi\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
       "signature": "EVMDbP0mKlgFlj7tSB0zGtDiDS2vvnzjHI17kaOPhvi8lH233AVs7BfsgmRW+qij1Eb4PHipJRVP9TyDM46RCg==",
       "context": {
+        "cadence": "realtime",
+        "channel": "stable",
+        "product": "airi",
         "now": "2026-10-24T00:00:00.000Z"
       },
       "expect": {
@@ -430,11 +520,62 @@
       }
     },
     {
-      "name": "pointer: expired",
       "kind": "pointer",
+      "name": "pointer: another channel at the asked path",
+      "document": "{\"cadence\":\"realtime\",\"channel\":\"stable\",\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"airi\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
+      "signature": "EVMDbP0mKlgFlj7tSB0zGtDiDS2vvnzjHI17kaOPhvi8lH233AVs7BfsgmRW+qij1Eb4PHipJRVP9TyDM46RCg==",
+      "context": {
+        "cadence": "realtime",
+        "channel": "canary",
+        "product": "airi",
+        "now": "2026-10-24T00:00:00.000Z"
+      },
+      "expect": {
+        "ok": false,
+        "reason": "pointer-mismatch"
+      }
+    },
+    {
+      "kind": "pointer",
+      "name": "pointer: another cadence",
+      "document": "{\"cadence\":\"nightly\",\"channel\":\"canary\",\"core\":{\"cohorts\":[\"alpha\",\"beta\",\"all\"],\"rollout\":{\"percentage\":25,\"salt\":\"42\"},\"seq\":42},\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"airi\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
+      "signature": "wWJj9r+OhIeReAbhuXexphZtjPx1lNxUOqbwwqm3BOOZBR7JIAV3XDy3m2XUA9NdGnzGOwLJ9zF0aDJ7FhD6CA==",
+      "context": {
+        "cadence": "realtime",
+        "channel": "canary",
+        "product": "airi",
+        "now": "2026-10-24T00:00:00.000Z"
+      },
+      "expect": {
+        "ok": false,
+        "reason": "pointer-mismatch"
+      }
+    },
+    {
+      "kind": "pointer",
+      "name": "pointer: another product with the same key",
+      "document": "{\"cadence\":\"realtime\",\"channel\":\"canary\",\"core\":{\"cohorts\":[\"alpha\",\"beta\",\"all\"],\"rollout\":{\"percentage\":25,\"salt\":\"42\"},\"seq\":42},\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"other\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
+      "signature": "mPvJ07kz/q9JCNZAK4mnppSZKxVH3lgMjqtORqW+PZnIN3F5zqd9/zng7bMKq0xozmnxIsfbIgwujj0UANwDDQ==",
+      "context": {
+        "cadence": "realtime",
+        "channel": "canary",
+        "product": "airi",
+        "now": "2026-10-24T00:00:00.000Z"
+      },
+      "expect": {
+        "ok": false,
+        "reason": "pointer-mismatch"
+      }
+    },
+    {
+      "kind": "pointer",
+      "name": "pointer: expired",
       "document": "{\"cadence\":\"realtime\",\"channel\":\"canary\",\"core\":{\"cohorts\":[\"alpha\",\"beta\",\"all\"],\"rollout\":{\"percentage\":25,\"salt\":\"42\"},\"seq\":42},\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"airi\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
       "signature": "s+KYARikrQEU/LKTUzqd/VsLCLvwWfexGfKlswgnkBhCWm1OgjMxZ4xg76gIykiKui7Fw6kei8Qim7g6RBAmCw==",
       "context": {
+        "cadence": "realtime",
+        "channel": "canary",
+        "product": "airi",
         "now": "2026-11-07T00:00:00.000Z"
       },
       "expect": {
@@ -443,13 +584,16 @@
       }
     },
     {
-      "name": "pointer: older than the last accepted pointer",
       "kind": "pointer",
+      "name": "pointer: older than the last accepted pointer",
       "document": "{\"cadence\":\"realtime\",\"channel\":\"canary\",\"core\":{\"cohorts\":[\"alpha\",\"beta\",\"all\"],\"rollout\":{\"percentage\":25,\"salt\":\"42\"},\"seq\":42},\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"airi\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
       "signature": "s+KYARikrQEU/LKTUzqd/VsLCLvwWfexGfKlswgnkBhCWm1OgjMxZ4xg76gIykiKui7Fw6kei8Qim7g6RBAmCw==",
       "context": {
-        "now": "2026-10-24T00:00:00.000Z",
-        "lastIssuedAt": "2026-10-23T12:00:00.000Z"
+        "cadence": "realtime",
+        "channel": "canary",
+        "product": "airi",
+        "lastIssuedAt": "2026-10-23T12:00:00.000Z",
+        "now": "2026-10-24T00:00:00.000Z"
       },
       "expect": {
         "ok": false,
@@ -457,24 +601,30 @@
       }
     },
     {
-      "name": "pointer: same issuedAt as the last accepted pointer",
       "kind": "pointer",
+      "name": "pointer: same issuedAt as the last accepted pointer",
       "document": "{\"cadence\":\"realtime\",\"channel\":\"canary\",\"core\":{\"cohorts\":[\"alpha\",\"beta\",\"all\"],\"rollout\":{\"percentage\":25,\"salt\":\"42\"},\"seq\":42},\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"airi\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
       "signature": "s+KYARikrQEU/LKTUzqd/VsLCLvwWfexGfKlswgnkBhCWm1OgjMxZ4xg76gIykiKui7Fw6kei8Qim7g6RBAmCw==",
       "context": {
-        "now": "2026-10-24T00:00:00.000Z",
-        "lastIssuedAt": "2026-10-23T00:00:00.000Z"
+        "cadence": "realtime",
+        "channel": "canary",
+        "product": "airi",
+        "lastIssuedAt": "2026-10-23T00:00:00.000Z",
+        "now": "2026-10-24T00:00:00.000Z"
       },
       "expect": {
         "ok": true
       }
     },
     {
-      "name": "pointer: expiresAt before issuedAt",
       "kind": "pointer",
+      "name": "pointer: expiresAt before issuedAt",
       "document": "{\"cadence\":\"realtime\",\"channel\":\"canary\",\"core\":{\"cohorts\":[\"alpha\",\"beta\",\"all\"],\"rollout\":{\"percentage\":25,\"salt\":\"42\"},\"seq\":42},\"expiresAt\":\"2026-10-22T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"airi\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
       "signature": "7O8A6oSON/Emddo801Wi8RodILFp9Tkj6IOhqXgH6hznRSSknyvfTtw/ETXKYEoEGFzZzu75+FS/KWLp8YsqAQ==",
       "context": {
+        "cadence": "realtime",
+        "channel": "canary",
+        "product": "airi",
         "now": "2026-10-21T00:00:00.000Z"
       },
       "expect": {
@@ -483,11 +633,14 @@
       }
     },
     {
-      "name": "pointer: rollout above 100",
       "kind": "pointer",
+      "name": "pointer: rollout above 100",
       "document": "{\"cadence\":\"realtime\",\"channel\":\"canary\",\"core\":{\"rollout\":{\"percentage\":101,\"salt\":\"42\"},\"seq\":42},\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"pointer\",\"product\":\"airi\",\"revoked\":[40,41],\"schema\":1,\"shell\":{\"seq\":7},\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"}}",
       "signature": "3SKSHQTlEi3w8nZ/inIcA468QfsskimYVeqWPhBb7zo8vIBJtQ6Rrf3leganmcbrsPP350wNOwhKewd4Q0BaDg==",
       "context": {
+        "cadence": "realtime",
+        "channel": "canary",
+        "product": "airi",
         "now": "2026-10-24T00:00:00.000Z"
       },
       "expect": {
@@ -496,144 +649,144 @@
       }
     },
     {
+      "expect": true,
+      "kind": "path",
       "name": "path: \"main/index.js\"",
-      "kind": "path",
-      "path": "main/index.js",
-      "expect": true
+      "path": "main/index.js"
     },
     {
+      "expect": true,
+      "kind": "path",
       "name": "path: \"renderer/assets/a b.js\"",
-      "kind": "path",
-      "path": "renderer/assets/a b.js",
-      "expect": true
+      "path": "renderer/assets/a b.js"
     },
     {
+      "expect": false,
+      "kind": "path",
       "name": "path: \"\"",
-      "kind": "path",
-      "path": "",
-      "expect": false
+      "path": ""
     },
     {
+      "expect": false,
+      "kind": "path",
       "name": "path: \"/abs\"",
-      "kind": "path",
-      "path": "/abs",
-      "expect": false
+      "path": "/abs"
     },
     {
+      "expect": false,
+      "kind": "path",
       "name": "path: \"../x\"",
-      "kind": "path",
-      "path": "../x",
-      "expect": false
+      "path": "../x"
     },
     {
+      "expect": false,
+      "kind": "path",
       "name": "path: \"a/../b\"",
-      "kind": "path",
-      "path": "a/../b",
-      "expect": false
+      "path": "a/../b"
     },
     {
+      "expect": false,
+      "kind": "path",
       "name": "path: \"a/./b\"",
-      "kind": "path",
-      "path": "a/./b",
-      "expect": false
+      "path": "a/./b"
     },
     {
+      "expect": false,
+      "kind": "path",
       "name": "path: \"a//b\"",
-      "kind": "path",
-      "path": "a//b",
-      "expect": false
+      "path": "a//b"
     },
     {
+      "expect": false,
+      "kind": "path",
       "name": "path: \"a\\\\b\"",
-      "kind": "path",
-      "path": "a\\b",
-      "expect": false
+      "path": "a\\b"
     },
     {
+      "expect": false,
+      "kind": "path",
       "name": "path: \"C:/x\"",
-      "kind": "path",
-      "path": "C:/x",
-      "expect": false
+      "path": "C:/x"
     },
     {
+      "expect": false,
+      "kind": "path",
       "name": "path: \"c:x\"",
-      "kind": "path",
-      "path": "c:x",
-      "expect": false
+      "path": "c:x"
     },
     {
+      "expect": false,
+      "kind": "path",
       "name": "path: \"a\\u0000b\"",
-      "kind": "path",
-      "path": "a\u0000b",
-      "expect": false
+      "path": "a\u0000b"
     },
     {
+      "bucket": 53,
+      "installId": "install-a",
+      "kind": "rollout",
       "name": "rollout: 42:install-a",
-      "kind": "rollout",
-      "salt": "42",
-      "installId": "install-a",
-      "bucket": 53
+      "salt": "42"
     },
     {
-      "name": "rollout: 42:install-b",
-      "kind": "rollout",
-      "salt": "42",
+      "bucket": 86,
       "installId": "install-b",
-      "bucket": 86
+      "kind": "rollout",
+      "name": "rollout: 42:install-b",
+      "salt": "42"
     },
     {
-      "name": "rollout: 43:install-a",
-      "kind": "rollout",
-      "salt": "43",
+      "bucket": 84,
       "installId": "install-a",
-      "bucket": 84
-    },
-    {
-      "name": "rollout: seq-1:00000000-0000-4000-8000-000000000000",
       "kind": "rollout",
-      "salt": "seq-1",
+      "name": "rollout: 43:install-a",
+      "salt": "43"
+    },
+    {
+      "bucket": 73,
       "installId": "00000000-0000-4000-8000-000000000000",
-      "bucket": 73
+      "kind": "rollout",
+      "name": "rollout: seq-1:00000000-0000-4000-8000-000000000000",
+      "salt": "seq-1"
     },
     {
+      "expect": true,
+      "kind": "host-api",
       "name": "host-api: 3 in 3..3",
-      "kind": "host-api",
-      "shellHostApi": 3,
       "range": {
-        "min": 3,
-        "max": 3
+        "max": 3,
+        "min": 3
       },
-      "expect": true
+      "shellHostApi": 3
     },
     {
+      "expect": true,
+      "kind": "host-api",
       "name": "host-api: 3 in 1..5",
-      "kind": "host-api",
-      "shellHostApi": 3,
       "range": {
-        "min": 1,
-        "max": 5
+        "max": 5,
+        "min": 1
       },
-      "expect": true
+      "shellHostApi": 3
     },
     {
+      "expect": false,
+      "kind": "host-api",
       "name": "host-api: 2 in 3..4",
-      "kind": "host-api",
-      "shellHostApi": 2,
       "range": {
-        "min": 3,
-        "max": 4
+        "max": 4,
+        "min": 3
       },
-      "expect": false
+      "shellHostApi": 2
     },
     {
-      "name": "host-api: 5 in 3..4",
+      "expect": false,
       "kind": "host-api",
-      "shellHostApi": 5,
+      "name": "host-api: 5 in 3..4",
       "range": {
-        "min": 3,
-        "max": 4
+        "max": 4,
+        "min": 3
       },
-      "expect": false
+      "shellHostApi": 5
     }
   ]
 }

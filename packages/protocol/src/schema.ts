@@ -48,53 +48,53 @@ export const fileEntrySchema = object({
 })
 
 export const componentSchema = object({
-  type: componentTypeSchema,
   entry: optional(pipe(string(), minLength(1))),
   files: array(fileEntrySchema),
+  type: componentTypeSchema,
 })
 
 export const hostApiRangeSchema = object({
-  min: hostApiSchema,
   max: hostApiSchema,
+  min: hostApiSchema,
 })
 
 export const coreManifestSchema = object({
-  schema: literal(SCHEMA_VERSION),
-  kind: literal('core'),
-  product: pipe(string(), minLength(1)),
-  seq: seqSchema,
-  version: pipe(string(), minLength(1)),
+  components: pipe(array(componentSchema), minLength(1)),
   createdAt: timestampSchema,
   host: pipe(string(), minLength(1)),
+  hostApi: hostApiRangeSchema,
+  kind: literal('core'),
   /** `any` when no file differs between platforms, otherwise for example `darwin-arm64`. */
   platform: pipe(string(), minLength(1)),
-  hostApi: hostApiRangeSchema,
-  components: pipe(array(componentSchema), minLength(1)),
-  totalSize: sizeSchema,
+  product: pipe(string(), minLength(1)),
+  schema: literal(SCHEMA_VERSION),
+  seq: seqSchema,
   signature: signatureRefSchema,
+  totalSize: sizeSchema,
+  version: pipe(string(), minLength(1)),
 })
 
 export const shellArtifactSchema = object({
   platform: pipe(string(), minLength(1)),
-  url: pipe(string(), minLength(1)),
   sha512: sha512Schema,
   size: sizeSchema,
+  url: pipe(string(), minLength(1)),
 })
 
 export const shellManifestSchema = object({
-  schema: literal(SCHEMA_VERSION),
-  kind: literal('shell'),
-  product: pipe(string(), minLength(1)),
-  seq: seqSchema,
-  version: pipe(string(), minLength(1)),
+  artifacts: pipe(array(shellArtifactSchema), minLength(1)),
+  builtinCoreSeq: seqSchema,
   createdAt: timestampSchema,
   host: pipe(string(), minLength(1)),
   hostApi: hostApiSchema,
-  builtinCoreSeq: seqSchema,
   /** Hash of the shell build inputs. CI compares it between releases. Clients do not read it. */
   inputsHash: optional(sha256Schema),
-  artifacts: pipe(array(shellArtifactSchema), minLength(1)),
+  kind: literal('shell'),
+  product: pipe(string(), minLength(1)),
+  schema: literal(SCHEMA_VERSION),
+  seq: seqSchema,
   signature: signatureRefSchema,
+  version: pipe(string(), minLength(1)),
 })
 
 export const rolloutSchema = object({
@@ -103,23 +103,23 @@ export const rolloutSchema = object({
 })
 
 export const pointerSchema = object({
-  schema: literal(SCHEMA_VERSION),
-  kind: literal('pointer'),
-  product: pipe(string(), minLength(1)),
-  channel: pipe(string(), minLength(1)),
   cadence: cadenceSchema,
-  issuedAt: timestampSchema,
-  expiresAt: timestampSchema,
+  channel: pipe(string(), minLength(1)),
   /** Stable pointers leave this out, so stable gets no core OTA by an explicit rule. */
   core: optional(object({
-    seq: seqSchema,
-    rollout: optional(rolloutSchema),
     cohorts: optional(array(pipe(string(), minLength(1)))),
+    rollout: optional(rolloutSchema),
+    seq: seqSchema,
   })),
+  expiresAt: timestampSchema,
+  issuedAt: timestampSchema,
+  kind: literal('pointer'),
+  product: pipe(string(), minLength(1)),
+  revoked: optional(array(seqSchema)),
+  schema: literal(SCHEMA_VERSION),
   shell: optional(object({
     seq: seqSchema,
   })),
-  revoked: optional(array(seqSchema)),
   signature: signatureRefSchema,
 })
 
@@ -129,15 +129,15 @@ export const trustedKeySchema = object({
   publicKey: pipe(string(), minLength(1)),
 })
 
-export type Distribution = InferOutput<typeof distributionSchema>
 export type Cadence = InferOutput<typeof cadenceSchema>
-export type ComponentType = InferOutput<typeof componentTypeSchema>
-export type FileEntry = InferOutput<typeof fileEntrySchema>
 export type Component = InferOutput<typeof componentSchema>
-export type HostApiRange = InferOutput<typeof hostApiRangeSchema>
+export type ComponentType = InferOutput<typeof componentTypeSchema>
 export type CoreManifest = InferOutput<typeof coreManifestSchema>
+export type Distribution = InferOutput<typeof distributionSchema>
+export type FileEntry = InferOutput<typeof fileEntrySchema>
+export type HostApiRange = InferOutput<typeof hostApiRangeSchema>
+export type Pointer = InferOutput<typeof pointerSchema>
+export type Rollout = InferOutput<typeof rolloutSchema>
 export type ShellArtifact = InferOutput<typeof shellArtifactSchema>
 export type ShellManifest = InferOutput<typeof shellManifestSchema>
-export type Rollout = InferOutput<typeof rolloutSchema>
-export type Pointer = InferOutput<typeof pointerSchema>
 export type TrustedKey = InferOutput<typeof trustedKeySchema>

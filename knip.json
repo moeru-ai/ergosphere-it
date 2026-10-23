@@ -1,0 +1,18 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreBinaries": [
+    "Xvfb"
+  ],
+  "workspaces": {
+    "examples/electron-app": {
+      "entry": [
+        "scripts/*.mjs"
+      ]
+    },
+    "packages/protocol": {
+      "entry": [
+        "scripts/*.ts"
+      ]
+    }
+  }
+}

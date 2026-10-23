@@ -1,0 +1,41 @@
+{
+  "name": "@ergosphere-it/server",
+  "type": "module",
+  "version": "0.0.0",
+  "description": "A static server for ergosphere-it update trees, with a dev console for local tests and demos",
+  "author": {
+    "name": "Moeru AI Project AIRI Team",
+    "email": "airi@moeru.ai",
+    "url": "https://github.com/moeru-ai"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/moeru-ai/ergosphere-it",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moeru-ai/ergosphere-it.git",
+    "directory": "packages/server"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ergosphere-it/protocol": "workspace:*",
+    "@ergosphere-it/publish": "workspace:*",
+    "@moeru/std": "catalog:",
+    "es-toolkit": "catalog:"
+  }
+}

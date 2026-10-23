@@ -12,7 +12,7 @@
   "homepage": "https://github.com/moeru-ai/ergosphere-it",
   "repository": {
     "type": "git",
-    "url": "https://github.com/moeru-ai/ergosphere-it.git",
+    "url": "git+https://github.com/moeru-ai/ergosphere-it.git",
     "directory": "packages/protocol"
   },
   "exports": {
@@ -23,16 +23,22 @@
     "./vectors": {
       "types": "./dist/vectors.d.mts",
       "default": "./dist/vectors.mjs"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=26"
+  },
   "scripts": {
     "build": "tsdown",
-    "vectors": "tsx scripts/generate-vectors.ts"
+    "vectors": "tsx scripts/generate-vectors.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@moeru/std": "catalog:",
     "valibot": "catalog:"
   }
 }
