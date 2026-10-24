@@ -33,6 +33,7 @@ catalog:
   bumpp: ^12.2.1
   canonicalize: ^5.1.0
   cspell: ^10.0.1
+  doctoc: ^2.5.0
   electron: 43.4.1
   electron-updater: ^6.8.9
   electron-vite: ^6.0.0

@@ -105,7 +105,7 @@ Internal: the object store and the state file.
 
 ## `@ergosphere-it/electron`
 
-[The Electron guide](../packages/electron/README.md) shows each entry in use.
+[The repository README](../README.md#installation-and-usage) shows each entry in use.
 
 | Entry | Exports |
 | --- | --- |
@@ -122,6 +122,57 @@ Internal: the object store and the state file.
 Status types: `UpdaterStatus`, `UpdateInfo`, `BundleInfo`, `UpdateRequirement`, `UpdateError`, `UpdateErrorCode`, `RollbackReason`, `DisabledReason`.
 
 The package has no page API. The app passes the updater to its pages with its own channel, for example IPC or Eventa.
+
+### `activeBundle`
+
+The bundle that runs now. A page-only update changes it without a restart, so read it when you need it.
+
+| Member | Meaning |
+| --- | --- |
+| `preload` | The path of the preload script, for `webPreferences.preload` |
+| `pageUrl({ page, hash, query })` | The URL of a page. `page` defaults to `index.html`. Under `electron-vite dev`, it is the URL of the development server. |
+| `resolve(...parts)` | The path of another file in the bundle |
+| `dir` | The directory of the bundle |
+| `releaseId`, `version`, `fromInstaller` | Which bundle runs. `fromInstaller` is true for the bundle that came with the installer. |
+
+### `updater`
+
+| Member | Meaning |
+| --- | --- |
+| `status`, `onStatus(listener)` | The status for an update notice. `onStatus` calls the listener at once and on every change. |
+| `checkForUpdates()` | Checks now, also when a failed download waits for its retry time. Automatic checks run without it. |
+| `applyUpdate()` | Applies the ready update: a reload, a restart, or an install. Rejects when no update is ready. |
+| `dismissRollback()` | Forgets the rollback notice. |
+| `markBundleHealthy()` | Records that the bundle works. A new bundle that does not call it in time is rolled back. |
+| `delayHealthCheck(seconds)` | Adds time to the running health check, up to five minutes in all. |
+| `channel` | The channel that the app follows. Setting it saves it for the next launches. |
+| `cohorts` | The cohorts of this install, for example `['qa']`. Setting it saves it for the next launches. |
+| `onBundleChange(listener)` | Calls the listener after a page-only update or a rollback in place switched the bundle. |
+| `onEvent(listener)` | Launcher events for logs: boots, health reports, reloads, restarts, rollbacks, installs, and statuses. |
+
+### Status
+
+`update` is `{ version, releaseId, requires, fromInstaller }`. `requires` is `reload`, `restart`, or `install`.
+
+`error` is `{ code, message }`. `code` is one of a closed list: `download-failed`, `installer-mismatch`, `network-error`, `storage-error`, `apply-failed`, or a protocol code such as `invalid-signature` or `channel-replayed`. `message` is English text for logs.
+
+### A custom launcher
+
+The generated launcher takes all settings from `ergo.config.ts`. When the app must pass more, for example an installer for tests, write a launcher and pass it to the main plugin: `ergosphereMain({ launcher: 'src/launcher.ts' })`.
+
+```ts
+import config from 'virtual:ergosphere-it/config'
+
+import { startLauncher } from '@ergosphere-it/electron/launcher'
+
+void startLauncher({ ...config, installer: myInstaller, launcherUrl: import.meta.url })
+```
+
+`startLauncher` also takes `dataDir`, `platform`, and `onEvent`. `installer: false` turns off installer updates. Add `"types": ["@ergosphere-it/electron/virtual"]` to the tsconfig of the main process for the virtual module.
+
+### Logs
+
+Set `ERGOSPHERE_IT_LOG` to a file path. The launcher writes each event as one JSON line. `updater.onEvent(listener)` gives the same events in main.
 
 Internal: the launcher class, module resolution hooks, and the global that holds the runtime.
 

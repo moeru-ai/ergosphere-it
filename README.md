@@ -12,6 +12,8 @@ Your app gets two parts:
 
 When a new bundle crashes or never reports that it works, the app goes back to the bundle before it. You can also withdraw a bad bundle on the server, and every app leaves it at the next check.
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 ## Table of Contents
 
 - [Installation and Usage](#installation-and-usage)
@@ -31,9 +33,12 @@ When a new bundle crashes or never reports that it works, the app goes back to t
 - [Concepts](#concepts)
 - [What happens when](#what-happens-when)
 - [Packages](#packages)
+- [Documentation Automation](#documentation-automation)
 - [Development](#development)
 - [Status](#status)
 - [License](#license)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## Installation and Usage
 
@@ -461,7 +466,17 @@ The demo builds the example app, starts it, and opens the console in a browser. 
 | [`@ergosphere-it/client`](packages/client) | The update state machine. A host injects the network and the file system. |
 | [`@ergosphere-it/server`](packages/server) | A tree server in memory with faults and a release console, for tests and demos |
 
-[The API design](docs/api.md) lists every export. The protocol does not depend on Electron, so other hosts can follow with their own package.
+[The API design](docs/api.md) lists every export, with each member of `activeBundle` and `updater`. The protocol does not depend on Electron, so other hosts can follow with their own package.
+
+## Documentation Automation
+
+The table of contents above comes from `doctoc`, so README navigation is not written by hand. Run this after you change a heading or the README:
+
+```bash
+pnpm docs:update
+```
+
+`docs:update` refreshes the table of contents, then copies this README to `packages/electron/README.md`, so npm shows the same guide for the package that apps install. Relative links point to GitHub in the copy. Every other package has a README of its own.
 
 ## Development
 
