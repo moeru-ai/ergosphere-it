@@ -14,8 +14,10 @@ export default defineConfig({
     'cspell.config.yaml',
     '.github/**',
     'CLAUDE.md',
-    // Build output of the example app
+    // Build output of the example app and its test build
     'examples/electron-app/out/**',
+    'tests/electron/out/**',
+    'tests/electron/.work/**',
   ],
 }, {
   rules: {

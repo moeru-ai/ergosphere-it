@@ -1,10 +1,17 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "lib": ["ESNext", "DOM"],
-    "types": ["node"],
-    "allowImportingTsExtensions": true,
-    "erasableSyntaxOnly": true
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "scripts/**/*.ts", "electron.vite.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "electron.vite.config.ts"
+  ]
 }

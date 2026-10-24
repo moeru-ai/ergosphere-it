@@ -3,6 +3,7 @@ ignorePaths:
   - "**/node_modules/**"
   - "**/dist/**"
   - "**/out/**"
+  - "**/.work/**"
   - "**/coverage/**"
   - pnpm-lock.yaml
   - pnpm-workspace.yaml

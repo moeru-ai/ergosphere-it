@@ -1,4 +1,4 @@
-// Shared helpers of e2e.ts and demo.ts: an example release workspace and the example app process.
+// Shared helpers of e2e.ts and demo.ts: a release workspace and the process of the test build of the example app.
 
 import type { ChildProcess } from 'node:child_process'
 
@@ -7,11 +7,11 @@ import type { HostApiRange, Pointer, SigningKey, TrustedKey } from '@ergosphere-
 import type { ComponentSpec, CoreFile, CoreRelease, ShellRelease, TreeFile } from '@ergosphere-it/publish'
 import type { Log } from '@guiiai/logg'
 
-import type { ExampleEvent, LoggedEvent } from '../src/events'
+import type { ExampleEvent, LoggedEvent } from '../../../examples/electron-app/src/events'
 
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { arch, env, kill, platform } from 'node:process'
 
@@ -40,7 +40,7 @@ const components: ComponentSpec[] = [
 ]
 
 export interface BuildOptions {
-  /** Build into `out` of the example app with the trusted key, so Electron starts it as the installed app. */
+  /** Build the installed app with the trusted key, so Electron starts it. */
   builtin?: boolean
   hostApi?: HostApiRange
   version?: string
@@ -60,15 +60,15 @@ export interface LaunchOptions {
 }
 
 /**
- * One build of the example app. `label` changes the page, and `mainTag` changes the main code. `assetMb` adds a page
- * asset. `crash` and `noMount` build a broken core.
+ * One test build of the example app. `label` changes the page, and `mainTag` changes the main code. `assetMb` adds a page
+ * asset. `crash` and `noHealth` build a broken core.
  */
 export interface Variant {
   assetMb?: number
   crash?: boolean
   label: string
   mainTag?: string
-  noMount?: boolean
+  noHealth?: boolean
 }
 
 export interface WorkspaceOptions {
@@ -112,12 +112,13 @@ class DiskTree extends MemoryTree {
 }
 
 /**
- * A release workspace: a signing key, an update tree in memory, the builtin core of the example app, and the app event
+ * A release workspace: a signing key, an update tree in memory, the builtin core of the test build, and the app event
  * log.
  *
- * `work` is a scratch directory. The installed app lives in `work/app`: the package manifest, the builtin build in
- * `out`, and a link to the `node_modules` of the example. So a demo and an e2e run never share files. With `persist`,
- * the tree is also kept in `work`, so the next run continues from it.
+ * `work` is a scratch directory for keys, logs, app data, and builds. The installed app lives in
+ * `tests/electron/.work/<id>`: the package manifest and the builtin build. Module resolution walks up from there to
+ * the `node_modules` of the test package, so the app needs no link. A demo and an e2e run never share files. With
+ * `persist`, the tree is also kept in `work`, so the next run continues from it.
  */
 export class Workspace {
   /** The directory of the installed app, as an installer would lay it out. */
@@ -144,7 +145,13 @@ export class Workspace {
 
   private constructor(work: string, signingKey: SigningKey, trustedKey: TrustedKey, { asar = false, persist = false }: WorkspaceOptions) {
     this.work = work
-    this.appDir = join(work, 'app')
+    // NOTICE:
+    // The installed app lives inside the test package, not in `work`, so dependencies resolve without a link.
+    // A junction from `work` to the `node_modules` of the package broke on Windows: pnpm links packages with relative
+    // symbolic links, and Windows resolved them from the junction path, so `@guiiai/logg` was not found.
+    // Source: the e2e run on Windows 11 with pnpm 11, 2026-10-24.
+    // Removal condition: none while pnpm uses relative links on Windows. Installers have no links.
+    this.appDir = join(appRoot, '.work', createHash('sha256').update(work).digest('hex').slice(0, 12))
     this.asar = asar
     this.signingKey = signingKey
     this.trustedKey = trustedKey
@@ -247,6 +254,11 @@ export class Workspace {
     this.tree.put((await reissuePointer(current, this.signingKey)).files)
   }
 
+  /** Removes the installed app from the test package. The work directory stays with the caller. */
+  removeApp(): void {
+    rmSync(this.appDir, { force: true, maxRetries: 5, recursive: true })
+  }
+
   private canary(): Pointer | undefined {
     const file = this.tree.get('pointers/canary/realtime.json')
 
@@ -254,21 +266,17 @@ export class Workspace {
   }
 
   /**
-   * Lays out the installed app: the package manifest, the builtin build, and the dependencies.
+   * Lays out the installed app: the package manifest and the builtin build.
    *
-   * With `asar`, the manifest and the build go into `app.asar`. The dependencies stay outside, and module resolution
-   * finds them in the parent directory of the archive.
+   * With `asar`, the manifest and the build go into `app.asar`. Module resolution walks up from the archive to the
+   * dependencies of the test package.
    */
   private async install(): Promise<void> {
     copyFileSync(join(appRoot, 'package.json'), join(this.appSource, 'package.json'))
-    if (this.asar)
+    if (this.asar) {
+      mkdirSync(this.appDir, { recursive: true })
       await createPackage(this.appSource, join(this.appDir, 'app.asar'))
-
-    mkdirSync(this.appDir, { recursive: true })
-    const modules = join(this.appDir, 'node_modules')
-    // A junction needs no rights on Windows. Other platforms ignore the type and create a directory link.
-    if (!existsSync(modules))
-      symlinkSync(join(appRoot, 'node_modules'), modules, 'junction')
+    }
   }
 }
 
@@ -292,7 +300,7 @@ export function findEvent<Type extends ExampleEvent['type']>(
   return events.find((event): event is Extract<LoggedEvent, { type: Type }> => event.type === type && match(event as Extract<LoggedEvent, { type: Type }>))
 }
 
-/** Starts the example app against an update server. Returns a function that stops every app process. */
+/** Starts the test build of the example app against an update server. Returns a function that stops every app process. */
 export async function launchApp(workspace: Workspace, options: LaunchOptions): Promise<() => void> {
   const { applyMode = 'auto', baseUrl, capture, checkMs = 1000, debugPort, e2eInstaller = false, healthMs = 4000, show = false } = options
   const { display, xvfb } = await ensureDisplay()
@@ -333,13 +341,13 @@ export async function launchApp(workspace: Workspace, options: LaunchOptions): P
 /** Runs `electron-vite build` with the build constants of a variant. */
 async function buildApp(out: string, variant: Variant, trustedKey: TrustedKey): Promise<void> {
   const variables: Record<string, string> = {
-    EXAMPLE_ASSET_MB: String(variant.assetMb ?? 0),
-    EXAMPLE_CRASH: variant.crash ? '1' : '0',
-    EXAMPLE_LABEL: variant.label,
-    EXAMPLE_MAIN_TAG: variant.mainTag ?? '1',
-    EXAMPLE_NO_MOUNT: variant.noMount ? '1' : '0',
-    EXAMPLE_OUT: out,
-    EXAMPLE_TRUSTED_KEY: JSON.stringify(trustedKey),
+    TEST_ASSET_MB: String(variant.assetMb ?? 0),
+    TEST_CRASH: variant.crash ? '1' : '0',
+    TEST_LABEL: variant.label,
+    TEST_MAIN_TAG: variant.mainTag ?? '1',
+    TEST_NO_HEALTH: variant.noHealth ? '1' : '0',
+    TEST_OUT: out,
+    TEST_TRUSTED_KEYS: JSON.stringify([trustedKey]),
   }
   // electron.vite.config.ts reads the variant from the environment, as `pnpm build` does.
   const previous = Object.fromEntries(Object.keys(variables).map(name => [name, env[name]]))

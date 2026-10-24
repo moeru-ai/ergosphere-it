@@ -5,14 +5,12 @@ import type { TrustedKey } from '@ergosphere-it/protocol'
 import type { ExampleApi } from './preload'
 
 declare global {
-  /** Build constants from `electron.vite.config.ts`. The scripts change them to build different releases. */
-  const __EXAMPLE_CRASH__: boolean
-  const __EXAMPLE_LABEL__: string
-  const __EXAMPLE_MAIN_TAG__: string
-  const __EXAMPLE_NO_MOUNT__: boolean
+  /** The version of the app, from `package.json`. The page shows it. */
+  const __APP_VERSION__: string
   /** The `seq` of this shell release. A pointer that names a newer shell offers a full update. */
-  const __EXAMPLE_SHELL_SEQ__: number
-  const __EXAMPLE_TRUSTED_KEY__: null | TrustedKey
+  const __SHELL_SEQ__: number
+  /** The public keys that sign releases. CI sets them at build time. */
+  const __TRUSTED_KEYS__: TrustedKey[]
 
   interface Window {
     example: ExampleApi

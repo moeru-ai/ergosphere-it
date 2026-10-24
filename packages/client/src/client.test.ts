@@ -451,6 +451,16 @@ describe('updateClient downloads', () => {
     expect(await checkAndStage(client)).toMatchObject({ status: 'staged' })
   })
 
+  it('stages a core with an empty file, without a request for it', async () => {
+    await server.publishCore(11, { ...builtinFiles, web: { ...builtinFiles.web, 'renderer/empty.css': '' } })
+    await server.publishPointer(11)
+    const client = await createClient()
+
+    expect(await checkAndStage(client)).toMatchObject({ status: 'staged' })
+    expect(await readFile(join(root, 'updates', 'cores', '11', 'renderer', 'empty.css'), 'utf8')).toBe('')
+    expect(server.requests.filter(url => url.includes('/e3/e3b0c442'))).toEqual([])
+  })
+
   it('downloads a few files at a time and reports progress up to the total', async () => {
     const many: CoreFiles = { ...builtinFiles, web: Object.fromEntries(Array.from({ length: 12 }, (_, index) => [`renderer/chunk-${index}.js`, `chunk ${index} `.repeat(500)])) }
     await server.publishCore(11, many)

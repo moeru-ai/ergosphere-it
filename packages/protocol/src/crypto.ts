@@ -1,7 +1,6 @@
 import type { TrustedKey } from './schema'
 
-import { canonicalJson } from './canonical'
-import { contentHash } from './digest'
+import canonicalize from 'canonicalize'
 
 const ED25519 = { name: 'Ed25519' } as const
 
@@ -16,6 +15,32 @@ export interface SigningKey {
   keyId: string
   /** PKCS#8, base64. */
   privateKey: string
+}
+
+/**
+ * Serializes a value as canonical JSON with the JSON Canonicalization Scheme (RFC 8785).
+ *
+ * Signed documents use this form, so one document has exactly one byte sequence. Clients in other languages use a JCS
+ * library of their language and get the same bytes.
+ *
+ * Object properties with `undefined` values are left out, as `JSON.stringify` does. Non-finite numbers, bigints, lone
+ * surrogates, and cycles throw, because JCS cannot carry them.
+ */
+export function canonicalJson(value: unknown): string {
+  const text = canonicalize(value)
+  if (text === undefined)
+    throw new TypeError(`canonicalJson: ${typeof value} has no JSON form`)
+
+  return text
+}
+
+/**
+ * Returns the content address of bytes: their SHA-256 as lowercase hex.
+ *
+ * Objects, file entries, and key IDs use it. It uses WebCrypto and the built-in `Uint8Array.prototype.toHex`.
+ */
+export async function contentHash(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)).toHex()
 }
 
 /** Creates an Ed25519 key pair with WebCrypto. Clients trust `trustedKey`, and the release pipeline keeps `signingKey`. */

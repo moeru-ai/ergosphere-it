@@ -38,8 +38,13 @@ export async function downloadFile(options: DownloadFileOptions): Promise<void> 
     await fs.remove(path)
     offset = 0
   }
-  if (offset === size)
+  if (offset === size) {
+    // An empty file needs no request. Create it, so the caller finds a complete file.
+    if (size === 0)
+      await fs.appendFile(path, new Uint8Array())
+
     return
+  }
 
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined

@@ -54,6 +54,13 @@ Merged prerequisites: #3078, #3079, #3080, #3081, #3082, #3083.
 
 One trusted Ed25519 key signs both layers. The shell contains the public key. The client never fetches a key at runtime.
 
+### Keys
+
+- The shell contains a list of trusted public keys. Each signed document names its key with `signature.keyId`.
+- A planned rotation takes two shell releases. The first shell trusts the old key and the new key. After most installs run it, CI signs with the new key. A later shell removes the old key.
+- A leaked key stays trusted by every install that runs a shell with it, until that install takes a newer shell. Cores have no platform code signing, so this is the risk of the layer. Keep the signing key in CI secrets only, and remove a leaked key with a shell release at once.
+- Version 1 has no runtime key list. A root key that signs a key list (TUF style) or a signed revocation list can come later. Most desktop updaters, for example Tauri, CodePush, and LobeHub Desktop, also rotate keys with an app update.
+
 ### Release identity
 
 - Each release has a `seq`, an integer that never decreases. The publish API assigns it. One counter serves all channels, so a release keeps its `seq` when it is promoted from canary to stable.
@@ -64,7 +71,7 @@ One trusted Ed25519 key signs both layers. The shell contains the public key. Th
 
 ### Signatures
 
-- A signed document is canonical JSON: UTF-8, keys sorted by code point at every level, no insignificant whitespace, and no `undefined` or non-finite numbers.
+- A signed document is canonical JSON in the JSON Canonicalization Scheme (JCS, RFC 8785), encoded as UTF-8. JCS sorts keys by UTF-16 code units, removes insignificant whitespace, and fixes the form of numbers and strings. Clients in other languages use a JCS library, for example for C# or Rust, and get the same bytes. The TypeScript packages use `canonicalize`.
 - The signature is Ed25519 over the exact bytes of the document file. It is stored as base64 in a detached `<file>.sig` file.
 - `keyId` is the first 16 hex characters of the SHA-256 of the public key in SPKI DER form.
 - A client parses the JSON only to read `signature.keyId`, and finds that key in its trusted list. It verifies the signature over the raw bytes before it uses any other field.
@@ -86,7 +93,6 @@ The server is static files on R2 or S3. Any static server works, including the t
 
 ```text
 <base>/
-  keys.json                                    # signed key list, for key rotation
   objects/sha256/<aa>/<sha256>                 # immutable, cache forever
   cores/<seq>/manifest.json                    # immutable, cache forever
   cores/<seq>/manifest.json.sig
@@ -103,7 +109,7 @@ The server is static files on R2 or S3. Any static server works, including the t
 
 ### Core manifest
 
-The manifest is canonical JSON (sorted keys, no extra spaces). The signature covers the exact bytes of the file.
+The manifest is canonical JSON (JCS, RFC 8785). The signature covers the exact bytes of the file.
 
 ```json
 {
@@ -353,4 +359,4 @@ Kirie runs AIRI pages in CEF inside Godot. AIRI host services in Kirie are C#. T
 ## Open questions
 
 1. Do core resources such as models and fonts need their own component type, with a reload instead of a restart?
-2. Production key creation, storage, and rotation process (`keys.json`).
+2. Where the production signing key lives, and who can read it.

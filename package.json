@@ -26,7 +26,7 @@
     "lint": "eslint --cache .",
     "lint:fix": "eslint --cache . --fix",
     "spellcheck": "cspell .",
-    "typecheck": "pnpm -rF=\"./packages/*\" -F=\"./examples/*\" --parallel typecheck",
+    "typecheck": "pnpm -rF=\"./packages/*\" -F=\"./examples/*\" -F=\"./tests/*\" --parallel typecheck",
     "publint": "pnpm -rF=\"./packages/*\" exec publint",
     "knip": "knip",
     "publish:lib": "pnpm -r publish --access public --no-git-checks",

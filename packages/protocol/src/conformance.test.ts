@@ -5,9 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 import { conformanceSuite } from './conformance'
 import { CandidateError, DocumentError, PointerError, SignatureError } from './errors'
-import { isSafeManifestPath } from './path'
-import { rolloutBucket } from './rollout'
-import { checkCoreCandidate, checkShellCandidate, isHostApiCompatible, verifyCoreManifest, verifyPointer, verifyShellManifest } from './verify'
+import { checkCoreCandidate, checkShellCandidate, isHostApiCompatible, isSafeManifestPath, rolloutBucket, verifyCoreManifest, verifyPointer, verifyShellManifest } from './verify'
 
 const encode = (text: string) => new TextEncoder().encode(text)
 const { cases, trustedKeys } = conformanceSuite

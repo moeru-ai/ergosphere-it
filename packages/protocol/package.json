@@ -38,6 +38,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "canonicalize": "catalog:",
     "valibot": "catalog:"
   }
 }

@@ -2,10 +2,9 @@ import type { UpdateResult, UpdateStatus } from '@ergosphere-it/driver-electron/
 
 import { contextBridge, ipcRenderer } from 'electron'
 
-/** What the page reports after it mounted. The e2e test reads it from the event log. */
+/** What the page reports after it mounted. */
 export interface MountedPage {
-  label: string
-  mainTag: string
+  version: string
 }
 
 const api = {

@@ -1,13 +1,12 @@
 import type { GenericSchema, InferOutput } from 'valibot'
 
-import type { CoreManifest, HostApiRange, Pointer, ShellArtifact, ShellManifest, TrustedKey } from './schema'
+import type { CoreManifest, HostApiRange, Pointer, Rollout, ShellArtifact, ShellManifest, TrustedKey } from './schema'
 
 import { safeParse, ValiError } from 'valibot'
 
+import { decodeBase64, verifyBytes } from './crypto'
 import { CandidateError, DocumentError, PointerError, SignatureError } from './errors'
-import { isSafeManifestPath } from './path'
 import { coreManifestSchema, pointerSchema, shellManifestSchema } from './schema'
-import { decodeBase64, verifyBytes } from './signature'
 
 /** What an install is, to decide if it can take a verified core. */
 export interface CoreCandidateContext {
@@ -197,4 +196,42 @@ async function verifySignedDocument<TSchema extends GenericSchema>(
     throw new DocumentError('invalid-schema', parsed.issues.map(issue => issue.message).join('; '), undefined, { cause: new ValiError(parsed.issues) })
 
   return parsed.output
+}
+
+const drivePattern = /^[a-z]:/i
+
+/** An install is in a rollout when its bucket is less than the percentage. No rollout means everyone. */
+export async function isInRollout(rollout: Rollout | undefined, installId: string): Promise<boolean> {
+  if (!rollout)
+    return true
+
+  return await rolloutBucket(rollout.salt, installId) < rollout.percentage
+}
+
+/**
+ * Checks that a manifest file path stays inside its core directory on every platform.
+ *
+ * A safe path is relative, uses `/` as its only separator, and has no empty, `.`, or `..` segment.
+ * It has no backslash, no drive letter, and no NUL character.
+ */
+export function isSafeManifestPath(path: string): boolean {
+  if (path.length === 0 || path.includes('\\') || path.includes('\0'))
+    return false
+
+  if (path.startsWith('/') || drivePattern.test(path))
+    return false
+
+  return path.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..')
+}
+
+/**
+ * Returns the rollout bucket of an install, from 0 to 99.
+ *
+ * The bucket is the first 4 bytes of `sha256(salt + ":" + installId)` as a big-endian integer, mod 100.
+ */
+export async function rolloutBucket(salt: string, installId: string): Promise<number> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${salt}:${installId}`))
+  const value = new DataView(digest, 0, 4).getUint32(0, false)
+
+  return value % 100
 }

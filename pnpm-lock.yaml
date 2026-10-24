@@ -36,6 +36,9 @@ catalogs:
     bumpp:
       specifier: ^12.2.1
       version: 12.3.0
+    canonicalize:
+      specifier: ^5.1.0
+      version: 5.1.0
     cspell:
       specifier: ^10.0.1
       version: 10.4.0
@@ -158,9 +161,6 @@ importers:
       '@guiiai/logg':
         specifier: 'catalog:'
         version: 1.2.12
-      '@moeru/std':
-        specifier: 'catalog:'
-        version: 0.1.0-beta.20
       electron-updater:
         specifier: 'catalog:'
         version: 6.8.9
@@ -168,18 +168,9 @@ importers:
         specifier: 'catalog:'
         version: 3.5.44(typescript@6.0.3)
     devDependencies:
-      '@electron/asar':
-        specifier: 'catalog:'
-        version: 4.3.1
       '@ergosphere-it/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@ergosphere-it/publish':
-        specifier: workspace:*
-        version: link:../../packages/publish
-      '@ergosphere-it/server':
-        specifier: workspace:*
-        version: link:../../packages/server
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
@@ -192,12 +183,6 @@ importers:
       electron-vite:
         specifier: 'catalog:'
         version: 6.0.0(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
-      es-toolkit:
-        specifier: 'catalog:'
-        version: 1.52.0
-      hono:
-        specifier: 'catalog:'
-        version: 4.13.13
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -247,6 +232,9 @@ importers:
 
   packages/protocol:
     dependencies:
+      canonicalize:
+        specifier: 'catalog:'
+        version: 5.1.0
       valibot:
         specifier: 'catalog:'
         version: 1.5.0(typescript@6.0.3)
@@ -283,6 +271,61 @@ importers:
       valibot:
         specifier: 'catalog:'
         version: 1.5.0(typescript@6.0.3)
+
+  tests/electron:
+    dependencies:
+      '@ergosphere-it/driver-electron':
+        specifier: workspace:*
+        version: link:../../packages/driver-electron
+      '@guiiai/logg':
+        specifier: 'catalog:'
+        version: 1.2.12
+      electron-updater:
+        specifier: 'catalog:'
+        version: 6.8.9
+      vue:
+        specifier: 'catalog:'
+        version: 3.5.44(typescript@6.0.3)
+    devDependencies:
+      '@electron/asar':
+        specifier: 'catalog:'
+        version: 4.3.1
+      '@ergosphere-it/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@ergosphere-it/publish':
+        specifier: workspace:*
+        version: link:../../packages/publish
+      '@ergosphere-it/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+      '@moeru/std':
+        specifier: 'catalog:'
+        version: 0.1.0-beta.20
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      '@vitejs/plugin-vue':
+        specifier: 'catalog:'
+        version: 6.0.10(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.44(typescript@6.0.3))
+      electron:
+        specifier: 'catalog:'
+        version: 43.4.1
+      electron-vite:
+        specifier: 'catalog:'
+        version: 6.0.0(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+      es-toolkit:
+        specifier: 'catalog:'
+        version: 1.52.0
+      hono:
+        specifier: 'catalog:'
+        version: 4.13.13
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
 
 packages:
 
@@ -1824,6 +1867,11 @@ packages:
 
   caniuse-lite@1.0.30001817:
     resolution: {integrity: sha512-uZ1JG80BwhtMalIAGPxPfmNhHyd/B/nTdr3hITWlRamSyAdUStP1Gop01e7SD5q6J90ixJvWDbvmiFVfDgn4bw==}
+
+  canonicalize@5.1.0:
+    resolution: {integrity: sha512-bab9+WefZljqQ8jT0qRwVmTyzAUU63K97QIQD3agynIBrb6sa5M2eAy8Hv8K3p4V9+ONVYZKtGYl4Dg+/5Gumw==}
+    engines: {node: '>=22'}
+    hasBin: true
 
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
@@ -4830,6 +4878,8 @@ snapshots:
       qified: 0.10.1
 
   caniuse-lite@1.0.30001817: {}
+
+  canonicalize@5.1.0: {}
 
   ccount@2.0.1: {}
 

@@ -28,7 +28,7 @@ Formats, keys, signatures, and verification. No I/O.
 | `checkShellCandidate(manifest, context)` | Returns the installer of a verified shell for this platform, or throws a `CandidateError`. |
 | `isInRollout(rollout, installId)`, `isHostApiCompatible(shellHostApi, range)`, `isSafeManifestPath(path)` | Policy helpers. |
 | `contentHash(bytes)` | The content address: SHA-256 as lowercase hex. |
-| `canonicalJson(value)` | The canonical JSON that signatures cover. |
+| `canonicalJson(value)` | The canonical JSON that signatures cover: JCS (RFC 8785) through `canonicalize`. |
 | `ErgosphereError`, `SignatureError`, `DocumentError`, `PointerError`, `CandidateError`, `ErrorCode` | Errors. |
 | Types: `CoreManifest`, `ShellManifest`, `ShellArtifact`, `Pointer`, `Component`, `ComponentType`, `FileEntry`, `HostApiRange`, `Rollout`, `Cadence`, `Distribution`, `SigningKey`, `TrustedKey` | Data. |
 | `@ergosphere-it/protocol/conformance` | Conformance cases. A case expects `ok` or an error `code`. |

@@ -1,0 +1,34 @@
+{
+  "name": "@ergosphere-it/tests-electron",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end tests and the release demo for the Electron driver, built from the example app",
+  "main": "out/shell/index.mjs",
+  "scripts": {
+    "demo": "node scripts/demo.ts",
+    "e2e": "node scripts/e2e.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ergosphere-it/driver-electron": "workspace:*",
+    "@guiiai/logg": "catalog:",
+    "electron-updater": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@electron/asar": "catalog:",
+    "@ergosphere-it/protocol": "workspace:*",
+    "@ergosphere-it/publish": "workspace:*",
+    "@ergosphere-it/server": "workspace:*",
+    "@moeru/std": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "electron": "catalog:",
+    "electron-vite": "catalog:",
+    "es-toolkit": "catalog:",
+    "hono": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

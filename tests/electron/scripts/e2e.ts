@@ -1,4 +1,4 @@
-// End-to-end test of the example app.
+// End-to-end test of the example app, in a test build with variants that break on purpose.
 //
 // It publishes cores to an update tree in memory and drives one real Electron install through these scenarios:
 //   1. a page-only core reloads in place, and the process stays the same
@@ -19,7 +19,7 @@
 
 import type { RequestRecord, TreeServer } from '@ergosphere-it/server'
 
-import type { LoggedEvent } from '../src/events'
+import type { LoggedEvent } from '../../../examples/electron-app/src/events'
 
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -105,7 +105,7 @@ try {
   log.withFields({ asar: options.asar, platform, server: server.url, work }).log('started')
 
   stopApp = await launchApp(workspace, { baseUrl: server.url, capture: options.capture, e2eInstaller: true, show: options.show })
-  const first = await waitFor('builtin page v1', list => findEvent(list, 'page-mounted', e => e.label === 'v1'))
+  const first = await waitFor('builtin page v1', list => findEvent(list, 'page-mounted', e => e.version === 'v1'))
   await step('0. boots the builtin core', true, `pid ${first.pid}`)
 
   // 1. page-only change
@@ -113,7 +113,7 @@ try {
   const objectRequests = requests.length
   const pageOnly = await workspace.publish(2, { label: 'v2', mainTag: '1' })
   await workspace.point(2)
-  const reloaded = await waitFor('page v2', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v2'))
+  const reloaded = await waitFor('page v2', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v2'))
   // The app downloads only the files that changed, and they are all page files.
   const known = new Set(builtin.objects.map(object => object.key))
   const changed = pageOnly.manifest.components.flatMap(component => component.files.filter(file => !known.has(`objects/sha256/${file.sha256.slice(0, 2)}/${file.sha256}`)))
@@ -125,7 +125,7 @@ try {
   mark = lastIndex()
   await workspace.publish(3, { label: 'v3', mainTag: '2' })
   await workspace.point(3)
-  const restarted = await waitFor('page v3', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v3'))
+  const restarted = await waitFor('page v3', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v3'))
   const restartEvent = findEvent(since(mark)(readEvents()), 'restart', e => e.seq === 3)
   await step('2. main-code core restarts the app', Boolean(restartEvent) && restarted.pid !== reloaded.pid, `pid ${reloaded.pid} -> ${restarted.pid}`)
 
@@ -135,15 +135,15 @@ try {
   await workspace.point(4)
   const fallback = await waitFor('fallback to core 3', list => findEvent(since(mark)(list), 'boot', e => e.seq === 3 && e.rejected.some(r => r.seq === 4)), 90_000)
   const failures = since(mark)(readEvents()).filter(e => e.type === 'boot-failed' && e.seq === 4).length
-  await waitFor('page v3 after fallback', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v3'))
+  await waitFor('page v3 after fallback', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v3'))
   await step('3. crashing core falls back and is blocked', failures === 3, `${failures} failed boots, then core ${fallback.seq}`)
 
   // 4. page never reports healthy
   mark = lastIndex()
-  await workspace.publish(5, { label: 'v5-broken', mainTag: '2', noMount: true })
+  await workspace.publish(5, { label: 'v5-broken', mainTag: '2', noHealth: true })
   await workspace.point(5)
   const rollback = await waitFor('rollback of core 5', list => findEvent(since(mark)(list), 'rollback', e => e.from === 5))
-  const back = await waitFor('page v3 after rollback', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v3'))
+  const back = await waitFor('page v3 after rollback', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v3'))
   const sameProcess = since(mark)(readEvents()).every(e => e.type !== 'shell-start')
   await step('4. unhealthy page rolls back in place', rollback.to === 3 && sameProcess, `rolled back to ${rollback.to} in pid ${back.pid}`)
 
@@ -151,11 +151,11 @@ try {
   mark = lastIndex()
   await workspace.publish(6, { label: 'v6', mainTag: '2' })
   await workspace.point(6)
-  await waitFor('page v6', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v6'))
+  await waitFor('page v6', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v6'))
   mark = lastIndex()
   await workspace.point(6, [6])
   const revokedBoot = await waitFor('boot after revoke', list => findEvent(since(mark)(list), 'boot'))
-  await waitFor('page v3 after revoke', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v3'))
+  await waitFor('page v3 after revoke', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v3'))
   await step('5. revoked core is left', revokedBoot.seq === 3, `booted core ${revokedBoot.seq}`)
 
   // 6. core for a newer host API
@@ -173,7 +173,7 @@ try {
   const lost = createSeq(7)
   await workspace.publish(lost, { label: 'v8-lost', mainTag: '2' })
   await workspace.point(lost)
-  await waitFor('page v8-lost', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v8-lost'))
+  await waitFor('page v8-lost', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v8-lost'))
 
   mark = lastIndex()
   workspace.tree.restore(backup)
@@ -189,7 +189,7 @@ try {
   const fix = createSeq()
   await workspace.publish(fix, { label: 'v9-fix', mainTag: '2' })
   await workspace.point(fix)
-  const fixed = await waitFor('page v9-fix', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v9-fix'))
+  const fixed = await waitFor('page v9-fix', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v9-fix'))
   await step(
     '7. server back to a backup: the app stays, then takes the next release',
     Boolean(replayed) && behind.current === lost && !wentBack && fix > lost && fixed.seq === fix,
@@ -202,15 +202,15 @@ try {
     const seq = createSeq()
     await workspace.publish(seq, { label, mainTag: '2' })
     await workspace.point(seq)
-    await waitFor(`page ${label}`, list => findEvent(since(mark)(list), 'page-mounted', e => e.label === label))
+    await waitFor(`page ${label}`, list => findEvent(since(mark)(list), 'page-mounted', e => e.version === label))
   }
   mark = lastIndex()
   const broken = createSeq()
-  await workspace.publish(broken, { label: 'v12-broken', mainTag: '2', noMount: true })
+  await workspace.publish(broken, { label: 'v12-broken', mainTag: '2', noHealth: true })
   await workspace.point(broken)
   await waitFor('rollback of v12', list => findEvent(since(mark)(list), 'rollback', e => e.from === broken))
   // The page reports through its preload script, so a mounted page proves that the preload of the booted core is there.
-  const remounted = await waitFor('page v11 after rollback', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v11'))
+  const remounted = await waitFor('page v11 after rollback', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v11'))
   const restartedAgain = since(mark)(readEvents()).some(e => e.type === 'shell-start')
   await step('8. after page reloads, an unhealthy page rolls back to a working page', !restartedAgain, `page v11 mounted again in pid ${remounted.pid}`)
 
@@ -223,7 +223,7 @@ try {
   interrupt.add(assetPath)
   const before = requests.length
   await workspace.point(resumed)
-  await waitFor('page v13', list => findEvent(since(mark)(list), 'page-mounted', e => e.label === 'v13'))
+  await waitFor('page v13', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v13'))
   const assetRequests = requests.slice(before).filter(request => request.path === assetPath)
   await step(
     '9. a broken download resumes with a range',
@@ -251,10 +251,13 @@ catch (error) {
 finally {
   stopApp?.()
   await server?.close()
-  if (options.keep)
-    log.log(`kept ${work}`)
-  else
+  if (options.keep) {
+    log.log(`kept ${work} and ${workspace?.appDir}`)
+  }
+  else {
     rmSync(work, { force: true, maxRetries: 5, recursive: true })
+    workspace?.removeApp()
+  }
 }
 
 const failed = results.filter(result => !result.ok)

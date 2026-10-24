@@ -8,7 +8,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { canonicalJson } from '../src'
-import { keyIdOf, signDocument } from '../src/signature'
+import { keyIdOf, signDocument } from '../src/crypto'
 
 interface TestKey { keyId: string, privateKey: string, publicKey: string }
 

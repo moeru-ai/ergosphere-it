@@ -1,4 +1,4 @@
-// Interactive demo: the example app on one side, the release console in a browser on the other.
+// Interactive demo: the test build of the example app on one side, the release console in a browser on the other.
 //
 // Usage: node scripts/demo.ts [--dir <dir>] [--reset-server] [--port 4100] [--no-open] [--debug-port <port>]
 //
@@ -63,7 +63,7 @@ const changes: Record<string, { hostApi?: HostApiRange, label: string, variant: 
   'main': { label: 'App code', variant: () => ({ mainTag: String(++mainTag) }) },
   'newer-shell': { hostApi: { max: 2, min: 2 }, label: 'Needs a newer shell', variant: () => ({ mainTag: `${mainTag}-api2` }) },
   'page': { label: 'Page only', variant: () => ({ mainTag: String(mainTag) }) },
-  'unhealthy': { label: 'Page never healthy', variant: () => ({ mainTag: String(mainTag), noMount: true }) },
+  'unhealthy': { label: 'Page never healthy', variant: () => ({ mainTag: String(mainTag), noHealth: true }) },
 }
 
 const server = await createDevServer({
@@ -142,6 +142,7 @@ async function shutdown(): Promise<void> {
   clearInterval(forward)
   stopApp()
   await server.close()
+  workspace.removeApp()
   if (!keep)
     rmSync(work, { force: true, maxRetries: 5, recursive: true })
   exit(0)

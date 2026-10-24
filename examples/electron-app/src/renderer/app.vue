@@ -7,20 +7,17 @@ import UpdateToast from './components/update-toast.vue'
 import { useUpdate } from './composables/use-update'
 
 const query = new URLSearchParams(location.search)
-const label = __EXAMPLE_LABEL__
-const info = `core ${query.get('seq')} (${query.get('kind')}) · main tag ${query.get('mainTag')} · pid ${query.get('pid')}`
-// Each label gets its own color, so a page update is easy to see.
-const hue = [...label].reduce((sum, char) => sum + char.charCodeAt(0) * 37, 0) % 360
+const version = __APP_VERSION__
+const info = `core ${query.get('seq')} (${query.get('kind')}) · pid ${query.get('pid')}`
+// Each version gets its own color, so a page update is easy to see.
+const hue = [...version].reduce((sum, char) => sum + char.charCodeAt(0) * 37, 0) % 360
 
 const { apply, closeDialog, dialogOpen, dismissToast, status, toastOpen } = useUpdate()
 
-document.title = `ergosphere-it example ${label}`
+document.title = `ergosphere-it example ${version}`
 
-onMounted(() => {
-  // The e2e test builds a page that never reports healthy, to check that the shell rolls it back.
-  if (!__EXAMPLE_NO_MOUNT__)
-    window.example.mounted({ label, mainTag: query.get('mainTag') ?? '' })
-})
+// Report health after the page mounted. A core whose page never mounts is rolled back.
+onMounted(() => window.example.mounted({ version }))
 </script>
 
 <template>
@@ -29,7 +26,7 @@ onMounted(() => {
       <div class="caption">
         page
       </div>
-      <h1>{{ label }}</h1>
+      <h1>{{ version }}</h1>
       <p class="info">
         {{ info }}
       </p>

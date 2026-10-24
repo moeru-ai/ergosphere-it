@@ -29,7 +29,7 @@ Each host gets one `driver-*` package. Version 1 has only the Electron driver.
 
 There is no publish CLI. Publish from CI: build the release with `@ergosphere-it/publish`, then upload the stages of `uploadStages` in order. [The API design](docs/api.md) lists every export.
 
-[The example Electron app](examples/electron-app) runs a demo with a release console, and an end-to-end test.
+[The example Electron app](examples/electron-app) shows what an app adds to use ergosphere-it. [`tests/electron`](tests/electron) runs it in the end-to-end test and in a demo with a release console.
 
 Each host gets one `driver-*` package. Version 1 has only the Electron driver.
 

@@ -1,0 +1,4 @@
+# electron-vite output
+out/
+# Apps that the demo and the e2e test install, one directory for each run
+.work/

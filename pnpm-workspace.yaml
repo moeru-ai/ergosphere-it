@@ -12,6 +12,7 @@ trustPolicyExclude:
 packages:
   - packages/**
   - examples/**
+  - tests/**
   - '!**/dist/**'
 
 allowBuilds:
@@ -30,6 +31,7 @@ catalog:
   '@vitejs/plugin-vue': ^6.0.10
   '@vitest/coverage-v8': ^5.0.0
   bumpp: ^12.2.1
+  canonicalize: ^5.1.0
   cspell: ^10.0.1
   electron: 43.4.1
   electron-updater: ^6.8.9

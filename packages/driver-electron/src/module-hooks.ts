@@ -14,7 +14,7 @@ export function registerCoreModuleHooks(shellEntryUrl: string, coresDir: string)
   // Node.js reports the real path of a module as its parent URL, but the data directory can be a symlink.
   // For example, macOS gives /var/folders/..., and the real path is /private/var/folders/...
   // Both prefixes must match, or bare imports of external cores fail with ERR_MODULE_NOT_FOUND.
-  // Found by examples/electron-app/scripts/e2e.ts on macOS. Keep this while data directories can be symlinks.
+  // Found by tests/electron/scripts/e2e.ts on macOS. Keep this while data directories can be symlinks.
   mkdirSync(coresDir, { recursive: true })
   // Windows paths are case-insensitive, and URLs of the same file can differ in drive letter case.
   const fold = (url: string) => (platform === 'win32' ? url.toLowerCase() : url)
