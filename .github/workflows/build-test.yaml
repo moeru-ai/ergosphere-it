@@ -14,3 +14,5 @@ jobs:
   build-test:
     name: Build and Test
     uses: ./.github/workflows/reusable-build-test-publish.yaml
+    permissions:
+      contents: read

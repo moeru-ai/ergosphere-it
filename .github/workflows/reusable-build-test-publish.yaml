@@ -8,8 +8,8 @@ on:
         required: false
         default: false
 
-permissions:
-  contents: read
+# The callers set the permissions. A called workflow can only lower them, so the publish job gets `id-token: write`
+# only from build-test-publish.yaml.
 
 jobs:
   check:
@@ -134,9 +134,6 @@ jobs:
     name: Publish
     needs: [check, build-test, e2e]
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
