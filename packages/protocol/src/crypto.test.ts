@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { canonicalJson } from './crypto'
+import { canonicalJson, createKeyPair, keyPairFromPrivateKey, signDocument, verifyBytes } from './crypto'
 
 describe('canonicalJson', () => {
   it('sorts keys at every level and drops whitespace', () => {
@@ -26,5 +26,24 @@ describe('canonicalJson', () => {
     // RFC 8785 section 3.2.3 sorts by UTF-16 code units, so U+1F600 (a surrogate pair) comes before U+E000.
     expect(canonicalJson({ '\u{1F600}': 2, '\uE000': 1 })).toBe('{"\u{1F600}":2,"\uE000":1}')
     expect(canonicalJson([1e21, 0.1, -0, 1e-7])).toBe('[1e+21,0.1,0,1e-7]')
+  })
+})
+
+describe('keyPairFromPrivateKey', () => {
+  it('rebuilds the same key pair from the private key alone', async () => {
+    const pair = await createKeyPair()
+
+    expect(await keyPairFromPrivateKey(pair.signingKey.privateKey)).toEqual(pair)
+  })
+
+  it('signs documents that the rebuilt trusted key verifies', async () => {
+    const { signingKey, trustedKey } = await keyPairFromPrivateKey((await createKeyPair()).signingKey.privateKey)
+    const { bytes, signature } = await signDocument({ kind: 'test' }, signingKey)
+
+    expect(await verifyBytes(bytes, Uint8Array.fromBase64(signature) as Uint8Array<ArrayBuffer>, trustedKey)).toBe(true)
+  })
+
+  it('rejects a private key that is not base64', async () => {
+    await expect(keyPairFromPrivateKey('not base64!')).rejects.toThrow('not base64')
   })
 })

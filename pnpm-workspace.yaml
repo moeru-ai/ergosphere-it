@@ -42,6 +42,7 @@ catalog:
   knip: ^6.31.0
   nano-staged: ^1.0.2
   publint: ^0.3.22
+  s3mini: ^1.0.3
   simple-git-hooks: ^2.13.1
   taze: ^19.17.1
   tsdown: ^0.22.14

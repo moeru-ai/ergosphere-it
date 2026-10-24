@@ -44,7 +44,7 @@ Do not use it when:
 | `updates.feedUrl` | The URL where the app reads updates: static files, for example a bucket behind a CDN. |
 | `updates.channel` | The channel that this build follows, for example `stable` or `beta`. The app can change it at run time. |
 | `updates.nativeVersion` | An integer for what only an installer can change. Increase it when you upgrade Electron, change a native module, or upgrade this package. Main and preload changes do not need it. |
-| `updates.publicKeys` | The keys that sign your updates, as `ed25519:<base64 SPKI>`. `createKeyPair()` of `@ergosphere-it/protocol` makes a pair. The private key stays in CI. |
+| `updates.publicKeys` | The keys that sign your updates. `ergosphere-it keygen` prints one. The private key stays in CI. |
 
 Optional fields:
 
@@ -201,19 +201,46 @@ Without Vue, use `@ergosphere-it/electron/renderer`: `markBundleHealthy()`, `wat
 
 ## Publish
 
-`@ergosphere-it/electron/release` builds the signed files of a release from the build output. Upload them with `uploadStages` from `@ergosphere-it/publish`, stage by stage, to the bucket behind `feedUrl`.
+The `ergosphere-it` command publishes from CI. It reads the build output, signs with `UPDATES_SIGNING_KEY`, and writes to the bucket behind `feedUrl`.
 
-```ts
-import { bundleReleaseFromBuild } from '@ergosphere-it/electron/release'
-import { buildChannelFile, uploadStages } from '@ergosphere-it/publish'
+Make a key pair once:
 
-const bundle = await bundleReleaseFromBuild({ signingKey })
-const channel = await buildChannelFile({ bundle: { releaseId: bundle.releaseId, rollout: 20 }, channel: 'beta', product: bundle.manifest.product, signingKey })
-for (const stage of uploadStages([bundle], [channel]))
-  await Promise.all(stage.map(file => bucket.put(file.key, file.bytes, file.headers)))
+```sh
+pnpm exec ergosphere-it keygen
 ```
 
-`installerReleaseFromBuild({ artifacts, signingKey })` builds the installer release that names the files of electron-builder. Name it in the channel file with `installer: { releaseId }`.
+Put the public key into `updates.publicKeys`, and the private key into the CI secret `UPDATES_SIGNING_KEY`.
+
+```yaml
+# An OTA update, for example on manual dispatch
+- run: pnpm build
+- run: pnpm exec ergosphere-it publish bundle --channel beta --rollout 20 --bucket s3://my-app-updates
+  env:
+    UPDATES_SIGNING_KEY: ${{ secrets.UPDATES_SIGNING_KEY }}
+    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+# A full release, on a version tag. electron-builder uploads the installers.
+- run: pnpm build
+- run: pnpm exec electron-builder --publish always
+- run: pnpm exec ergosphere-it register installer --channel stable --files-url https://github.com/<owner>/<repo>/releases/download/${{ github.ref_name }} --bucket s3://my-app-updates
+
+# A daily channel, on a schedule
+- run: pnpm exec ergosphere-it promote --from beta --to beta-daily --bucket s3://my-app-updates
+```
+
+| Command | What it does |
+| --- | --- |
+| `keygen` | Prints a new key pair. |
+| `publish bundle --channel <name> [--rollout <percent>] [--cohorts <a,b>] [--min-native-version <n>]` | Uploads the bundle of `out/` and serves it on a channel. Objects that the bucket has are skipped. |
+| `register installer --channel <name> --files-url <url> [--dist <dir>]` | Reads the `latest*.yml` files of electron-builder, uploads a signed installer release that points to the installer files, and names it on a channel. |
+| `promote --from <channel> --to <channel>` | Serves the bundle and the installer of one channel on another. |
+| `rollout --channel <name> <percent>` | Changes the rollout percentage. Installs keep their buckets. |
+| `withdraw <releaseId> [--channel <name>]` | Withdraws a bundle on one channel, or on every channel. Apps that run it go back to the bundle before it. |
+
+`--bucket` takes `s3://<bucket>/<prefix>`, `file://<dir>`, or a directory. It defaults to `UPDATES_BUCKET`. For R2 or another S3 service, set `UPDATES_S3_ENDPOINT`, for example to `https://<account id>.r2.cloudflarestorage.com`. Serve the bucket at `feedUrl`, for example behind a CDN. Uploads set `Cache-Control`, so the CDN caches objects forever and channel files never.
+
+For other upload tools, `@ergosphere-it/electron/release` builds the signed files in memory: `bundleReleaseFromBuild()` and `installerReleaseFromBuild()`. Upload them with `uploadStages` from `@ergosphere-it/publish`, stage by stage.
 
 ## A custom launcher
 
@@ -242,6 +269,7 @@ Set `ERGOSPHERE_IT_LOG` to a file path. The launcher writes each event as one JS
 | `@ergosphere-it/electron/preload` | preload | `exposeUpdater()` |
 | `@ergosphere-it/electron/renderer` | page | `markBundleHealthy()`, `watchUpdaterStatus(listener)`, `getPageUpdater()` |
 | `@ergosphere-it/electron/vue` | page with Vue | `useUpdater()`, `markBundleHealthy()` |
+| `ergosphere-it` | CI | the command above |
 | `@ergosphere-it/electron/release` | CI scripts | `bundleReleaseFromBuild()`, `installerReleaseFromBuild()`, `readBuildInfo()` |
 | `@ergosphere-it/electron/launcher` | a custom launcher | `startLauncher(options)` |
 | `@ergosphere-it/electron/electron-updater` | a custom launcher | `createElectronUpdaterInstaller(updater?)` |

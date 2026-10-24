@@ -69,6 +69,24 @@ export async function keyIdOf(spki: Uint8Array<ArrayBuffer>): Promise<string> {
 }
 
 /**
+ * Rebuilds a key pair from a base64 PKCS#8 private key, so a release pipeline needs one secret.
+ *
+ * The public key comes from the JWK form of the private key, which carries both halves.
+ */
+export async function keyPairFromPrivateKey(privateKey: string): Promise<{ signingKey: SigningKey, trustedKey: TrustedKey }> {
+  const der = decodeBase64(privateKey)
+  if (!der)
+    throw new TypeError('The private key is not base64.')
+
+  const jwk = await crypto.subtle.exportKey('jwk', await crypto.subtle.importKey('pkcs8', der, ED25519, true, ['sign']))
+  const publicKey = await crypto.subtle.importKey('jwk', { crv: jwk.crv, kty: jwk.kty, x: jwk.x }, ED25519, true, ['verify'])
+  const spki = new Uint8Array(await crypto.subtle.exportKey('spki', publicKey))
+  const keyId = await keyIdOf(spki)
+
+  return { signingKey: { keyId, privateKey: der.toBase64() }, trustedKey: { keyId, publicKey: spki.toBase64() } }
+}
+
+/**
  * Signs a document: adds the signature reference, serializes it as canonical JSON, and signs the bytes.
  *
  * Publish the bytes as they are. A client verifies the signature over these exact bytes.

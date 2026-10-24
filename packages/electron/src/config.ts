@@ -39,7 +39,7 @@ const updatesConfigSchema = object({
    * a native module, or the launcher changes. Main and preload changes ship as bundles and do not need it.
    */
   nativeVersion: pipe(number(), integer(), minValue(1)),
-  /** Public keys that sign updates, as `ed25519:<base64 SPKI>`. */
+  /** Public keys that sign updates, as `ed25519:<base64>`. `ergosphere-it keygen` prints one. */
   publicKeys: pipe(array(pipe(string(), regex(/^ed25519:[\w+/=]+$/, 'A public key looks like `ed25519:<base64>`.'))), minLength(1)),
   /**
    * Quits a second instance of the app at start, as most desktop apps do. Defaults to true. With false, a second

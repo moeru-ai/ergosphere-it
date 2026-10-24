@@ -20,6 +20,7 @@ Formats, keys, signatures, and verification. No I/O.
 | Export | Purpose |
 | --- | --- |
 | `createKeyPair()` | Creates a `SigningKey` and its `TrustedKey` with WebCrypto. |
+| `keyPairFromPrivateKey(privateKey)` | Rebuilds both keys from a base64 PKCS#8 private key, so a pipeline needs one secret. |
 | `trustedKeyFromPublicKey(publicKey)` | Builds a `TrustedKey` from a base64 SPKI public key. |
 | `signDocument(document, signingKey)` | Returns the canonical bytes of a document and their detached signature. |
 | `verifyBundleManifest(bytes, signature, trustedKeys)` | Returns the verified `BundleManifest`, or throws. |
@@ -117,6 +118,7 @@ Internal: the object store and the state file.
 | `/launcher` | `startLauncher(options)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Installer`. |
 | `/electron-updater` | `createElectronUpdaterInstaller(updater?)`. Without an argument, it creates its own electron-updater instance. |
 | `/virtual` | Types of `virtual:ergosphere-it/config` for a custom launcher |
+| `ergosphere-it` (bin) | `keygen`, `publish bundle`, `register installer`, `promote`, `rollout`, `withdraw`. `--bucket` takes `s3://`, `file://`, or a directory. S3 goes through `s3mini`. |
 
 Status types: `UpdaterStatus`, `UpdateInfo`, `BundleInfo`, `UpdateRequirement`, `UpdateError`, `UpdateErrorCode`, `RollbackReason`, `DisabledReason`, `PageUpdater`.
 

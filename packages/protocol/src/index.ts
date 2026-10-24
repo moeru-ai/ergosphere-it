@@ -1,4 +1,4 @@
-export { canonicalJson, contentHash, createKeyPair, signDocument, trustedKeyFromPublicKey } from './crypto'
+export { canonicalJson, contentHash, createKeyPair, keyPairFromPrivateKey, signDocument, trustedKeyFromPublicKey } from './crypto'
 export type { SignedDocument, SigningKey } from './crypto'
 export { CandidateError, ChannelError, DocumentError, ErgosphereError, SignatureError } from './errors'
 export type { CandidateErrorCode, ChannelErrorCode, DocumentErrorCode, ErrorCode, SignatureErrorCode } from './errors'

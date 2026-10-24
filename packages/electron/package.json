@@ -61,6 +61,9 @@
     },
     "./package.json": "./package.json"
   },
+  "bin": {
+    "ergosphere-it": "./dist/cli.mjs"
+  },
   "files": [
     "dist",
     "virtual.d.ts"
@@ -98,6 +101,7 @@
     "@ergosphere-it/protocol": "workspace:*",
     "@ergosphere-it/publish": "workspace:*",
     "@moeru/std": "catalog:",
+    "s3mini": "catalog:",
     "valibot": "catalog:",
     "yaml": "catalog:"
   },

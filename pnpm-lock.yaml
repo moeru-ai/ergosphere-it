@@ -69,6 +69,9 @@ catalogs:
     publint:
       specifier: ^0.3.22
       version: 0.3.25
+    s3mini:
+      specifier: ^1.0.3
+      version: 1.0.3
     simple-git-hooks:
       specifier: ^2.13.1
       version: 2.14.0
@@ -222,6 +225,9 @@ importers:
       '@moeru/std':
         specifier: 'catalog:'
         version: 0.1.0-beta.20
+      s3mini:
+        specifier: 'catalog:'
+        version: 1.0.3
       valibot:
         specifier: 'catalog:'
         version: 1.5.0(typescript@6.0.3)
@@ -3127,6 +3133,10 @@ packages:
     resolution: {integrity: sha512-eTBTTqMR6uHKLgcUqpJP8ntzDI6V4LYA8negAMBEI7gkgVvOdrx6VsvS2Ym+83KhOPdLCHWJu0w7UQFJZhHKNw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
+
+  s3mini@1.0.3:
+    resolution: {integrity: sha512-BTwXpSRMApk+djyN2FS1ZzYWrMr9cCrasAdgQQIlr0sC2xCKF4cD/XsSkH8iSeLLwkjAadmPq1zp5w92T+S+6Q==}
+    engines: {node: '>=20'}
 
   sade@1.8.1:
     resolution: {integrity: sha512-xal3CZX1Xlo/k4ApwCFrHVACi9fBqJ7V+mwhBsuf/1IOKbBy098Fex+Wa/5QMubw09pSZ/u8EY8PWgevJsXp1A==}
@@ -6405,6 +6415,8 @@ snapshots:
       '@rolldown/binding-openharmony-arm64': 1.2.14
       '@rolldown/binding-win32-arm64-msvc': 1.2.14
       '@rolldown/binding-win32-x64-msvc': 1.2.14
+
+  s3mini@1.0.3: {}
 
   sade@1.8.1:
     dependencies:

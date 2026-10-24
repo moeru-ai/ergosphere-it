@@ -5,6 +5,7 @@ export default defineConfig({
   deps: { neverBundle: ['electron', 'electron-updater', 'electron-vite', 'vite', 'vue'] },
   dts: true,
   entry: {
+    'cli': 'src/cli/index.ts',
     'electron-updater': 'src/electron-updater.ts',
     'launcher': 'src/launcher.ts',
     'main': 'src/main.ts',
