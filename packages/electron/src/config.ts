@@ -25,6 +25,8 @@ export interface LauncherConfig {
   checkIntervalMs: number
   disabled: boolean
   feedUrl: string
+  /** The installer of each platform. `false` turns installer updates off. */
+  installers: ResolvedErgoConfig['installers']
   /** Time for a booted bundle to call `markBundleHealthy`. */
   launchHealthTimeoutMs: number
   maxLaunchAttempts: number
@@ -69,6 +71,7 @@ export async function loadLauncherConfig(root: string): Promise<LauncherConfig> 
     checkIntervalMs: config.checkIntervalMinutes * 60_000,
     disabled: config.disabled,
     feedUrl: config.feedUrl.replace(/\/+$/, ''),
+    installers: config.installers,
     launchHealthTimeoutMs: config.health.launchTimeout * 1000,
     maxLaunchAttempts: config.health.maxLaunchAttempts,
     nativeVersion: config.nativeVersion,

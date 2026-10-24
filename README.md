@@ -52,6 +52,7 @@ When a new bundle crashes or never reports that it works, the app goes back to t
 | electron-vite | 6 | The build. One plugin goes into each process. |
 | electron-builder | any | Optional. It packs installers. ergosphere-it records them as installer releases. |
 | electron-updater | 6.8.9 or later | Optional. With it, the app also installs new installers. Without it, the app updates only its bundle. |
+| electron-sparkle-updater | 0.5.3 or later | Optional, macOS only. With `installers: { darwin: 'sparkle' }`, Sparkle installs new installers as small deltas. |
 
 You also need a place for static files that the app can read over HTTPS, for example an S3 or R2 bucket behind a CDN. There is no update server to run.
 
@@ -115,6 +116,7 @@ export default defineConfig({
 | `health.reloadTimeout` | `15` | Seconds for a new bundle to report health after a page-only update |
 | `health.maxLaunchAttempts` | `3` | Starts without a health report before the app leaves the bundle |
 | `disabled` | `false` | Turns updates off, for example in a Steam build |
+| `installers` | `electron-updater` on each platform | The installer of each platform: `{ darwin, linux, win32 }`. `darwin` can be `sparkle`. `false` turns installer updates off on that platform. |
 | `singleInstance` | `true` | Quits a second instance at start. With `false`, a second instance runs without changing the update state. |
 
 </details>
@@ -291,7 +293,7 @@ electron-builder packs the app as before. Make sure that the package contains `o
 
 You do not need `ergo.config.ts` in the package. Keep electron-builder `publish` settings if electron-updater installs your installers. ergosphere-it gives electron-updater a feed of its own for each installer release.
 
-On macOS, Sparkle can install new installers instead of electron-updater. It downloads a delta of the changed files, not the whole zip. [The Sparkle example](examples/electron-sparkle-app) shows the installer and the release steps.
+On macOS, Sparkle can install new installers instead of electron-updater. It downloads a delta of the changed files, not the whole zip. Set `installers: { darwin: 'sparkle' }` in `ergo.config.ts`, and add the electron-builder config of electron-sparkle-updater. [The Sparkle example](examples/electron-sparkle-app) shows the config and the release steps.
 
 ### Host the updates
 
@@ -301,7 +303,7 @@ The app reads static files from `feedUrl`:
 <feedUrl>/
   objects/sha256/<aa>/<sha256>          # file contents, immutable
   bundles/<releaseId>/bundle.json(.sig) # signed bundle manifests, immutable
-  installers/<releaseId>/...            # signed installer releases and their feeds, immutable
+  installers/<releaseId>/...            # signed installer releases, their feeds and appcasts, immutable
   channels/<channel>.json(.sig)         # what each channel serves now, changes on every publish
 ```
 
@@ -326,6 +328,18 @@ pnpm exec ergosphere-it register installer --channel stable --files-url https://
 ```
 
 `register installer` reads the `latest*.yml` files of electron-builder in `dist/`. `--files-url` is where the installer files are, for example the download URL of a GitHub release.
+
+With Sparkle on macOS, add the appcast that `generate_appcast` made. The release keeps its own copy of it. `--download-page` is where people download the app by hand, when an installer keeps failing:
+
+```bash
+pnpm exec ergosphere-it register installer --channel stable \
+  --files-url https://github.com/<owner>/<repo>/releases/download/v1.5.0 \
+  --sparkle darwin-arm64=dist/appcast.xml \
+  --download-page https://example.com/download \
+  --bucket s3://my-app-updates
+```
+
+A release with both a zip and an appcast moves an app from electron-updater to Sparkle: installs of the old app take the zip, and the new app takes the appcast.
 
 <details>
 <summary>Buckets</summary>
@@ -441,7 +455,7 @@ On macOS, `pnpm -F ergosphere-example-electron-sparkle demo` installs a new inst
 | Channel file | A small signed file that names what a channel serves: a bundle, an installer, and withdrawn bundles |
 | Rollout | The percentage of installs that get a bundle. Each install keeps its bucket. |
 | Cohort | A named group of installs, for example `qa` |
-| Withdraw | Removes a bad bundle. Apps that run it go back to the bundle before it. |
+| Withdraw | Removes a bad bundle or installer. Apps that run the bundle go back to the bundle before it. |
 
 [The specification](docs/spec.md) defines the protocol: formats, signatures, checks, and the rules of every client.
 
@@ -451,7 +465,9 @@ On macOS, `pnpm -F ergosphere-example-electron-sparkle demo` installs a new inst
 | --- | --- |
 | Only pages changed | The windows reload on the same routes, and the process keeps running. |
 | Main or preload code changed | The update waits for `applyUpdate()`, then restarts. Without it, it takes effect at the next start. |
-| A newer installer is out | electron-updater downloads it. The launcher checks the file against the signed release, then installs on `applyUpdate()`. |
+| A newer installer is out | electron-updater downloads it, or Sparkle downloads and applies a delta. The launcher checks it against the signed release, then installs on `applyUpdate()`. |
+| An installer keeps failing | Bundles still arrive. The status shows the failure, the count of attempts, and `update.downloadPage`. |
+| You withdraw an installer | Apps drop a download of it. Apps that installed it keep it until a newer installer. |
 | A new bundle crashes when its main code loads | It goes back to the bundle before it at once, and never takes that bundle again. |
 | A new bundle never reports health | It goes back: in place after a reload, after the last allowed start after a restart. |
 | The installer bundle fails | It shows a window that asks the user to install the app again. It does not restart in a loop. |

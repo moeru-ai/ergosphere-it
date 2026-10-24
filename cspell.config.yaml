@@ -14,11 +14,13 @@ dictionaries: []
 words:
   - airi
   - appcast
+  - appcasts
   - armv
   - asar
   - blockmap
   - bumpp
   - cloudflarestorage
+  - codesign
   - desync
   - desyncs
   - doctoc
@@ -28,6 +30,7 @@ words:
   - guiiai
   - innei
   - kirie
+  - libexec
   - logg
   - masknet
   - maxlevel

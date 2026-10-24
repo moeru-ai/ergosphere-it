@@ -89,12 +89,76 @@ describe('ergosphere-it commands', () => {
 
     const result = await registerInstaller({ bucket, channel: 'stable', distDir: dist, filesUrl: 'https://downloads.test/v1.0.10/', outDir: out, signingKey })
 
-    expect(result).toEqual({ platforms: ['linux-arm64', 'darwin-arm64', 'win32-x64'], releaseId: 11 })
+    expect(result).toEqual({ files: ['linux-arm64 electron-updater', 'darwin-arm64 electron-updater', 'win32-x64 electron-updater'], releaseId: 11 })
     const installer = await verifyInstallerManifest((await bucket.get('installers/11/installer.json'))!, decode((await bucket.get('installers/11/installer.json.sig'))!), trustedKeys)
     expect(installer).toMatchObject({ bundleReleaseId: 10, nativeVersion: 2 })
     expect(installer.artifacts.find(artifact => artifact.platform === 'win32-x64')?.url).toBe('https://downloads.test/v1.0.10/App%20Setup%201.0.10.exe')
     expect(await bucket.get('installers/11/feeds/win32-x64/latest.yml')).toBeDefined()
     expect(JSON.parse(decode((await bucket.get('channels/stable.json'))!))).toMatchObject({ bundle: { releaseId: 10 }, installer: { releaseId: 11 } })
+  })
+
+  it('registers a Sparkle appcast next to the electron-builder installers, and hosts a copy of it in the release', async () => {
+    const signingKey = await parseSigningKey((await keygen()).privateKey)
+    const bucket = openBucket(join(root, 'bucket'))
+    const out = join(root, 'out')
+    const dist = join(root, 'dist')
+    await writeBuild(out, 10, 'page')
+    mkdirSync(dist)
+    writeFileSync(join(dist, 'latest-mac.yml'), stringify({ files: [{ sha512: 'bWFj', size: 1, url: 'App-1.0.10-arm64-mac.zip' }], version: '1.0.10' }))
+    const appcast = '<rss><channel><item><sparkle:shortVersionString>1.0.10</sparkle:shortVersionString><enclosure url="https://downloads.test/App-1.0.10.zip"/></item></channel></rss>'
+    writeFileSync(join(dist, 'appcast.xml'), appcast)
+
+    const result = await registerInstaller({
+      bucket,
+      channel: 'stable',
+      distDir: dist,
+      downloadPage: 'https://example.test/download',
+      feedUrl: 'https://updates.test',
+      filesUrl: 'https://downloads.test',
+      outDir: out,
+      signingKey,
+      sparkleAppcasts: { 'darwin-arm64': join(dist, 'appcast.xml') },
+    })
+
+    expect(result.files).toEqual(['darwin-arm64 electron-updater', 'darwin-arm64 sparkle'])
+    expect(decode((await bucket.get('installers/11/sparkle/darwin-arm64/appcast.xml'))!)).toBe(appcast)
+    const manifest = JSON.parse(decode((await bucket.get('installers/11/installer.json'))!))
+    expect(manifest.downloadPage).toBe('https://example.test/download')
+    expect(manifest.artifacts[1]).toMatchObject({ format: 'sparkle', url: 'https://updates.test/installers/11/sparkle/darwin-arm64/appcast.xml' })
+  })
+
+  it('refuses an appcast that does not offer the version of the build, or names an archive by a relative URL', async () => {
+    const signingKey = await parseSigningKey((await keygen()).privateKey)
+    const bucket = openBucket(join(root, 'bucket'))
+    const out = join(root, 'out')
+    await writeBuild(out, 10, 'page')
+    const write = (text: string) => {
+      writeFileSync(join(root, 'appcast.xml'), text)
+
+      return registerInstaller({ bucket, channel: 'stable', distDir: root, feedUrl: 'https://updates.test', outDir: out, signingKey, sparkleAppcasts: { 'darwin-arm64': join(root, 'appcast.xml') } })
+    }
+
+    await expect(write('<item><sparkle:shortVersionString>1.0.9</sparkle:shortVersionString><enclosure url="https://d.test/a.zip"/></item>')).rejects.toThrow('offers 1.0.9')
+    await expect(write('<item><sparkle:shortVersionString>1.0.10</sparkle:shortVersionString><enclosure url="a.zip"/></item>')).rejects.toThrow('relative URL')
+    await expect(registerInstaller({ bucket, channel: 'stable', distDir: root, outDir: out, signingKey })).rejects.toThrow('needs --files-url')
+  })
+
+  it('withdraws an installer: the channel stops naming it and lists it as withdrawn', async () => {
+    const signingKey = await parseSigningKey((await keygen()).privateKey)
+    const bucket = openBucket(join(root, 'bucket'))
+    const out = join(root, 'out')
+    const dist = join(root, 'dist')
+    await writeBuild(out, 10, 'page')
+    await publishBundle({ bucket, channel: 'stable', outDir: out, signingKey })
+    mkdirSync(dist)
+    writeFileSync(join(dist, 'latest.yml'), stringify({ files: [{ sha512: 'd2lu', size: 3, url: 'App Setup.exe' }], version: '1.0.10' }))
+    await registerInstaller({ bucket, channel: 'stable', distDir: dist, filesUrl: 'https://downloads.test', outDir: out, signingKey })
+
+    await withdraw(bucket, 11, signingKey)
+
+    const stable = JSON.parse(decode((await bucket.get('channels/stable.json'))!))
+    expect(stable).toMatchObject({ bundle: { releaseId: 10 }, withdrawn: [11] })
+    expect(stable.installer).toBeUndefined()
   })
 
   it('promotes a channel, changes a rollout, and withdraws a bundle on every channel', async () => {

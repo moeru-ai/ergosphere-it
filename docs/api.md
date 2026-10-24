@@ -28,12 +28,12 @@ Formats, keys, signatures, and verification. No I/O.
 | `verifyInstallerManifest(bytes, signature, trustedKeys)` | Returns the verified `InstallerManifest`, or throws. |
 | `validateBundleManifest(document)`, `validateChannelFile(document)`, `validateInstallerManifest(document)` | Check the schema and rules of a document without its signature. Clients run them after the signature verifies, and publishers run them before they sign. |
 | `checkBundleCandidate(manifest, context)` | Throws a `CandidateError` when an install cannot take a verified bundle. |
-| `checkInstallerCandidate(manifest, context)` | Returns the installer file of a verified installer release for this platform, or throws a `CandidateError`. |
+| `checkInstallerCandidate(manifest, context)` | Returns the installer file of a verified installer release for this platform, in the first of `context.formats` that the release has, or throws a `CandidateError`. |
 | `isInRollout(rollout, installId)`, `isNativeVersionCompatible(nativeVersion, range)`, `isSafeManifestPath(path)` | Policy helpers. |
 | `contentHash(bytes)` | The content address: SHA-256 as lowercase hex. |
 | `canonicalJson(value)` | The canonical JSON that signatures cover: JCS (RFC 8785) through `canonicalize`. |
 | `ErgosphereError`, `SignatureError`, `DocumentError`, `ChannelError`, `CandidateError`, `ErrorCode` | Errors. |
-| Types: `BundleManifest`, `InstallerManifest`, `InstallerArtifact`, `ChannelFile`, `Component`, `ComponentType`, `FileEntry`, `NativeVersionRange`, `Rollout`, `SigningKey`, `TrustedKey` | Data. |
+| Types: `BundleManifest`, `InstallerManifest`, `InstallerArtifact`, `InstallerFormat`, `ChannelFile`, `Component`, `ComponentType`, `FileEntry`, `NativeVersionRange`, `Rollout`, `SigningKey`, `TrustedKey` | Data. |
 | `@ergosphere-it/protocol/conformance` | Conformance cases. A case expects `ok` or an error `code`. |
 
 Internal: Valibot schemas, signature primitives, base64 decoding.
@@ -45,7 +45,7 @@ Internal: Valibot schemas, signature primitives, base64 decoding.
 | `SignatureError` | `invalid-signature`, `untrusted-key` |
 | `DocumentError` | `invalid-json`, `invalid-schema`, `unsafe-path`, `duplicate-path` |
 | `ChannelError` | `channel-expired`, `channel-replayed`, `channel-mismatch` |
-| `CandidateError` | `bundle-mismatch`, `installer-mismatch`, `platform-mismatch`, `native-version-mismatch`, `withdrawn`, `blocked`, `not-newer` |
+| `CandidateError` | `bundle-mismatch`, `installer-mismatch`, `platform-mismatch`, `format-mismatch`, `native-version-mismatch`, `withdrawn`, `blocked`, `not-newer` |
 
 ## `@ergosphere-it/publish`
 
@@ -77,7 +77,8 @@ for (const stage of uploadStages([release], [channel]))
 | `buildBundleRelease(input)` | Returns the objects, the signed manifest, and the descriptor of a bundle. |
 | `buildChannelFile(input)` | Returns the signed channel file. The caller declares the whole file. |
 | `reissueChannelFile(channelFile, signingKey)` | Signs a channel file again with a new issue time, for example after a backup restore. |
-| `buildInstallerRelease(input)` | Returns the signed installer manifest, and one electron-updater feed per platform. Installer URLs must be absolute. |
+| `buildInstallerRelease(input)` | Returns the signed installer manifest and `platformFiles`: one electron-updater feed per electron-updater file, and a copy of each Sparkle appcast. Installer URLs must be absolute. A Sparkle appcast needs `feedUrl`. |
+| `checkSparkleAppcast(appcast, version)` | Throws when the appcast does not offer `version`, or names an archive with a relative URL. `buildInstallerRelease` runs it. |
 | `uploadStages(releases, channelFiles)` | Groups files in upload order: objects, then manifests and feeds, then channel files. |
 | `createReleaseId(minimum?)` | The next release ID: the current time in milliseconds, or one more than `minimum`. |
 | `feedFileName(platform)` | The feed file that electron-updater reads on a platform, for example `latest-mac.yml`. |
@@ -93,11 +94,11 @@ The update state machine of one install. The host injects the network, file syst
 | --- | --- |
 | `UpdateClient` | `check({ force })`, `checkInstaller()`, `stage(available, { onProgress })`, `boot({ readOnly })`, `markHealthy(selection)`, `activateInPlace(releaseId)`, `rollback(releaseId, reason)`, `dismissRollback()`, `storedBundle(releaseId)`, `bundleDir(releaseId)`, `collectGarbage()`, `state()`. |
 | `requirementOf(running, next)` | What a change needs: `none`, `reload`, or `restart`. |
-| Types: `UpdateClientOptions`, `CheckResult`, `CheckOptions`, `UpToDateDetail`, `InstallerCheckResult`, `StageResult`, `StageProgress`, `BootSelection`, `InstallerBundle`, `UpdateFileSystem`, `Fetch`, `ClientState`, `BundleRef`, `RollbackReason` | Data. |
+| Types: `UpdateClientOptions`, `CheckResult`, `CheckOptions`, `UpToDateDetail`, `InstalledApp`, `InstallerCheckResult`, `StageResult`, `StageProgress`, `BootSelection`, `InstallerBundle`, `UpdateFileSystem`, `Fetch`, `ClientState`, `BundleRef`, `RollbackReason` | Data. |
 | `@ergosphere-it/client/node` → `createNodeFileSystem()` | File system for Node.js hosts. |
 
 - `check()` returns `available`, `up-to-date` with an optional `detail`, `retry-scheduled` after a failed download, or `verification-failed` with the `ErgosphereError`. Network and file system errors throw. `force` skips the wait for a retry.
-- `UpdateClientOptions` needs `product`, `host`, `channel`, `feedUrl`, `nativeVersion`, and `installerBundle`. Download options: `concurrency` (4), `idleTimeoutMs` (30 s), `retries` (3), and `retryDelayMs` (1 s).
+- `UpdateClientOptions` needs `product`, `host`, `channel`, `feedUrl`, `nativeVersion`, and `installerBundle`. With `installedApp: { releaseId, formats }`, the client also checks for installers in those formats. Download options: `concurrency` (4), `idleTimeoutMs` (30 s), `retries` (3), and `retryDelayMs` (1 s).
 - `UpdateFileSystem` streams large files: `appendFile` writes a `.part` file, and `hashFile` hashes a file without reading it into memory.
 - `boot()` records a boot attempt, so it is not a query. `boot({ readOnly: true })` selects without a change, for a second instance.
 
@@ -114,10 +115,11 @@ Internal: the object store and the state file.
 | `/main` | `activeBundle` with `preload` and `pageUrl({ page, hash, query })`, and `updater` with `status`, `onStatus()`, `checkForUpdates()`, `applyUpdate()`, `dismissRollback()`, `markBundleHealthy()`, `delayHealthCheck()`, `channel`, `cohorts`, `onBundleChange()`, and `onEvent()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
 | `/types` | The status types only, for pages and preload scripts. It has no code. |
 | `/release` | `bundleReleaseFromBuild(options)`, `installerReleaseFromBuild(options)`, `readBuildInfo(outDir)` |
-| `/launcher` | `startLauncher(options)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Installer`. |
+| `/launcher` | `startLauncher(options)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Installer`, `ElectronUpdaterInstaller`, `SparkleInstaller`, `InstallerProgress`. |
 | `/electron-updater` | `createElectronUpdaterInstaller(updater?)`. Without an argument, it creates its own electron-updater instance. |
+| `/sparkle` | `createSparkleInstaller(bridge?)`. Without an argument, it loads the bridge of electron-sparkle-updater, and returns `undefined` when Sparkle is not available. |
 | `/virtual` | Types of `virtual:ergosphere-it/config` for a custom launcher |
-| `ergosphere-it` (bin) | `keygen`, `publish bundle`, `register installer`, `promote`, `rollout`, `withdraw`. `--bucket` takes `s3://`, `file://`, or a directory. S3 goes through `s3mini`. |
+| `ergosphere-it` (bin) | `keygen`, `publish bundle`, `register installer` (with `--files-url`, `--sparkle <platform>=<appcast>`, `--download-page`), `promote`, `rollout`, `withdraw` (bundles and installers). `--bucket` takes `s3://`, `file://`, or a directory. S3 goes through `s3mini`. |
 
 Status types: `UpdaterStatus`, `UpdateInfo`, `BundleInfo`, `UpdateRequirement`, `UpdateError`, `UpdateErrorCode`, `RollbackReason`, `DisabledReason`.
 
@@ -152,7 +154,9 @@ The bundle that runs now. A page-only update changes it without a restart, so re
 
 ### Status
 
-`update` is `{ version, releaseId, requires, fromInstaller }`. `requires` is `reload`, `restart`, or `install`.
+`update` is `{ version, releaseId, requires, fromInstaller, downloadPage? }`. `requires` is `reload`, `restart`, or `install`. `downloadPage` comes from the installer release.
+
+The statuses are `idle`, `checking`, `up-to-date`, `downloading`, `preparing`, `download-failed`, `ready`, `applying`, `verification-failed`, `rolled-back`, `error`, and `disabled`. `preparing` is work after a download, for example a Sparkle patch. A `download-failed` of an installer has `attempts`. It stays the status while bundles are up to date, so the app can show `update.downloadPage` after a few attempts.
 
 `error` is `{ code, message }`. `code` is one of a closed list: `download-failed`, `installer-mismatch`, `network-error`, `storage-error`, `apply-failed`, or a protocol code such as `invalid-signature` or `channel-replayed`. `message` is English text for logs.
 
@@ -168,7 +172,7 @@ import { startLauncher } from '@ergosphere-it/electron/launcher'
 void startLauncher({ ...config, installer: myInstaller, launcherUrl: import.meta.url })
 ```
 
-`startLauncher` also takes `dataDir`, `platform`, and `onEvent`. `installer: false` turns off installer updates. Add `"types": ["@ergosphere-it/electron/virtual"]` to the tsconfig of the main process for the virtual module.
+`startLauncher` also takes `dataDir`, `platform`, and `onEvent`. `installer` replaces the installer that `installers` of `ergo.config.ts` names, and `installer: false` turns off installer updates. An installer has a `format`, and the launcher checks each format in its own way. See [the specification](spec.md#installer-formats). Add `"types": ["@ergosphere-it/electron/virtual"]` to the tsconfig of the main process for the virtual module.
 
 ### Logs
 

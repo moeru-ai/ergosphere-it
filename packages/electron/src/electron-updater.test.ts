@@ -1,5 +1,7 @@
 import type { AppUpdater, ProgressInfo } from 'electron-updater'
 
+import type { InstallerProgress } from './installer'
+
 import { EventEmitter } from 'node:events'
 
 import { createKeyPair } from '@ergosphere-it/protocol'
@@ -37,14 +39,14 @@ function fakeUpdater(version: string | undefined, file = '/tmp/AIRI-arm64-mac.zi
 describe('createElectronUpdaterInstaller', () => {
   it('downloads from the generic feed of the installer release, without installing it on its own', async () => {
     const updater = fakeUpdater('0.14.0')
-    const progress: number[][] = []
+    const progress: InstallerProgress[] = []
 
-    const file = await (await createElectronUpdaterInstaller(updater)).download(update, (downloaded, total) => progress.push([downloaded, total]))
+    const file = await (await createElectronUpdaterInstaller(updater)).download(update, value => progress.push(value))
 
     expect(file).toBe('/tmp/AIRI-arm64-mac.zip')
     expect(updater.setFeedURL).toHaveBeenCalledWith({ provider: 'generic', url: update.feedUrl })
     expect([updater.autoDownload, updater.autoInstallOnAppQuit]).toEqual([false, false])
-    expect(progress).toEqual([[40, 100]])
+    expect(progress).toEqual([{ phase: 'download', totalBytes: 100, transferredBytes: 40 }])
     expect(updater.listenerCount('download-progress')).toBe(0)
   })
 
@@ -53,10 +55,16 @@ describe('createElectronUpdaterInstaller', () => {
     await expect((await createElectronUpdaterInstaller(fakeUpdater(undefined))).download(update, () => {})).rejects.toThrow('no newer version')
   })
 
-  it('installs through quitAndInstall', async () => {
+  it('installs through quitAndInstall, and installs on quit only until it discards the update', async () => {
     const updater = fakeUpdater('0.14.0')
-    ;(await createElectronUpdaterInstaller(updater)).install()
+    const installer = await createElectronUpdaterInstaller(updater)
+    installer.installOnQuit()
+    expect(updater.autoInstallOnAppQuit).toBe(true)
 
+    installer.discard()
+    expect(updater.autoInstallOnAppQuit).toBe(false)
+
+    installer.install()
     expect(updater.quitAndInstall).toHaveBeenCalledOnce()
   })
 })
@@ -65,7 +73,7 @@ describe('installer release feeds', () => {
   it('are feeds that electron-updater reads', async () => {
     const { signingKey } = await createKeyPair()
     const release = await buildInstallerRelease({
-      artifacts: [{ platform: 'darwin-arm64', sha512: 'bWFj', size: 100, url: update.url }],
+      artifacts: [{ format: 'electron-updater', platform: 'darwin-arm64', sha512: 'bWFj', size: 100, url: update.url }],
       bundleReleaseId: 20,
       createdAt: '2026-10-24T00:00:00.000Z',
       host: 'electron',
@@ -75,7 +83,7 @@ describe('installer release feeds', () => {
       signingKey,
       version: '0.14.0',
     })
-    const feed = release.feeds[0]!
+    const feed = release.platformFiles[0]!
     const name = feedFileName('darwin-arm64')
 
     expect(parseUpdateInfo(new TextDecoder().decode(feed.bytes), name, new URL(`${update.feedUrl}/${name}`))).toMatchObject({

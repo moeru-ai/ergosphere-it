@@ -12,6 +12,9 @@
 //  8b. a slow page asks for more time with delayHealthCheck(), and is not rolled back
 //   9. a download breaks in the middle, and the next request resumes it with a range
 //  10. an installer update: a file that does not match the signed manifest is refused, and a good one installs
+//  11. a Sparkle installer: an appcast whose newest version is not the release, and a changed appcast, are refused.
+//      A failed installer stays the status while bundles are up to date. A good appcast is prepared and gets ready.
+//  12. a withdrawn installer that waits for applyUpdate() is discarded
 //
 // Usage: node scripts/e2e.ts [--asar] [--keep] [--show] [--pause <ms>] [--capture <dir>]
 //
@@ -105,7 +108,7 @@ try {
   server = await listen(app)
   log.withFields({ asar: options.asar, platform, server: server.url, work }).log('started')
 
-  stopApp = await launchApp(workspace, { capture: options.capture, e2eInstaller: true, feedUrl: server.url, show: options.show })
+  stopApp = await launchApp(workspace, { capture: options.capture, feedUrl: server.url, installer: 'file', show: options.show })
   const first = await waitFor('installed page v1', list => findEvent(list, 'page-mounted', e => e.version === 'v1'))
   await step('0. boots the bundle of the installer', true, `pid ${first.pid}`)
 
@@ -260,6 +263,49 @@ try {
   await workspace.point(resumed, [], { installer: 3 })
   const install = await waitFor('install of installer 3', list => findEvent(since(mark)(list), 'install', e => e.releaseId === 3))
   await step('10. an installer update refuses a wrong file, then installs a good one', Boolean(refused) && !installedTooEarly && install.releaseId === 3, `refused installer 2 (${refused.error.code}), installed installer 3`)
+
+  // 11. a Sparkle installer. The test installer quits on install, so the installed app is still installer release 1.
+  stopApp()
+  await workspace.point(resumed)
+  mark = lastIndex()
+  stopApp = await launchApp(workspace, { applyAll: false, capture: options.capture, feedUrl: server.url, installer: 'sparkle', show: options.show })
+  await waitFor('boot with the Sparkle installer', list => findEvent(since(mark)(list), 'boot'))
+  const appcastOf = (...versions: string[]) => `<rss><channel>${versions.map(version => `<item><sparkle:shortVersionString>${version}</sparkle:shortVersionString><enclosure url="https://downloads.test/${version}.zip"/></item>`).join('')}</channel></rss>`
+
+  mark = lastIndex()
+  await workspace.publishSparkleInstaller(4, { appcast: appcastOf('1.0.4', '1.0.99'), feedUrl: server.url })
+  await workspace.point(resumed, [], { installer: 4 })
+  const otherVersion = await waitFor('an appcast that offers another version', list => findStatus(since(mark)(list), 'download-failed', status => status.error.code === 'installer-mismatch'))
+  const failedAt = lastIndex()
+  await delay(3000)
+  const shownUpToDate = findStatus(since(failedAt)(readEvents()), 'up-to-date')
+
+  mark = lastIndex()
+  const sparkleRelease = await workspace.publishSparkleInstaller(5, { appcast: appcastOf('1.0.5'), feedUrl: server.url })
+  const appcastKey = new URL(sparkleRelease.manifest.artifacts[0]!.url).pathname.slice(1)
+  tree.put([{ ...tree.get(appcastKey)!, bytes: new TextEncoder().encode(appcastOf('1.0.5', '9.9.9')) as Uint8Array<ArrayBuffer> }])
+  await workspace.point(resumed, [], { installer: 5 })
+  const changedAppcast = await waitFor('a changed appcast', list => findStatus(since(mark)(list), 'download-failed', status => status.update.releaseId === 5))
+
+  mark = lastIndex()
+  await workspace.publishSparkleInstaller(6, { appcast: appcastOf('1.0.6'), feedUrl: server.url })
+  await workspace.point(resumed, [], { installer: 6 })
+  const ready = await waitFor('a prepared Sparkle installer', list => findStatus(since(mark)(list), 'ready', status => status.update.releaseId === 6))
+  const preparing = findStatus(since(mark)(readEvents()), 'preparing')
+  await step(
+    '11. a Sparkle installer refuses another version and a changed appcast, then gets ready',
+    otherVersion.error.message.includes('1.0.99') && otherVersion.attempts === 1 && !shownUpToDate
+    && changedAppcast.error.code === 'installer-mismatch' && changedAppcast.error.message.includes('appcast')
+    && preparing?.percent === 50 && ready.update.downloadPage === 'https://example.test/download',
+    `refused 4 (${otherVersion.error.message}), refused 5 (${changedAppcast.error.message}), ready 6 after preparing`,
+  )
+
+  // 12. a withdrawn installer
+  mark = lastIndex()
+  await workspace.point(resumed, [6])
+  const discarded = await waitFor('discard of installer 6', list => findEvent(since(mark)(list), 'installer-discarded', e => e.releaseId === 6))
+  const idle = await waitFor('the status after the discard', list => findStatus(since(mark)(list), 'up-to-date') ?? findStatus(since(mark)(list), 'idle'))
+  await step('12. a withdrawn installer that waits is discarded', discarded.reason === 'withdrawn' && Boolean(idle), `${discarded.type}, then ${idle.status}`)
 }
 catch (error) {
   await step('run', false, errorMessageFrom(error) ?? 'unknown error')

@@ -1,6 +1,6 @@
 import type { InferInput, InferOutput } from 'valibot'
 
-import { array, boolean, integer, maxValue, minLength, minValue, number, object, optional, picklist, pipe, regex, string, url } from 'valibot'
+import { array, boolean, integer, literal, maxValue, minLength, minValue, number, object, optional, picklist, pipe, regex, string, union, url } from 'valibot'
 
 /** The schema of `ergo.config.ts`. The build checks the config with it. */
 export const ergoConfigSchema = object({
@@ -28,6 +28,17 @@ export const ergoConfigSchema = object({
     maxLaunchAttempts: optional(pipe(number(), integer(), minValue(1), maxValue(10)), 3),
     /** Seconds after a page-only update reloads the windows. Defaults to 15. */
     reloadTimeout: optional(pipe(number(), minValue(1), maxValue(3600)), 15),
+  }), {}),
+  /**
+   * The installer of each platform, for new installers. `false` turns installer updates off, so the app updates only
+   * its bundle. Each platform defaults to `electron-updater`, which needs the electron-updater package.
+   *
+   * `sparkle` installs a Sparkle delta on macOS. It needs electron-sparkle-updater, and the package config of it.
+   */
+  installers: optional(object({
+    darwin: optional(union([picklist(['electron-updater', 'sparkle']), literal(false)]), 'electron-updater'),
+    linux: optional(union([literal('electron-updater'), literal(false)]), 'electron-updater'),
+    win32: optional(union([literal('electron-updater'), literal(false)]), 'electron-updater'),
   }), {}),
   /**
    * The native version of this build: an integer that changes only with a new installer. Increase it when Electron,

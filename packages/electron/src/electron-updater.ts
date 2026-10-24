@@ -1,12 +1,12 @@
 import type { AppUpdater, ProgressInfo } from 'electron-updater'
 
-import type { Installer } from './installer'
+import type { ElectronUpdaterInstaller } from './installer'
 
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { platform, resourcesPath } from 'node:process'
 
-export type { Installer, InstallerDownload } from './installer'
+export type { ElectronUpdaterInstaller, InstallerFile, InstallerProgress } from './installer'
 
 /**
  * Wraps electron-updater as the installer of the app.
@@ -15,16 +15,21 @@ export type { Installer, InstallerDownload } from './installer'
  * feed and settings. It sets the feed to the generic feed of each installer release, and turns off automatic download
  * and install, because the launcher decides when to download and when to install.
  */
-export async function createElectronUpdaterInstaller(updater?: AppUpdater): Promise<Installer> {
+export async function createElectronUpdaterInstaller(updater?: AppUpdater): Promise<ElectronUpdaterInstaller> {
   const instance = updater ?? await createUpdaterInstance()
+  // The launcher owns the schedule, so electron-updater never downloads or installs by itself.
+  instance.autoDownload = false
+  instance.autoInstallOnAppQuit = false
 
   return {
+    discard() {
+      instance.autoInstallOnAppQuit = false
+    },
     async download(update, onProgress) {
-      instance.autoDownload = false
       instance.autoInstallOnAppQuit = false
       instance.setFeedURL({ provider: 'generic', url: update.feedUrl })
 
-      const listener = (info: ProgressInfo) => onProgress(info.transferred, info.total)
+      const listener = (info: ProgressInfo) => onProgress({ phase: 'download', totalBytes: info.total, transferredBytes: info.transferred })
       instance.on('download-progress', listener)
       try {
         const result = await instance.checkForUpdates()
@@ -43,6 +48,7 @@ export async function createElectronUpdaterInstaller(updater?: AppUpdater): Prom
         instance.removeListener('download-progress', listener)
       }
     },
+    format: 'electron-updater',
     install() {
       instance.quitAndInstall()
     },
