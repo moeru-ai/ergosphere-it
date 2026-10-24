@@ -15,7 +15,7 @@ let root: string
 const encode = (text: string) => new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
 
-/** Writes the build output of withUpdates() with one main file and one page file. */
+/** Writes the build output of the ergosphere-it plugins with one main file and one page file. */
 async function writeBuild(outDir: string, releaseId: number, page: string): Promise<void> {
   const files = { 'main/index.mjs': 'main', 'renderer/index.html': page }
   for (const [path, text] of Object.entries(files)) {

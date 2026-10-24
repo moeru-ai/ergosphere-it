@@ -49,10 +49,20 @@
     "./virtual": {
       "types": "./virtual.d.ts"
     },
-    "./vite": {
-      "@ergosphere-it/source": "./src/vite.ts",
-      "types": "./dist/vite.d.mts",
-      "default": "./dist/vite.mjs"
+    "./vite/main": {
+      "@ergosphere-it/source": "./src/vite/main.ts",
+      "types": "./dist/vite/main.d.mts",
+      "default": "./dist/vite/main.mjs"
+    },
+    "./vite/preload": {
+      "@ergosphere-it/source": "./src/vite/preload.ts",
+      "types": "./dist/vite/preload.d.mts",
+      "default": "./dist/vite/preload.mjs"
+    },
+    "./vite/renderer": {
+      "@ergosphere-it/source": "./src/vite/renderer.ts",
+      "types": "./dist/vite/renderer.d.mts",
+      "default": "./dist/vite/renderer.mjs"
     },
     "./package.json": "./package.json"
   },

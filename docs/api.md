@@ -110,7 +110,7 @@ Internal: the object store and the state file.
 | Entry | Exports |
 | --- | --- |
 | `/config` | `defineConfig(config)` for `ergo.config.ts`. Types: `ErgoConfig`. |
-| `/vite` | `withUpdates(config, { launcher, main, preload, outDir, root })`. It reads `ergo.config.ts`, and keeps every HTML entry of the renderer. |
+| `/vite/main`, `/vite/preload`, `/vite/renderer` | One electron-vite plugin each, as the default export. Options: `outDir` and `root` for all, `entry` for main and preload, and `launcher` for main. The main plugin reads `ergo.config.ts`, and the renderer plugin keeps every HTML entry and writes `out/bundle.json`. |
 | `/main` | `activeBundle` with `preload` and `pageUrl({ page, hash, query })`, and `updater` with `status`, `onStatus()`, `checkForUpdates()`, `applyUpdate()`, `dismissRollback()`, `markBundleHealthy()`, `delayHealthCheck()`, `channel`, `cohorts`, `onBundleChange()`, and `onEvent()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
 | `/types` | The status types only, for pages and preload scripts. It has no code. |
 | `/release` | `bundleReleaseFromBuild(options)`, `installerReleaseFromBuild(options)`, `readBuildInfo(outDir)` |

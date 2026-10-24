@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The `ergosphere-it` command: publishes releases of an app that builds with withUpdates().
+// The `ergosphere-it` command: publishes releases of an app that builds with the ergosphere-it plugins.
 
 import { argv, env, exit } from 'node:process'
 import { parseArgs } from 'node:util'
@@ -29,7 +29,7 @@ Commands:
 
 Options:
   --bucket <url>  s3://<bucket>/<prefix>, file://<dir>, or a directory. Defaults to UPDATES_BUCKET.
-  --out <dir>     The build output of withUpdates(). Defaults to out.
+  --out <dir>     The build output of the ergosphere-it plugins. Defaults to out.
 
 Environment:
   UPDATES_SIGNING_KEY                         The private key from keygen

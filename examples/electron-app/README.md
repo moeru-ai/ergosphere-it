@@ -10,7 +10,7 @@ Read it to see what an app adds. [The Electron guide](../../packages/electron/RE
 | --- | --- |
 | `ergo.config.ts` | The feed URL, the channel, the native version, and the public key |
 | `package.json` | `main` points to the generated launcher. |
-| `electron.vite.config.ts` | `withUpdates()` around the electron-vite config |
+| `electron.vite.config.ts` | One ergosphere-it plugin for each process |
 | `src/main/index.ts` | Opens the window with `activeBundle.preload` and `activeBundle.pageUrl()`. A small IPC bridge passes the updater to the page. |
 | `src/preload/index.ts` | The page side of the bridge, as `window.updates` |
 | `src/renderer/composables/use-updates.ts` | The status and the active bundle as Vue state, and `markBundleHealthy()` |

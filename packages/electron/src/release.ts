@@ -15,7 +15,7 @@ export type { BuildInfo } from './layout'
 export interface BundleReleaseFromBuildOptions {
   /** Native versions that can run the bundle. Defaults to the native version of the build only. */
   nativeVersion?: NativeVersionRange
-  /** The output directory of `withUpdates()`. Defaults to `out`. */
+  /** The output directory of the ergosphere-it plugins. Defaults to `out`. */
   outDir?: string
   signingKey: SigningKey
 }
@@ -23,12 +23,12 @@ export interface BundleReleaseFromBuildOptions {
 export interface InstallerReleaseFromBuildOptions {
   /** One installer file per platform, for example from the `latest*.yml` files of electron-builder. */
   artifacts: InstallerFileInput[]
-  /** The output directory of `withUpdates()`. Defaults to `out`. */
+  /** The output directory of the ergosphere-it plugins. Defaults to `out`. */
   outDir?: string
   signingKey: SigningKey
 }
 
-/** Builds a signed bundle release from the output of `withUpdates()`: the files of `out/bundle/` and `out/bundle.json`. */
+/** Builds a signed bundle release from the output of the ergosphere-it plugins: the files of `out/bundle/` and `out/bundle.json`. */
 export async function bundleReleaseFromBuild({ nativeVersion, outDir = 'out', signingKey }: BundleReleaseFromBuildOptions): Promise<BundleRelease> {
   const info = readBuildInfo(outDir)
   const bundleDir = join(outDir, OUT_LAYOUT.bundle)
@@ -50,7 +50,7 @@ export async function bundleReleaseFromBuild({ nativeVersion, outDir = 'out', si
   })
 }
 
-/** Builds a signed installer release for the installers that electron-builder made from the output of `withUpdates()`. */
+/** Builds a signed installer release for the installers that electron-builder made from the output of the ergosphere-it plugins. */
 export async function installerReleaseFromBuild({ artifacts, outDir = 'out', signingKey }: InstallerReleaseFromBuildOptions): Promise<InstallerRelease> {
   const info = readBuildInfo(outDir)
 
@@ -66,7 +66,7 @@ export async function installerReleaseFromBuild({ artifacts, outDir = 'out', sig
   })
 }
 
-/** Reads `out/bundle.json`, which `withUpdates()` writes at build time. */
+/** Reads `out/bundle.json`, which the ergosphere-it plugins write at build time. */
 export function readBuildInfo(outDir = 'out'): BuildInfo {
   return JSON.parse(readFileSync(join(outDir, OUT_LAYOUT.buildInfo), 'utf8')) as BuildInfo
 }

@@ -4,7 +4,7 @@ The end-to-end test and the release demo of `@ergosphere-it/electron`. They run 
 
 ## How the test build works
 
-`electron.vite.config.ts` compiles the sources of the example with `withUpdates()`, and three test entries:
+`electron.vite.config.ts` compiles the sources of the example with the three ergosphere-it plugins, and three test entries:
 
 | Path | Role |
 | --- | --- |

@@ -15,7 +15,9 @@ Do not use it when your app is only on the Mac App Store or the Microsoft Store.
 | Entry | Use in | Exports |
 | --- | --- | --- |
 | `@ergosphere-it/electron/config` | `ergo.config.ts` | `defineConfig(config)` |
-| `@ergosphere-it/electron/vite` | `electron.vite.config.ts` | `withUpdates(config, options)` |
+| `@ergosphere-it/electron/vite/main` | `electron.vite.config.ts`, `main.plugins` | the plugin, as the default export |
+| `@ergosphere-it/electron/vite/preload` | `electron.vite.config.ts`, `preload.plugins` | the plugin, as the default export |
+| `@ergosphere-it/electron/vite/renderer` | `electron.vite.config.ts`, `renderer.plugins` | the plugin, as the default export |
 | `@ergosphere-it/electron/main` | main | `activeBundle`, `updater`, and the status types |
 | `@ergosphere-it/electron/types` | pages, preload scripts | the status types only, with no code |
 | `ergosphere-it` | CI | `keygen`, `publish bundle`, `register installer`, `promote`, `rollout`, `withdraw` |
@@ -89,7 +91,7 @@ The bundle that runs now. A page-only update changes it without a restart, so re
 
 ## A custom launcher
 
-The generated launcher takes all settings from `ergo.config.ts`. When the app must pass more, for example an installer for tests, write a launcher and pass it to `withUpdates(config, { launcher: 'src/launcher.ts' })`:
+The generated launcher takes all settings from `ergo.config.ts`. When the app must pass more, for example an installer for tests, write a launcher and pass it to the main plugin: `ergosphereMain({ launcher: 'src/launcher.ts' })`:
 
 ```ts
 import config from 'virtual:ergosphere-it/config'

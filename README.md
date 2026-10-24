@@ -19,7 +19,7 @@ When a new bundle crashes or never reports that it works, the app goes back to t
   - [Install](#install)
   - [Create a signing key](#create-a-signing-key)
   - [Configure updates](#configure-updates)
-  - [Wrap the build](#wrap-the-build)
+  - [Add the build plugins](#add-the-build-plugins)
   - [Open windows from the active bundle](#open-windows-from-the-active-bundle)
   - [Connect the updater to your pages](#connect-the-updater-to-your-pages)
   - [Report health](#report-health)
@@ -43,7 +43,7 @@ When a new bundle crashes or never reports that it works, the app goes back to t
 | --- | --- | --- |
 | Node.js | 26 or later | The build reads `ergo.config.ts` with the TypeScript support of Node.js. The CLI runs on it. |
 | Electron | 43 or later | The app. The tests use 43.4.1. |
-| electron-vite | 6 | The build. `withUpdates()` wraps its config. |
+| electron-vite | 6 | The build. One plugin goes into each process. |
 | electron-builder | any | Optional. It packs installers. ergosphere-it records them as installer releases. |
 | electron-updater | 6.8.9 or later | Optional. With it, the app also installs new installers. Without it, the app updates only its bundle. |
 
@@ -117,20 +117,24 @@ The build reads the file and writes the settings into the launcher. The app does
 
 The app never states the product name, the release IDs, or the platform. The product name is the electron-builder `appId`, or the package name. The release IDs come from the clock at build time. The platform comes from the running system.
 
-### Wrap the build
+### Add the build plugins
 
-Wrap the electron-vite config with `withUpdates()`:
+Add one plugin to each process in the electron-vite config:
 
 ```ts
 // electron.vite.config.ts
+import ergosphereMain from '@ergosphere-it/electron/vite/main'
+import ergospherePreload from '@ergosphere-it/electron/vite/preload'
+import ergosphereRenderer from '@ergosphere-it/electron/vite/renderer'
 import vue from '@vitejs/plugin-vue'
 
-import { withUpdates } from '@ergosphere-it/electron/vite'
 import { defineConfig } from 'electron-vite'
 
-export default defineConfig(withUpdates({
-  renderer: { plugins: [vue()] },
-}))
+export default defineConfig({
+  main: { plugins: [ergosphereMain()] },
+  preload: { plugins: [ergospherePreload()] },
+  renderer: { plugins: [vue(), ergosphereRenderer()] },
+})
 ```
 
 Set `main` in `package.json` to the launcher:
@@ -141,26 +145,27 @@ Set `main` in `package.json` to the launcher:
 }
 ```
 
-`withUpdates()` keeps the electron-vite source layout: `src/main/index.ts`, `src/preload/index.ts`, and `src/renderer/index.html`. An app with several HTML entries keeps its own `renderer.build.rolldownOptions.input`. The build writes:
+The plugins keep the electron-vite source layout: `src/main/index.ts`, `src/preload/index.ts`, and `src/renderer/index.html`. An app with several HTML entries keeps its own `renderer.build.rolldownOptions.input`. The build writes:
 
-| Path | Content |
-| --- | --- |
-| `out/launcher/index.mjs` | The launcher, with the settings of `ergo.config.ts` |
-| `out/bundle/main`, `out/bundle/preload`, `out/bundle/renderer` | The bundle. The preload script is CommonJS, so it works in a sandbox. |
-| `out/bundle.json` | The files of the bundle with their hashes, the release IDs, and the version |
+| Path | Plugin | Content |
+| --- | --- | --- |
+| `out/launcher/index.mjs` | main | The launcher, with the settings of `ergo.config.ts` |
+| `out/bundle/main` | main | The main code of the bundle |
+| `out/bundle/preload` | preload | The preload script. It is CommonJS, so it works in a sandbox. |
+| `out/bundle/renderer` | renderer | The pages |
+| `out/bundle.json` | renderer | The files of the bundle with their hashes, the release IDs, and the version. electron-vite builds the renderer last, so this plugin writes it. |
 
 Under `electron-vite dev`, the launcher loads the development server, and updates are off.
 
 <details>
-<summary>Options of withUpdates()</summary>
+<summary>Plugin options</summary>
 
-| Option | Default | Meaning |
-| --- | --- | --- |
-| `main` | `src/main/index.ts` | The main entry of the bundle |
-| `preload` | `src/preload/index.ts` | The preload entry of the bundle |
-| `outDir` | `out` | The output directory |
-| `root` | the current directory | The directory with `package.json` and `ergo.config.ts` |
-| `launcher` | the generated launcher | A launcher file of your own, for example for tests |
+| Option | Plugins | Default | Meaning |
+| --- | --- | --- | --- |
+| `entry` | main, preload | the entry that electron-vite finds | The main or preload entry of the bundle |
+| `launcher` | main | the generated launcher | A launcher file of your own, for example for tests |
+| `outDir` | all | `out` | The output directory. Pass the same value to all three. |
+| `root` | all | the current directory | The directory with `package.json` and `ergo.config.ts`. Pass the same value to all three. |
 
 `UPDATES_RELEASE_ID`, `UPDATES_INSTALLER_RELEASE_ID`, and `UPDATES_VERSION` override the release IDs and the version of a build.
 

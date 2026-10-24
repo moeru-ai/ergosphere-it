@@ -8,7 +8,7 @@ export type * from './status'
 function runtime(): Runtime {
   const found = readRuntime()
   if (!found)
-    throw new Error('ergosphere-it: the app did not start through its launcher. Use withUpdates() from @ergosphere-it/electron/vite, and set "main" in package.json to "out/launcher/index.mjs".')
+    throw new Error('ergosphere-it: the app did not start through its launcher. Add the plugins of @ergosphere-it/electron/vite/main, /preload, and /renderer, and set "main" in package.json to "out/launcher/index.mjs".')
 
   return found
 }
