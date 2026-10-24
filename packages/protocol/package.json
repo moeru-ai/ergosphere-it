@@ -17,10 +17,12 @@
   },
   "exports": {
     ".": {
+      "@ergosphere-it/source": "./src/index.ts",
       "types": "./dist/index.d.mts",
       "default": "./dist/index.mjs"
     },
     "./conformance": {
+      "@ergosphere-it/source": "./src/conformance.ts",
       "types": "./dist/conformance.d.mts",
       "default": "./dist/conformance.mjs"
     },

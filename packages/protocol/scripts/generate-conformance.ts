@@ -87,7 +87,7 @@ function pointer(overrides: Record<string, unknown> = {}) {
 }
 
 const shell = {
-  artifacts: [{ platform: 'darwin-arm64', sha512: 'c2hhNTEy', size: 1024, url: 'AIRI-0.13.0-arm64-mac.zip' }],
+  artifacts: [{ platform: 'darwin-arm64', sha512: 'c2hhNTEy', size: 1024, url: 'https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip' }],
   builtinCoreSeq: 10,
   createdAt: '2026-10-23T00:00:00.000Z',
   host: 'electron',
@@ -127,6 +127,28 @@ const duplicate = core({
   totalSize: 2,
 })
 cases.push({ kind: 'core-manifest', name: 'core: same path in two components', ...await signed(duplicate), context, expect: { code: 'duplicate-path', ok: false } })
+/** A valid core manifest with two extra web files. */
+function coreWith(...paths: string[]) {
+  const base = core()
+  const files = paths.map((path, index) => ({ path, sha256: sha(String.fromCharCode(100 + index)), size: 1 }))
+  base.components[1] = { ...base.components[1]!, files: [...base.components[1]!.files, ...files] }
+
+  return { ...base, totalSize: base.totalSize + files.length }
+}
+for (const [label, paths] of [
+  ['paths that differ only in case', ['renderer/App.js', 'renderer/app.js']],
+  ['paths that differ only in Unicode normalization', ['renderer/caf\u00E9.js', 'renderer/cafe\u0301.js']],
+  ['a file that another path needs as a directory', ['renderer/lib', 'renderer/lib/a.js']],
+] as const)
+  cases.push({ kind: 'core-manifest', name: `core: ${label}`, ...await signed(coreWith(...paths)), context, expect: { code: 'duplicate-path', ok: false } })
+for (const [label, path] of [
+  ['a Windows device name', 'renderer/aux.js'],
+  ['a segment that ends with a dot', 'renderer/app.js.'],
+  ['a segment that ends with a space', 'renderer/app.js '],
+  ['a colon, as in an NTFS stream', 'renderer/app.js:stream'],
+  ['a character that Windows does not allow', 'renderer/a?b.js'],
+] as const)
+  cases.push({ kind: 'core-manifest', name: `core: unsafe path with ${label}`, ...await signed(coreWith(path)), context, expect: { code: 'unsafe-path', ok: false } })
 
 cases.push({ kind: 'core-manifest', name: 'core: another product with the same key', ...await signed(core({ product: 'other' })), context, expect: { code: 'core-mismatch', ok: false } })
 cases.push({ kind: 'core-manifest', name: 'core: another host', ...await signed(core({ host: 'kirie' })), context, expect: { code: 'core-mismatch', ok: false } })
@@ -147,6 +169,8 @@ cases.push({ kind: 'shell-manifest', name: 'shell: another product with the same
 cases.push({ kind: 'shell-manifest', name: 'shell: another host', ...await signed({ ...shell, host: 'kirie' }), context: shellContext, expect: { code: 'shell-mismatch', ok: false } })
 cases.push({ kind: 'shell-manifest', name: 'shell: no installer for this platform', ...validShell, context: { ...shellContext, platform: 'win32-x64' }, expect: { code: 'platform-mismatch', ok: false } })
 cases.push({ kind: 'shell-manifest', name: 'shell: seq equals the installed shell', ...validShell, context: { ...shellContext, shellSeq: 7 }, expect: { code: 'not-newer', ok: false } })
+cases.push({ kind: 'shell-manifest', name: 'shell: a relative installer URL', ...await signed({ ...shell, artifacts: [{ ...shell.artifacts[0]!, url: 'AIRI.zip' }] }), expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'shell-manifest', name: 'shell: two installers for one platform', ...await signed({ ...shell, artifacts: [shell.artifacts[0]!, shell.artifacts[0]!] }), expect: { code: 'invalid-schema', ok: false } })
 
 const now = '2026-10-24T00:00:00.000Z'
 const target = { cadence: 'realtime', channel: 'canary', product: 'airi' }
@@ -160,6 +184,10 @@ cases.push({ kind: 'pointer', name: 'pointer: expired', ...await signed(pointer(
 cases.push({ kind: 'pointer', name: 'pointer: older than the last accepted pointer', ...await signed(pointer()), context: { ...target, lastIssuedAt: '2026-10-23T12:00:00.000Z', now }, expect: { code: 'pointer-replayed', ok: false } })
 cases.push({ kind: 'pointer', name: 'pointer: same issuedAt as the last accepted pointer', ...await signed(pointer()), context: { ...target, lastIssuedAt: '2026-10-23T00:00:00.000Z', now }, expect: { ok: true } })
 cases.push({ kind: 'pointer', name: 'pointer: expiresAt before issuedAt', ...await signed(pointer({ expiresAt: '2026-10-22T00:00:00.000Z' })), context: { ...target, now: '2026-10-21T00:00:00.000Z' }, expect: { code: 'invalid-schema', ok: false } })
+for (const [label, issuedAt] of [['an hour-only offset', '2026-10-23T08:00:00+08'], ['a full offset', '2026-10-23T08:00:00+08:00'], ['a day that does not exist', '2026-02-31T00:00:00.000Z'], ['no time zone', '2026-10-23T00:00:00']])
+  cases.push({ kind: 'pointer', name: `pointer: issuedAt with ${label}`, ...await signed(pointer({ issuedAt })), context: { ...target, now }, expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'pointer', name: 'pointer: expiresAt with an hour-only offset, which some parsers read as no date', ...await signed(pointer({ expiresAt: '2026-11-06T00:00:00+08' })), context: { ...target, now: '3000-01-01T00:00:00.000Z' }, expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'pointer', name: 'pointer: seq above the largest safe integer', ...await signed(pointer({ core: { seq: 2 ** 53 } })), context: { ...target, now }, expect: { code: 'invalid-schema', ok: false } })
 cases.push({ kind: 'pointer', name: 'pointer: rollout above 100', ...await signed(pointer({ core: { rollout: { percentage: 101, salt: '42' }, seq: 42 } })), context: { ...target, now }, expect: { code: 'invalid-schema', ok: false } })
 
 for (const [path, expect] of [['main/index.js', true], ['renderer/assets/a b.js', true], ['', false], ['/abs', false], ['../x', false], ['a/../b', false], ['a/./b', false], ['a//b', false], ['a\\b', false], ['C:/x', false], ['c:x', false], ['a\0b', false]] as const)

@@ -14,7 +14,8 @@ const clientStateSchema = object({
   /** A staged core that waits for a newer shell. */
   deferred: optional(seqSchema),
   installId: string(),
-  lastPointerIssuedAt: optional(string()),
+  /** The newest pointer `issuedAt` that this install accepted, by `<channel>/<cadence>`. */
+  pointerIssuedAt: optional(record(string(), string())),
   previous: optional(seqSchema),
   staged: optional(seqSchema),
 })

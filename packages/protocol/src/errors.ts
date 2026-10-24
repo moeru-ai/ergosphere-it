@@ -8,28 +8,34 @@ export type SignatureErrorCode = 'invalid-signature' | 'untrusted-key'
 
 /** A document or a release that the protocol rejects. `code` comes from the specification. */
 export class ErgosphereError<Code extends ErrorCode = ErrorCode> extends Error {
+  readonly code: Code
   override name = 'ErgosphereError'
 
-  constructor(readonly code: Code, message: string, options?: ErrorOptions) {
+  constructor(code: Code, message: string, options?: ErrorOptions) {
     super(message, options)
+    this.code = code
   }
 }
 
 /** A verified core or shell that this install cannot take. */
 export class CandidateError extends ErgosphereError<CandidateErrorCode> {
   override name = 'CandidateError'
+  readonly seq: number
 
-  constructor(code: CandidateErrorCode, message: string, readonly seq: number, options?: ErrorOptions) {
+  constructor(code: CandidateErrorCode, message: string, seq: number, options?: ErrorOptions) {
     super(code, message, options)
+    this.seq = seq
   }
 }
 
 /** The document is not valid JSON, does not match its schema, or lists unsafe or duplicate paths. */
 export class DocumentError extends ErgosphereError<DocumentErrorCode> {
   override name = 'DocumentError'
+  readonly path: string | undefined
 
-  constructor(code: DocumentErrorCode, message: string, readonly path?: string, options?: ErrorOptions) {
+  constructor(code: DocumentErrorCode, message: string, path?: string, options?: ErrorOptions) {
     super(code, message, options)
+    this.path = path
   }
 }
 
@@ -40,9 +46,11 @@ export class PointerError extends ErgosphereError<PointerErrorCode> {
 
 /** The signature is not valid, or no trusted key made it. */
 export class SignatureError extends ErgosphereError<SignatureErrorCode> {
+  readonly keyId: string | undefined
   override name = 'SignatureError'
 
-  constructor(code: SignatureErrorCode, message: string, readonly keyId?: string, options?: ErrorOptions) {
+  constructor(code: SignatureErrorCode, message: string, keyId?: string, options?: ErrorOptions) {
     super(code, message, options)
+    this.keyId = keyId
   }
 }

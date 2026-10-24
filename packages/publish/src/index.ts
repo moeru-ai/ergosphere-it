@@ -1,7 +1,8 @@
 import type { Cadence, Component, ComponentType, CoreManifest, HostApiRange, Pointer, ShellManifest, SignedDocument, SigningKey } from '@ergosphere-it/protocol'
 
-import { contentHash, signDocument } from '@ergosphere-it/protocol'
+import { contentHash, signDocument, validateCoreManifest, validatePointer, validateShellManifest } from '@ergosphere-it/protocol'
 import { sumBy } from 'es-toolkit'
+import { stringify } from 'yaml'
 
 /** What an installer needs to ship a core as its builtin core. */
 export interface BuiltinCore {
@@ -56,7 +57,15 @@ export interface PointerInput {
   cadence: Cadence
   channel: string
   /** The core to serve. Leave it out to serve no core, as a stable channel without OTA does. */
-  core?: { cohorts?: string[], rollout?: number, seq: number }
+  core?: {
+    /** Cohorts that get the core. An empty list serves no cohort. Leave it out to serve every cohort. */
+    cohorts?: string[]
+    /** Percentage of installs that get the core, from 0 to 100. */
+    rollout?: number
+    /** The salt of the rollout buckets. Defaults to the seq, so each release gets new buckets. */
+    salt?: string
+    seq: number
+  }
   /** Defaults to 14 days after `issuedAt`. */
   expiresAt?: string
   /** Defaults to now. */
@@ -160,7 +169,7 @@ export async function buildCoreRelease(input: CoreReleaseInput): Promise<CoreRel
     totalSize: sumBy(used.flatMap(component => component.files), entry => entry.size),
     version: input.version,
   } as const
-  const signed = await signDocument(manifest, input.signingKey)
+  const signed = await signValidated(manifest, input.signingKey, validateCoreManifest)
 
   return {
     builtin: { components: used, seq, version: input.version },
@@ -176,15 +185,16 @@ export async function buildCoreRelease(input: CoreReleaseInput): Promise<CoreRel
 export async function buildPointer(input: PointerInput): Promise<PointerRelease> {
   const issuedAt = input.issuedAt ?? new Date().toISOString()
   const core = input.core && {
-    cohorts: input.core.cohorts?.length ? input.core.cohorts : undefined,
-    rollout: input.core.rollout !== undefined && input.core.rollout < 100 ? { percentage: input.core.rollout, salt: String(input.core.seq) } : undefined,
+    cohorts: input.core.cohorts,
+    rollout: input.core.rollout !== undefined && input.core.rollout < 100 ? { percentage: input.core.rollout, salt: input.core.salt ?? String(input.core.seq) } : undefined,
     seq: input.core.seq,
   }
   const pointer = {
     cadence: input.cadence,
     channel: input.channel,
     core,
-    expiresAt: input.expiresAt ?? new Date(Date.parse(issuedAt) + 14 * DAY).toISOString(),
+    // An issuedAt that does not parse stays as it is, so the check below names it.
+    expiresAt: input.expiresAt ?? (Number.isNaN(Date.parse(issuedAt)) ? issuedAt : new Date(Date.parse(issuedAt) + 14 * DAY).toISOString()),
     issuedAt,
     kind: 'pointer',
     product: input.product,
@@ -192,7 +202,7 @@ export async function buildPointer(input: PointerInput): Promise<PointerRelease>
     schema: 1,
     shell: input.shell && { seq: input.shell.seq },
   } as const
-  const signed = await signDocument(pointer, input.signingKey)
+  const signed = await signValidated(pointer, input.signingKey, validatePointer)
 
   return {
     files: documentFiles(`pointers/${input.channel}/${input.cadence}.json`, signed, false),
@@ -208,10 +218,6 @@ export async function buildPointer(input: PointerInput): Promise<PointerRelease>
 export async function buildShellRelease(input: ShellReleaseInput): Promise<ShellRelease> {
   const seq = input.seq ?? createSeq()
   const createdAt = input.createdAt ?? new Date().toISOString()
-  for (const artifact of input.artifacts) {
-    if (!URL.canParse(artifact.url))
-      throw new Error(`The installer URL ${artifact.url} is not absolute. electron-updater resolves a relative URL against the feed.`)
-  }
 
   const manifest = {
     artifacts: input.artifacts.map(({ platform, sha512, size, url }) => ({ platform, sha512, size, url })),
@@ -226,7 +232,7 @@ export async function buildShellRelease(input: ShellReleaseInput): Promise<Shell
     seq,
     version: input.version,
   } as const
-  const signed = await signDocument(manifest, input.signingKey)
+  const signed = await signValidated(manifest, input.signingKey, validateShellManifest)
   const feeds = input.artifacts.map(artifact => treeFile(
     `shells/${seq}/feeds/${artifact.platform}/${feedFileName(artifact.platform)}`,
     new TextEncoder().encode(feedYaml(artifact, input.version, createdAt)) as Uint8Array<ArrayBuffer>,
@@ -243,26 +249,32 @@ export async function buildShellRelease(input: ShellReleaseInput): Promise<Shell
   }
 }
 
+/** The last seq that `createSeq` returned in this process. */
+let lastSeq = 0
+
 /**
  * Returns the seq of the next release: the current time in milliseconds, or one more than `minimum`.
  *
  * A seq does not depend on the state of the server. After the server loses releases, the next release still gets a seq
- * above every seq that a client has.
+ * above every seq that a client has. One process never returns the same seq twice, even within one millisecond.
  */
 export function createSeq(minimum = 0, now = Date.now()): number {
-  return Math.max(now, minimum + 1)
+  // Two releases built in the same millisecond must not share a seq, so a seq is never handed out twice here.
+  lastSeq = Math.max(now, minimum + 1, lastSeq + 1)
+
+  return lastSeq
 }
 
 /** The file that electron-updater reads from a generic feed on each platform, with the default `latest` channel. */
 export function feedFileName(platform: string): string {
-  if (platform.startsWith('darwin-'))
+  const [os, arch] = platform.split('-')
+  if (os === 'darwin')
     return 'latest-mac.yml'
-  if (platform.startsWith('win32-'))
+  if (os === 'win32')
     return 'latest.yml'
-  if (platform === 'linux-arm64')
-    return 'latest-linux-arm64.yml'
 
-  return 'latest-linux.yml'
+  // electron-updater adds the architecture on Linux, except for x64.
+  return arch === 'x64' || arch === undefined ? 'latest-linux.yml' : `latest-linux-${arch}.yml`
 }
 
 /**
@@ -274,7 +286,7 @@ export async function reissuePointer(pointer: Pointer, signingKey: SigningKey): 
   return buildPointer({
     cadence: pointer.cadence,
     channel: pointer.channel,
-    core: pointer.core && { cohorts: pointer.core.cohorts, rollout: pointer.core.rollout?.percentage, seq: pointer.core.seq },
+    core: pointer.core && { cohorts: pointer.core.cohorts, rollout: pointer.core.rollout?.percentage, salt: pointer.core.rollout?.salt, seq: pointer.core.seq },
     product: pointer.product,
     revoked: pointer.revoked,
     shell: pointer.shell,
@@ -301,21 +313,21 @@ function documentFiles(key: string, { bytes, signature }: SignedDocument, immuta
   ]
 }
 
-/** Writes an electron-updater feed with one file. JSON strings are valid YAML scalars, so no YAML library is needed. */
+/** Writes an electron-updater feed with one file, in the shape that electron-builder writes. */
 function feedYaml(artifact: ShellArtifactInput, version: string, releaseDate: string): string {
-  const text = JSON.stringify
+  const file = { sha512: artifact.sha512, size: artifact.size, url: artifact.url }
 
-  return [
-    `version: ${text(version)}`,
-    'files:',
-    `  - url: ${text(artifact.url)}`,
-    `    sha512: ${text(artifact.sha512)}`,
-    `    size: ${artifact.size}`,
-    `path: ${text(artifact.url)}`,
-    `sha512: ${text(artifact.sha512)}`,
-    `releaseDate: ${text(releaseDate)}`,
-    '',
-  ].join('\n')
+  return stringify({ files: [file], path: artifact.url, releaseDate, sha512: artifact.sha512, version })
+}
+
+/**
+ * Signs a document after it passes the same checks that clients run, so a publisher never signs a document that
+ * every client rejects. The check sees the document as clients do, with its signature reference.
+ */
+async function signValidated<TDocument extends Record<string, unknown>>(document: TDocument, signingKey: SigningKey, validate: (document: unknown) => unknown): Promise<SignedDocument> {
+  validate({ ...document, signature: { alg: 'ed25519', keyId: signingKey.keyId } })
+
+  return signDocument(document, signingKey)
 }
 
 function treeFile(key: string, bytes: Uint8Array<ArrayBuffer>, contentType: string, immutable: boolean): TreeFile {

@@ -550,3 +550,120 @@ describe('updateClient shell check', () => {
     expect(server.requests.filter(url => url.endsWith('/pointers/canary/realtime.json'))).toHaveLength(1)
   })
 })
+
+describe('updateClient state and pointer rules', () => {
+  const page = (seq: number): CoreFiles => ({ ...builtinFiles, web: { 'renderer/index.html': `<html>v${seq}</html>` } })
+
+  async function stageAvailable(client: UpdateClient) {
+    const checked = await client.check()
+    if (checked.status !== 'available')
+      throw new Error(`expected an available core, got ${JSON.stringify(checked)}`)
+
+    return client.stage(checked)
+  }
+
+  it('remembers the last pointer for each channel and cadence', async () => {
+    await server.publishCore(11, page(11))
+    await server.publishPointer(11, { issuedAt: '2026-10-23T12:00:00.000Z' })
+    await server.publishPointer(11, { cadence: 'nightly', issuedAt: '2026-10-23T03:00:00.000Z' })
+    expect((await (await createClient()).check()).status).toBe('available')
+
+    expect((await (await createClient({ cadence: 'nightly' })).check()).status).toBe('available')
+  })
+
+  it('does not let a pointer from the future lock out the next pointers', async () => {
+    await server.publishCore(11, page(11))
+    await server.publishPointer(11, { expiresAt: '2026-11-30T00:00:00.000Z', issuedAt: '2026-11-20T00:00:00.000Z' })
+    const client = await createClient()
+    expect((await client.check()).status).toBe('available')
+
+    await server.publishPointer(11, { issuedAt: '2026-10-24T00:00:00.000Z' })
+    expect((await client.check()).status).toBe('available')
+  })
+
+  it('drops a staged core that a pointer revokes, and takes the older core that the channel serves', async () => {
+    const client = await createClient()
+    await server.publishCore(11, page(11))
+    await server.publishCore(12, page(12))
+    await server.publishPointer(12)
+    await stageAvailable(client)
+    await server.publishPointer(11, { issuedAt: '2026-10-23T01:00:00.000Z', revoked: [12] })
+
+    expect(await client.check()).toMatchObject({ manifest: { seq: 11 }, status: 'available' })
+    expect((await client.state()).staged).toBeUndefined()
+    await expect(client.activateInPlace(12)).rejects.toThrow()
+  })
+
+  it('keeps every state change when changes run at the same time', async () => {
+    const client = await createClient()
+    await server.publishCore(11, page(11))
+    await server.publishPointer(11)
+    await stageAvailable(client)
+    const selection = await client.boot()
+    await server.publishPointer(undefined, { issuedAt: '2026-10-23T01:00:00.000Z', revoked: [99] })
+
+    await Promise.all([client.markHealthy(selection), client.check()])
+
+    const state = await client.state()
+    expect(state.bootAttempts).toEqual({ 11: 0 })
+    expect(state.blocked).toEqual([99])
+  })
+
+  it('removes partial files of failed downloads', async () => {
+    const client = await createClient()
+    const manifest = await server.publishCore(11, page(11))
+    await server.publishPointer(11)
+    const file = manifest.components.flatMap(component => component.files).find(entry => entry.path === 'renderer/index.html')!
+    const part = join(root, 'updates', 'objects', 'sha256', file.sha256.slice(0, 2), `${file.sha256}.part`)
+    await mkdir(dirname(part), { recursive: true })
+    await writeFile(part, 'stale bytes of another attempt')
+    await stageAvailable(client)
+    await writeFile(`${part}.copy`, 'left by a crash')
+    await client.collectGarbage()
+
+    expect((await readdir(dirname(part))).filter(name => name.includes('.part'))).toEqual([])
+  })
+
+  it('boots a deferred core once the shell has its host API', async () => {
+    await server.publishCore(11, page(11), { hostApi: { max: 4, min: 4 } })
+    await server.publishPointer(11)
+    const oldShell = await createClient({ shellHostApi: 3 })
+    const checked = await oldShell.check()
+    expect(checked).toMatchObject({ error: { code: 'host-api-incompatible' }, status: 'rejected' })
+
+    // The core was staged by a shell that supported it, then the app went back to an older shell.
+    const newShell = await createClient({ shellHostApi: 4 })
+    await stageAvailable(newShell)
+    expect((await oldShell.boot()).kind).toBe('builtin')
+    expect((await oldShell.state()).deferred).toBe(11)
+
+    expect(await newShell.boot()).toMatchObject({ kind: 'external', seq: 11 })
+    expect((await newShell.state()).deferred).toBeUndefined()
+  })
+
+  it('boots the builtin core when the state cannot be read', async () => {
+    const fs = createNodeFileSystem()
+    const client = await createClient({
+      fs: { ...fs, readFile: async (path: string) => (path.endsWith('state.json') ? Promise.reject(Object.assign(new Error('locked'), { code: 'EPERM' })) : fs.readFile(path)) },
+    })
+
+    expect(await client.boot()).toMatchObject({ kind: 'builtin', rejected: [{ problem: expect.stringContaining('locked') }] })
+  })
+
+  it('fetches a pointer again when its signature belongs to the pointer before it', async () => {
+    await server.publishCore(11, page(11))
+    await server.publishPointer(11)
+    const stale = server.files.get('/pointers/canary/realtime.json.sig')!
+    await server.publishPointer(11, { issuedAt: '2026-10-23T01:00:00.000Z' })
+    let first = true
+    server.intercept = (path) => {
+      if (path !== '/pointers/canary/realtime.json.sig' || !first)
+        return undefined
+      first = false
+
+      return new Response(stale.slice())
+    }
+
+    expect((await (await createClient({ retryDelayMs: 1 })).check()).status).toBe('available')
+  })
+})

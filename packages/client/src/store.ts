@@ -2,7 +2,13 @@ import type { UpdateFileSystem } from './io'
 
 /** The local content store: one file per object, named by its SHA-256. */
 export class ObjectStore {
-  constructor(private readonly fs: UpdateFileSystem, private readonly root: string) {}
+  private readonly fs: UpdateFileSystem
+  private readonly root: string
+
+  constructor(fs: UpdateFileSystem, root: string) {
+    this.fs = fs
+    this.root = root
+  }
 
   /**
    * Takes a complete file as an object after it checks its size and hash, and moves it into the store.
@@ -55,6 +61,19 @@ export class ObjectStore {
     }
 
     return hashes
+  }
+
+  /** Lists the partial files of downloads and copies, which a failure or a crash can leave behind. */
+  async listPartial(): Promise<string[]> {
+    const paths: string[] = []
+    for (const prefix of await this.fs.list(this.root)) {
+      for (const name of await this.fs.list(this.fs.join(this.root, prefix))) {
+        if (/^[0-9a-f]{64}\.part(?:\.copy)?$/.test(name))
+          paths.push(this.fs.join(this.root, prefix, name))
+      }
+    }
+
+    return paths
   }
 
   /** The file that a download writes to. It stays between attempts, so the next attempt can resume it. */

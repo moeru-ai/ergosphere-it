@@ -24,6 +24,7 @@ Formats, keys, signatures, and verification. No I/O.
 | `verifyCoreManifest(bytes, signature, trustedKeys)` | Returns the verified `CoreManifest`, or throws. |
 | `verifyPointer(bytes, signature, trustedKeys, context)` | Returns the verified `Pointer`, or throws. `context` names the product, channel, and cadence that the client asked for. |
 | `verifyShellManifest(bytes, signature, trustedKeys)` | Returns the verified `ShellManifest`, or throws. |
+| `validateCoreManifest(document)`, `validatePointer(document)`, `validateShellManifest(document)` | Check the schema and rules of a document without its signature. Clients run them after the signature verifies, and publishers run them before they sign. |
 | `checkCoreCandidate(manifest, context)` | Throws a `CandidateError` when an install cannot take a verified core. |
 | `checkShellCandidate(manifest, context)` | Returns the installer of a verified shell for this platform, or throws a `CandidateError`. |
 | `isInRollout(rollout, installId)`, `isHostApiCompatible(shellHostApi, range)`, `isSafeManifestPath(path)` | Policy helpers. |

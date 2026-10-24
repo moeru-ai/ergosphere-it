@@ -20,9 +20,11 @@ export interface DownloadFileOptions {
  */
 export class DownloadError extends Error {
   override name = 'DownloadError'
+  readonly retryable: boolean
 
-  constructor(message: string, readonly retryable: boolean, options?: ErrorOptions) {
+  constructor(message: string, retryable: boolean, options?: ErrorOptions) {
     super(message, options)
+    this.retryable = retryable
   }
 }
 

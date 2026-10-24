@@ -17,14 +17,17 @@
   },
   "exports": {
     "./core": {
+      "@ergosphere-it/source": "./src/core.ts",
       "types": "./dist/core.d.mts",
       "default": "./dist/core.mjs"
     },
     "./electron-updater": {
+      "@ergosphere-it/source": "./src/electron-updater.ts",
       "types": "./dist/electron-updater.d.mts",
       "default": "./dist/electron-updater.mjs"
     },
     "./shell": {
+      "@ergosphere-it/source": "./src/shell.ts",
       "types": "./dist/shell.d.mts",
       "default": "./dist/shell.mjs"
     },

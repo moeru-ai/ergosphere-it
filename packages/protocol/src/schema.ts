@@ -2,8 +2,8 @@ import type { InferOutput } from 'valibot'
 
 import {
   array,
+  check,
   integer,
-  isoTimestamp,
   literal,
   maxValue,
   minLength,
@@ -22,10 +22,26 @@ const SCHEMA_VERSION = 1
 
 const sha256Schema = pipe(string(), regex(/^[0-9a-f]{64}$/, 'sha256 must be 64 lowercase hex characters'))
 const sha512Schema = pipe(string(), minLength(1))
-const seqSchema = pipe(number(), integer(), minValue(1))
-const sizeSchema = pipe(number(), integer(), minValue(0))
-const timestampSchema = pipe(string(), isoTimestamp())
-const hostApiSchema = pipe(number(), integer(), minValue(1))
+// Integers stay at or below 2^53 - 1, so every language reads the same value.
+const seqSchema = pipe(number(), integer(), minValue(1), maxValue(Number.MAX_SAFE_INTEGER))
+const sizeSchema = pipe(number(), integer(), minValue(0), maxValue(Number.MAX_SAFE_INTEGER))
+const hostApiSchema = pipe(number(), integer(), minValue(1), maxValue(Number.MAX_SAFE_INTEGER))
+
+/**
+ * A UTC time in RFC 3339 form with `Z`, for example `2026-10-24T00:00:00.000Z`, on a real calendar day.
+ *
+ * Offsets are not allowed, because some parsers read an offset such as `+08` as an invalid date, which turns off
+ * the expiry and replay checks.
+ */
+const timestampSchema = pipe(
+  string(),
+  regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/, 'a timestamp must be UTC in the form YYYY-MM-DDTHH:MM:SS.sssZ'),
+  check((value) => {
+    const time = Date.parse(value)
+
+    return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 19) === value.slice(0, 19)
+  }, 'a timestamp must be a real date and time'),
+)
 
 /** `realtime` follows every release of a channel. `nightly` moves once a day to the newest release that passed smoke tests. */
 const cadenceSchema = picklist(['realtime', 'nightly'])

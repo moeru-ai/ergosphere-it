@@ -3,10 +3,10 @@ import type { Cadence, Component, CoreManifest, Distribution, Pointer, ShellArti
 import type { Fetch, UpdateFileSystem } from './io'
 import type { ClientState } from './state'
 
-import { CandidateError, checkCoreCandidate, checkShellCandidate, DocumentError, ErgosphereError, isInRollout, verifyCoreManifest, verifyPointer, verifyShellManifest } from '@ergosphere-it/protocol'
+import { CandidateError, checkCoreCandidate, checkShellCandidate, DocumentError, ErgosphereError, isInRollout, SignatureError, verifyCoreManifest, verifyPointer, verifyShellManifest } from '@ergosphere-it/protocol'
 import { errorMessageFrom } from '@moeru/std/error'
 import { withRetry } from '@moeru/std/with-retry'
-import { sumBy } from 'es-toolkit'
+import { delay, sumBy } from 'es-toolkit'
 
 import { DownloadError, downloadFile } from './download'
 import { loadState, saveState } from './state'
@@ -130,14 +130,19 @@ export class UpdateClient {
   private readonly maxBootAttempts: number
   private readonly now: () => Date
   private readonly objects: ObjectStore
+  private readonly options: UpdateClientOptions
+  /** The tail of the state changes, so each change waits for the one before. */
+  private queue: Promise<unknown> = Promise.resolve()
   private readonly retries: number
+
   private readonly retryDelayMs: number
 
   private get statePath(): string {
     return this.path('state.json')
   }
 
-  constructor(private readonly options: UpdateClientOptions) {
+  constructor(options: UpdateClientOptions) {
+    this.options = options
     this.fs = options.fs
     this.fetch = options.fetch ?? ((url, init) => globalThis.fetch(url, init))
     this.now = options.now ?? (() => new Date())
@@ -158,6 +163,8 @@ export class UpdateClient {
     await this.update((state) => {
       if (state.staged !== seq)
         throw new Error(`activateInPlace: core ${seq} is not staged`)
+      if (state.blocked.includes(seq))
+        throw new CandidateError('blocked', `Core ${seq} is blocked on this install.`, seq)
 
       state.previous = state.current
       state.current = seq
@@ -171,44 +178,20 @@ export class UpdateClient {
    * It counts the boot attempt of the selected core. The host must call `markHealthy` when the app works.
    */
   async boot(): Promise<BootSelection & { rejected: { problem: string, seq: number }[] }> {
-    const state = await this.state()
-    const rejected: { problem: string, seq: number }[] = []
-    const accepted: { manifest: CoreManifest, seq: number }[] = []
-    const seen = new Set<number>()
-
-    for (const seq of [state.staged, state.current, state.previous]) {
-      if (seq === undefined || seen.has(seq))
-        continue
-
-      seen.add(seq)
-      const result = await this.inspect(seq, state)
-      if (result.problem === undefined && result.manifest) {
-        accepted.push({ manifest: result.manifest, seq })
-        continue
-      }
-
-      rejected.push({ problem: result.problem ?? 'unknown', seq })
-      if (result.permanent && !state.blocked.includes(seq))
-        state.blocked.push(seq)
-      if (!result.permanent && seq === state.staged)
-        state.deferred = seq
+    try {
+      return await this.exclusive(() => this.selectBoot())
     }
+    catch (error) {
+      // NOTICE:
+      // A file system error must not stop the app. The builtin core needs no state, so it boots without one.
+      // For example, antivirus software on Windows can hold state.json during a rename and fail it with EPERM.
+      // Removal condition: none. This is the last fallback of the boot order.
+      this.booted = undefined
+      const { builtin } = this.options
+      const problem = `the update state is unavailable: ${errorMessageFrom(error) ?? 'unknown error'}`
 
-    const chosen = accepted[0]
-    state.staged = undefined
-    state.current = chosen?.seq
-    state.previous = accepted[1]?.seq
-    const key = chosen ? String(chosen.seq) : BUILTIN_KEY
-    state.bootAttempts[key] = (state.bootAttempts[key] ?? 0) + 1
-    await saveState(this.fs, this.statePath, state)
-    this.booted = chosen?.seq
-
-    if (chosen)
-      return { components: chosen.manifest.components, dir: this.coreDir(chosen.seq), kind: 'external', rejected, seq: chosen.seq, version: chosen.manifest.version }
-
-    const { builtin } = this.options
-
-    return { components: builtin.components, dir: builtin.dir, kind: 'builtin', rejected, seq: builtin.seq, version: builtin.version }
+      return { components: builtin.components, dir: builtin.dir, kind: 'builtin', rejected: [{ problem, seq: builtin.seq }], seq: builtin.seq, version: builtin.version }
+    }
   }
 
   /**
@@ -265,7 +248,11 @@ export class UpdateClient {
 
   /** Removes cores and objects that no kept core uses. It keeps the core that this process booted. */
   async collectGarbage(): Promise<void> {
-    const state = await this.state()
+    // A deferred core older than the current core can never boot.
+    const state = await this.update((next) => {
+      if (next.deferred !== undefined && next.deferred <= (next.current ?? 0))
+        next.deferred = undefined
+    })
     const keep = new Set([state.staged, state.current, state.previous, state.deferred, this.booted].filter((seq): seq is number => seq !== undefined))
     const used = new Set<string>()
 
@@ -290,6 +277,9 @@ export class UpdateClient {
       if (!used.has(hash))
         await this.objects.remove(hash)
     }
+    // Partial files of failed downloads. A later download of the same object starts again.
+    for (const path of await this.objects.listPartial())
+      await this.fs.remove(path)
   }
 
   coreDir(seq: number): string {
@@ -381,7 +371,8 @@ export class UpdateClient {
     const target = pointer.core.seq
     // A client never moves back. When the channel serves less than this install has, it reports that and waits for a
     // newer release.
-    const ahead = Math.max(state.current ?? 0, state.staged ?? 0)
+    // A blocked core is not ahead. The install leaves it, so the channel can serve an older core again.
+    const ahead = Math.max(...[state.current, state.staged].filter(seq => seq !== undefined && !state.blocked.includes(seq)) as number[], 0)
     if (target < ahead)
       return { current: ahead, seq: target, status: 'server-behind' }
 
@@ -413,7 +404,7 @@ export class UpdateClient {
     checkCoreCandidate(manifest, {
       blocked: state.blocked,
       builtinSeq: this.options.builtin.seq,
-      currentSeq: Math.max(state.current ?? 0, state.staged ?? 0) || undefined,
+      currentSeq: ahead || undefined,
       host: this.options.host,
       platform: this.options.platform,
       product: this.options.product,
@@ -461,6 +452,14 @@ export class UpdateClient {
     return `downloaded bytes do not match sha256 ${hash}`
   }
 
+  /** Runs state changes one at a time, so two changes never read the same state and lose one write. */
+  private exclusive<T>(run: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(run)
+    this.queue = result.catch(() => {})
+
+    return result
+  }
+
   /** Fetches a small document, for example a pointer or a manifest. A stalled request fails after the idle timeout. */
   private async fetchBytes(url: string): Promise<Uint8Array<ArrayBuffer>> {
     const response = await this.fetch(url, { signal: AbortSignal.timeout(this.idleTimeoutMs) })
@@ -482,20 +481,36 @@ export class UpdateClient {
       return this.lastPointer.pointer
 
     const { baseUrl, cadence, channel, trustedKeys } = this.options
+    const target = `${channel}/${cadence}`
     const state = await this.state()
     const pointerUrl = `${baseUrl}/pointers/${channel}/${cadence}.json`
-    const pointer = await verifyPointer(
+    const fetchVerified = async () => verifyPointer(
       await this.fetchBytes(pointerUrl),
       await this.fetchText(`${pointerUrl}.sig`),
       trustedKeys,
-      { cadence, channel, lastIssuedAt: state.lastPointerIssuedAt, now, product: this.options.product },
+      { cadence, channel, lastIssuedAt: state.pointerIssuedAt?.[target], now, product: this.options.product },
     )
+    const pointer = await fetchVerified().catch(async (error: unknown) => {
+      // A pointer and its signature are two files, so a fetch between their uploads can get a new pointer with the
+      // old signature. Fetch both again once.
+      if (!(error instanceof SignatureError) || error.code !== 'invalid-signature')
+        throw error
+      await delay(this.retryDelayMs)
+
+      return fetchVerified()
+    })
     await this.update((next) => {
-      next.lastPointerIssuedAt = pointer.issuedAt
+      // A pointer issued in the future, for example by a CI runner with a fast clock, would make every later pointer
+      // look replayed. Remember at most the time of this check.
+      const issuedAt = Math.min(Date.parse(pointer.issuedAt), now.getTime())
+      next.pointerIssuedAt = { ...next.pointerIssuedAt, [target]: new Date(issuedAt).toISOString() }
       for (const seq of pointer.revoked ?? []) {
         if (!next.blocked.includes(seq))
           next.blocked.push(seq)
       }
+      // A staged core that is now revoked must not boot or activate.
+      if (next.staged !== undefined && next.blocked.includes(next.staged))
+        next.staged = undefined
     })
     this.lastPointer = { at: now.getTime(), pointer }
 
@@ -605,6 +620,53 @@ export class UpdateClient {
     }
   }
 
+  private async selectBoot(): Promise<BootSelection & { rejected: { problem: string, seq: number }[] }> {
+    const state = await this.state()
+    const rejected: { problem: string, seq: number }[] = []
+    const accepted: { manifest: CoreManifest, seq: number }[] = []
+    const seen = new Set<number>()
+    // A deferred core waits for a newer shell. Try it again, because this shell can be the newer one.
+    const deferred = state.deferred !== undefined && state.deferred > (state.current ?? 0) ? state.deferred : undefined
+
+    for (const seq of [state.staged, deferred, state.current, state.previous]) {
+      if (seq === undefined || seen.has(seq))
+        continue
+
+      seen.add(seq)
+      const result = await this.inspect(seq, state)
+      if (result.problem === undefined && result.manifest) {
+        accepted.push({ manifest: result.manifest, seq })
+        continue
+      }
+
+      rejected.push({ problem: result.problem ?? 'unknown', seq })
+      if (result.permanent && !state.blocked.includes(seq))
+        state.blocked.push(seq)
+      if (!result.permanent && (seq === state.staged || seq === deferred))
+        state.deferred = seq
+      else if (seq === state.deferred)
+        state.deferred = undefined
+    }
+
+    const chosen = accepted[0]
+    if (chosen && chosen.seq === state.deferred)
+      state.deferred = undefined
+    state.staged = undefined
+    state.current = chosen?.seq
+    state.previous = accepted[1]?.seq
+    const key = chosen ? String(chosen.seq) : BUILTIN_KEY
+    state.bootAttempts[key] = (state.bootAttempts[key] ?? 0) + 1
+    await saveState(this.fs, this.statePath, state)
+    this.booted = chosen?.seq
+
+    if (chosen)
+      return { components: chosen.manifest.components, dir: this.coreDir(chosen.seq), kind: 'external', rejected, seq: chosen.seq, version: chosen.manifest.version }
+
+    const { builtin } = this.options
+
+    return { components: builtin.components, dir: builtin.dir, kind: 'builtin', rejected, seq: builtin.seq, version: builtin.version }
+  }
+
   /**
    * Puts every object of a manifest into the store: from the store, from a core on disk, or from the network.
    *
@@ -663,10 +725,12 @@ export class UpdateClient {
   }
 
   private async update(change: (state: ClientState) => void): Promise<ClientState> {
-    const state = await this.state()
-    change(state)
-    await saveState(this.fs, this.statePath, state)
+    return this.exclusive(async () => {
+      const state = await this.state()
+      change(state)
+      await saveState(this.fs, this.statePath, state)
 
-    return state
+      return state
+    })
   }
 }

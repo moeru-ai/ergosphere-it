@@ -2,6 +2,7 @@ import type { SigningKey, TrustedKey } from '@ergosphere-it/protocol'
 
 import { checkShellCandidate, contentHash, createKeyPair, verifyCoreManifest, verifyPointer, verifyShellManifest } from '@ergosphere-it/protocol'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { parse } from 'yaml'
 
 import { buildCoreRelease, buildPointer, buildShellRelease, createSeq, feedFileName, reissuePointer, uploadStages } from './index'
 
@@ -95,9 +96,12 @@ describe('uploadStages', () => {
 })
 
 describe('createSeq', () => {
-  it('uses the clock, or goes above a minimum when the clock is behind it', () => {
-    expect(createSeq(0, 1_000)).toBe(1_000)
-    expect(createSeq(5_000, 1_000)).toBe(5_001)
+  it('uses the clock, goes above a minimum, and never repeats in one process', () => {
+    const now = Date.now() + 10_000_000
+
+    expect(createSeq(0, now)).toBe(now)
+    expect(createSeq(0, now)).toBe(now + 1)
+    expect(createSeq(now + 100, now)).toBe(now + 101)
   })
 })
 
@@ -115,17 +119,13 @@ describe('buildShellRelease', () => {
     expect(manifest!.key).toBe('shells/7/shell.json')
     expect(checkShellCandidate(verified, { host: 'electron', platform: 'win32-x64', product: 'app', shellSeq: 6 })).toMatchObject({ url: artifacts[1]!.url })
     expect(built.feeds.map(feed => feed.key)).toEqual(['shells/7/feeds/darwin-arm64/latest-mac.yml', 'shells/7/feeds/win32-x64/latest.yml'])
-    expect(decode(built.feeds[0]!.bytes)).toBe([
-      'version: "0.13.0"',
-      'files:',
-      '  - url: "https://downloads.test/AIRI-0.13.0-arm64-mac.zip"',
-      '    sha512: "bWFj"',
-      '    size: 100',
-      'path: "https://downloads.test/AIRI-0.13.0-arm64-mac.zip"',
-      'sha512: "bWFj"',
-      'releaseDate: "2026-10-24T00:00:00.000Z"',
-      '',
-    ].join('\n'))
+    expect(parse(decode(built.feeds[0]!.bytes))).toEqual({
+      files: [{ sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-0.13.0-arm64-mac.zip' }],
+      path: 'https://downloads.test/AIRI-0.13.0-arm64-mac.zip',
+      releaseDate: '2026-10-24T00:00:00.000Z',
+      sha512: 'bWFj',
+      version: '0.13.0',
+    })
   })
 
   it('rejects a relative installer URL', async () => {
@@ -133,7 +133,7 @@ describe('buildShellRelease', () => {
   })
 
   it('names the feed file that electron-updater reads on each platform', () => {
-    expect(['darwin-x64', 'win32-arm64', 'linux-x64', 'linux-arm64'].map(feedFileName)).toEqual(['latest-mac.yml', 'latest.yml', 'latest-linux.yml', 'latest-linux-arm64.yml'])
+    expect(['darwin-x64', 'win32-arm64', 'linux-x64', 'linux-arm64', 'linux-armv7l'].map(feedFileName)).toEqual(['latest-mac.yml', 'latest.yml', 'latest-linux.yml', 'latest-linux-arm64.yml', 'latest-linux-armv7l.yml'])
   })
 
   it('names the newest shell in the pointer, keeps it when signed again, and uploads shells before pointers', async () => {
@@ -143,5 +143,36 @@ describe('buildShellRelease', () => {
     expect(pointer.pointer.shell).toEqual({ seq: 7 })
     expect((await reissuePointer(pointer.pointer, signingKey)).pointer.shell).toEqual({ seq: 7 })
     expect(uploadStages([shell], [pointer]).map(stage => stage.map(file => file.key.split('/')[0]))).toEqual([['shells', 'shells', 'shells', 'shells'], ['pointers', 'pointers']])
+  })
+})
+
+describe('documents that clients reject', () => {
+  it('are refused before signing', async () => {
+    await expect(release({ 'main/index.mjs': 'main', 'renderer/aux.js': 'x' })).rejects.toThrow('not safe')
+    await expect(release({ 'main/index.mjs': 'main', 'renderer/App.js': 'a', 'renderer/app.js': 'b' })).rejects.toThrow('same file')
+    await expect(buildPointer({ cadence: 'realtime', channel: 'canary', core: { rollout: 12.5, seq: 1 }, product: 'app', signingKey })).rejects.toThrow()
+    await expect(buildPointer({ cadence: 'realtime', channel: 'canary', issuedAt: '2026-10-24T00:00:00+08', product: 'app', signingKey })).rejects.toThrow('timestamp')
+  })
+
+  it('keeps two builds in the same millisecond apart', async () => {
+    const build = (text: string) => buildCoreRelease({ components, files: [{ bytes: encode(text), path: 'main/index.mjs' }], host: 'electron', hostApi: { max: 1, min: 1 }, product: 'app', signingKey, version: '1' })
+    const [a, b] = await Promise.all([build('a'), build('b')])
+
+    expect(a.seq).not.toBe(b.seq)
+  })
+})
+
+describe('pointer content', () => {
+  it('keeps an empty cohort list, which serves no cohort', async () => {
+    const built = await buildPointer({ cadence: 'realtime', channel: 'canary', core: { cohorts: [], seq: 5 }, product: 'app', signingKey })
+
+    expect(built.pointer.core).toEqual({ cohorts: [], seq: 5 })
+  })
+
+  it('keeps the rollout salt when signed again, so installs stay in their buckets', async () => {
+    const first = await buildPointer({ cadence: 'realtime', channel: 'canary', core: { rollout: 30, salt: 'spring', seq: 5 }, product: 'app', signingKey })
+    const again = await reissuePointer(first.pointer, signingKey)
+
+    expect(again.pointer.core?.rollout).toEqual({ percentage: 30, salt: 'spring' })
   })
 })

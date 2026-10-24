@@ -65,7 +65,10 @@ One trusted Ed25519 key signs both layers. The shell contains the public key. Th
 
 - Each release has a `seq`, an integer that never decreases. The publish API assigns it. One counter serves all channels, so a release keeps its `seq` when it is promoted from canary to stable.
 - A `seq` must not depend on the state of the server. `createSeq(minimum)` gives the current time in milliseconds, or `minimum + 1` if that is larger. CI does not read the server to get it. When the server loses releases or goes back to a backup, the next release still gets a `seq` above every `seq` that a client already has.
-- A `seq` is never used for two releases. Do not pass a `seq` by hand unless you are sure no client has seen it.
+- A `seq` is never used for two releases. `createSeq` never returns the same value twice in one process, also within one millisecond. Build all cores of one release in one process, or pass each `seq` by hand. Do not pass a `seq` by hand unless you are sure no client has seen it.
+- All integers in documents stay at or below 2^53 - 1, so every language reads the same value.
+- All times in documents are UTC in RFC 3339 form with `Z`, for example `2026-10-24T00:00:00.000Z`, on a real calendar day. Offsets are not allowed, because some parsers read an offset such as `+08` as no date, which turns off the expiry and replay checks.
+- The publish API checks each document with the same rules as clients before it signs. It never signs a document that clients reject.
 - Each release also has a display version, for example `0.13.0-core.42`. Clients never compare display versions. This avoids the semver problem that T-196 found: `0.12.0.core.1` is not semver, and `0.12.0-core.1` sorts before `0.12.0`.
 - The builtin core of each installer records its `seq`. The client rejects an external core with a `seq` that is not greater than the builtin `seq`. So after a full update, old OTA cores do not come back.
 
@@ -169,9 +172,13 @@ The manifest is canonical JSON (JCS, RFC 8785). The signature covers the exact b
 }
 ```
 
-- Signed pointers stop a third party from serving an old pointer. The client stores the newest `issuedAt` it has seen and rejects older pointers. The client also rejects expired pointers. So a frozen mirror cannot hold clients on an old release for longer than `expiresAt` allows.
+- Signed pointers stop a third party from serving an old pointer. The client stores the newest `issuedAt` it has seen for each channel and cadence, and rejects older pointers of that channel and cadence. The client also rejects expired pointers. So a frozen mirror cannot hold clients on an old release for longer than `expiresAt` allows.
+- The client stores at most its own current time as the newest `issuedAt`. A pointer issued in the future, for example by a CI runner with a fast clock, then cannot make every later pointer look replayed.
+- A pointer and its `.sig` are two files. A client that gets `invalid-signature` for a pointer fetches both again once, because it can fetch between the two uploads.
+- `cohorts` limits a core to the listed cohorts. An empty list serves no cohort. A pointer without `cohorts` serves every cohort.
+- Signing a pointer again keeps its rollout salt, so installs stay in their buckets.
 - `stable` pointers have no `core` field by default. So stable gets no OTA because of an explicit rule. In the PoC, stable got no OTA only because of version comparison, by accident.
-- `revoked` lists bad core `seq` values. A client that runs a revoked core falls back to `previous` or `builtin` on the next check, and adds the `seq` to its local block list.
+- `revoked` lists bad core `seq` values. A client that runs a revoked core falls back to `previous` or `builtin` on the next check, and adds the `seq` to its local block list. A staged core that becomes revoked is dropped, and is never activated. A revoked core does not count as newer than what the channel serves, so the channel can serve an older core again.
 - Rollout bucket: the first 4 bytes of `sha256(salt + ":" + installId)` as a big-endian integer, mod 100. The client is in the rollout when the bucket is less than `percentage`. `installId` is a random ID in the data directory. The bucket does not use the user account, so the client sends no identity to the server.
 
 ### Client state
@@ -181,12 +188,14 @@ The SDK owns one directory, `<userData>/updates/`:
 ```text
 objects/sha256/<aa>/<sha256>      # local content store
 cores/<seq>/                      # materialized cores, read only after activation
-state.json                        # staged, current, previous, deferred, blocked, lastPointer
+state.json                        # staged, current, previous, deferred, blocked, pointerIssuedAt
 boot.json                         # boot attempts and last healthy seq
 ```
 
-- The SDK writes `state.json` and `boot.json` atomically: it writes a temporary file and renames it.
-- Boot order: staged, then current, then previous, then builtin. Each candidate must pass these checks:
+- The SDK writes `state.json` and `boot.json` atomically: it writes a temporary file, flushes it to disk, and renames it. On Windows, it retries a rename for a short time when another process holds the file.
+- The SDK runs state changes one at a time in a process, so two changes never lose a write.
+- When the SDK cannot read or write its state at boot, it boots the builtin core. The builtin core needs no state.
+- Boot order: staged, then deferred when it is newer than current, then current, then previous, then builtin. A deferred core waits for a newer shell, so each boot tries it again. Each candidate must pass these checks:
   1. The signature is valid and the key is trusted.
   2. The `seq` is greater than the builtin `seq` and is not blocked.
   3. The host API is in range.
@@ -208,6 +217,8 @@ boot.json                         # boot attempts and last healthy seq
 6. Build `cores/<seq>/` in a temporary directory, with copy-on-write clones when the file system supports them. Rename the directory into place.
 7. Set `staged` to the new `seq`.
 8. Delete cores and objects that `current`, `previous`, `staged`, `deferred`, and builtin no longer use. The PoC never deleted them.
+   - Delete partial `.part` files of failed downloads. A later download of the same object starts again.
+   - Drop a deferred core that is not newer than `current`, because it can never boot.
    - Never delete the core that the running process booted. A reload moves `current` and `previous`, but the main code of the booted core still runs, and the host can still load files from its directory. Examples are the preload script and lazy chunks. The next boot releases it.
 
 LobeHub also uses packs with zstd frames, HTTP Range reads, and binary patches. Version 1 of this protocol does not. The design leaves room for a `packs` field in a later schema.
@@ -286,8 +297,8 @@ A verifier returns the verified document, or fails with one reason code. The Typ
 | `untrusted-key` | `signature.keyId` is not in the trusted key list. |
 | `invalid-json` | The document is not valid UTF-8 JSON. |
 | `invalid-schema` | The document does not match its schema. |
-| `unsafe-path` | A file path is absolute, has a `.` or `..` segment, has a backslash or a drive letter, or is empty. |
-| `duplicate-path` | Two files have the same path. |
+| `unsafe-path` | A file path is absolute, is empty, or has a `.` or `..` segment, a backslash, a drive letter, a control character, one of `<>:"\|?*`, a Windows device name such as `aux.js`, or a segment that ends with a dot or a space. |
+| `duplicate-path` | Two files land on the same file on some file system: the same path, paths that differ only in case or in Unicode normalization, or a file that another path needs as a directory. |
 | `host-api-incompatible` | The shell host API is outside the core range. |
 | `platform-mismatch` | The core is for another platform. |
 | `not-newer` | The `seq` is not greater than the builtin or current `seq`. |

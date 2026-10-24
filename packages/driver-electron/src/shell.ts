@@ -88,6 +88,7 @@ export class Shell {
   private readonly client: UpdateClient
   private healthTimer: ReturnType<typeof setTimeout> | undefined
   private healthy = false
+  private readonly options: ShellOptions
   private pending: Pending | undefined
   /** A downloaded shell that waits for `apply()`. */
   private pendingShell: undefined | { seq: number, version: string }
@@ -96,9 +97,11 @@ export class Shell {
   /** Shells whose installer failed. The next attempt waits longer after each failure, as core downloads do. */
   private readonly shellFailures = new Map<number, { count: number, retryAt: number }>()
   private status: UpdateStatus = { state: 'idle' }
+
   private readonly statusListeners = new Set<(status: UpdateStatus) => void>()
 
-  constructor(private readonly options: ShellOptions) {
+  constructor(options: ShellOptions) {
+    this.options = options
     const dataDir = options.dataDir ?? join(app.getPath('userData'), 'ergosphere-it')
     registerCoreModuleHooks(options.entryUrl, join(dataDir, 'cores'))
 
@@ -229,6 +232,11 @@ export class Shell {
       this.restart(this.running.seq, 'the running core is revoked')
 
       return { seq: this.running.seq, status: 'restarting' }
+    }
+    // A core that waits for apply() and is now revoked must not activate. The client already dropped it.
+    if (this.pending && state.blocked.includes(this.pending.seq)) {
+      this.pending = undefined
+      this.setStatus({ state: 'idle' })
     }
 
     if (checked.status === 'rejected')

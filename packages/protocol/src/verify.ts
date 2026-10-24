@@ -92,24 +92,57 @@ export function isHostApiCompatible(shellHostApi: number, range: HostApiRange): 
   return range.min <= shellHostApi && shellHostApi <= range.max
 }
 
-/** Verifies the signature, schema, and file list of a core manifest. Throws an `ErgosphereError` subclass. */
-export async function verifyCoreManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<CoreManifest> {
-  const manifest = await verifySignedDocument(bytes, signature, trustedKeys, coreManifestSchema)
+/**
+ * Checks the schema and the rules of a core manifest, without its signature. Throws a `DocumentError`.
+ *
+ * Clients run it after the signature verifies. Publishers run it before they sign, so they never sign a manifest that
+ * clients reject.
+ */
+export function validateCoreManifest(document: unknown): CoreManifest {
+  const manifest = parseDocument(coreManifestSchema, document)
   checkFiles(manifest)
 
   return manifest
 }
 
+/** Checks the schema and the rules of a pointer, without its signature. Throws a `DocumentError`. */
+export function validatePointer(document: unknown): Pointer {
+  const pointer = parseDocument(pointerSchema, document)
+  if (Date.parse(pointer.expiresAt) <= Date.parse(pointer.issuedAt))
+    throw new DocumentError('invalid-schema', 'The pointer expiresAt is not after its issuedAt.')
+
+  return pointer
+}
+
+/** Checks the schema and the rules of a shell manifest, without its signature. Throws a `DocumentError`. */
+export function validateShellManifest(document: unknown): ShellManifest {
+  const manifest = parseDocument(shellManifestSchema, document)
+  const platforms = new Set<string>()
+  for (const artifact of manifest.artifacts) {
+    // electron-updater resolves a relative URL against its feed, which is not where installers live.
+    if (!URL.canParse(artifact.url))
+      throw new DocumentError('invalid-schema', `The installer URL ${artifact.url} is not absolute.`)
+    if (platforms.has(artifact.platform))
+      throw new DocumentError('invalid-schema', `The platform ${artifact.platform} has two installers.`)
+    platforms.add(artifact.platform)
+  }
+
+  return manifest
+}
+
+/** Verifies the signature, schema, and file list of a core manifest. Throws an `ErgosphereError` subclass. */
+export async function verifyCoreManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<CoreManifest> {
+  return validateCoreManifest(await verifySignature(bytes, signature, trustedKeys))
+}
+
 /** Verifies a pointer, then rejects pointers of another target, expired pointers, and replayed pointers. */
 export async function verifyPointer(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[], context: PointerContext): Promise<Pointer> {
-  const pointer = await verifySignedDocument(bytes, signature, trustedKeys, pointerSchema)
+  const pointer = validatePointer(await verifySignature(bytes, signature, trustedKeys))
   const issuedAt = Date.parse(pointer.issuedAt)
   const expiresAt = Date.parse(pointer.expiresAt)
 
   if (pointer.product !== context.product || pointer.channel !== context.channel || pointer.cadence !== context.cadence)
     throw new PointerError('pointer-mismatch', `The pointer is for ${pointer.product} ${pointer.channel}/${pointer.cadence}, and the client asked for ${context.product} ${context.channel}/${context.cadence}.`)
-  if (expiresAt <= issuedAt)
-    throw new DocumentError('invalid-schema', 'The pointer expiresAt is not after its issuedAt.')
   if (context.now.getTime() > expiresAt)
     throw new PointerError('pointer-expired', `The pointer expired at ${pointer.expiresAt}.`)
   if (context.lastIssuedAt !== undefined && issuedAt < Date.parse(context.lastIssuedAt))
@@ -118,22 +151,31 @@ export async function verifyPointer(bytes: Uint8Array<ArrayBuffer>, signature: s
   return pointer
 }
 
+/** Verifies the signature and the rules of a shell manifest. Throws an `ErgosphereError` subclass. */
 export async function verifyShellManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<ShellManifest> {
-  return verifySignedDocument(bytes, signature, trustedKeys, shellManifestSchema)
+  return validateShellManifest(await verifySignature(bytes, signature, trustedKeys))
 }
 
+/**
+ * Rejects unsafe paths, and paths that land on the same file on some file system.
+ *
+ * Two paths collide when they differ only in case or in Unicode normalization, as on default macOS and Windows
+ * volumes, or when one path is a directory of the other.
+ */
 function checkFiles(manifest: CoreManifest): void {
-  const seen = new Set<string>()
+  const seen = new Map<string, string>()
   let totalSize = 0
 
   for (const component of manifest.components) {
     for (const file of component.files) {
       if (!isSafeManifestPath(file.path))
         throw new DocumentError('unsafe-path', `The path ${JSON.stringify(file.path)} is not safe.`, file.path)
-      if (seen.has(file.path))
-        throw new DocumentError('duplicate-path', `The path ${file.path} appears twice.`, file.path)
 
-      seen.add(file.path)
+      const key = file.path.normalize('NFC').toLowerCase()
+      if (seen.has(key))
+        throw new DocumentError('duplicate-path', `The paths ${seen.get(key)} and ${file.path} are the same file on some file systems.`, file.path)
+
+      seen.set(key, file.path)
       totalSize += file.size
     }
 
@@ -141,10 +183,28 @@ function checkFiles(manifest: CoreManifest): void {
       throw new DocumentError('invalid-schema', `The entry ${component.entry} is not a file of its component.`, component.entry)
   }
 
+  // A file at `a` and a file at `a/b` cannot both exist, because `a` must be a directory for the second one.
+  for (const [key, path] of seen) {
+    for (let slash = key.indexOf('/'); slash !== -1; slash = key.indexOf('/', slash + 1)) {
+      const parent = seen.get(key.slice(0, slash))
+      if (parent !== undefined)
+        throw new DocumentError('duplicate-path', `The path ${parent} is a file, and ${path} needs it as a directory.`, path)
+    }
+  }
+
   if (totalSize !== manifest.totalSize)
     throw new DocumentError('invalid-schema', `totalSize is ${manifest.totalSize}, and the files add up to ${totalSize}.`)
   if (manifest.hostApi.min > manifest.hostApi.max)
     throw new DocumentError('invalid-schema', 'hostApi.min is greater than hostApi.max.')
+}
+
+/** Parses a document with its schema. Throws a `DocumentError` with code `invalid-schema`. */
+function parseDocument<TSchema extends GenericSchema>(schema: TSchema, document: unknown): InferOutput<TSchema> {
+  const parsed = safeParse(schema, document)
+  if (!parsed.success)
+    throw new DocumentError('invalid-schema', parsed.issues.map(issue => issue.message).join('; '), undefined, { cause: new ValiError(parsed.issues) })
+
+  return parsed.output
 }
 
 function readKeyId(document: unknown): string | undefined {
@@ -161,17 +221,12 @@ function readKeyId(document: unknown): string | undefined {
 }
 
 /**
- * Verifies a signed document and parses it with a schema.
+ * Verifies the signature of a document and returns the parsed JSON.
  *
  * The JSON is parsed first only to read `signature.keyId`. No other field is used before the signature over the
  * raw bytes verifies with that trusted key.
  */
-async function verifySignedDocument<TSchema extends GenericSchema>(
-  bytes: Uint8Array<ArrayBuffer>,
-  signature: string,
-  trustedKeys: readonly TrustedKey[],
-  schema: TSchema,
-): Promise<InferOutput<TSchema>> {
+async function verifySignature(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<unknown> {
   const signatureBytes = decodeBase64(signature)
   if (!signatureBytes)
     throw new SignatureError('invalid-signature', 'The signature is not base64.')
@@ -188,17 +243,21 @@ async function verifySignedDocument<TSchema extends GenericSchema>(
   const key = trustedKeys.find(candidate => candidate.keyId === keyId)
   if (!key)
     throw new SignatureError('untrusted-key', keyId === undefined ? 'The document names no signing key.' : `The key ${keyId} is not trusted.`, keyId)
-  if (!await verifyBytes(bytes, signatureBytes, key))
+  const verified = await verifyBytes(bytes, signatureBytes, key).catch((error: unknown) => {
+    throw new SignatureError('untrusted-key', `The trusted key ${key.keyId} is not a valid Ed25519 public key.`, key.keyId, { cause: error })
+  })
+  if (!verified)
     throw new SignatureError('invalid-signature', `The signature does not verify with the key ${key.keyId}.`, key.keyId)
 
-  const parsed = safeParse(schema, document)
-  if (!parsed.success)
-    throw new DocumentError('invalid-schema', parsed.issues.map(issue => issue.message).join('; '), undefined, { cause: new ValiError(parsed.issues) })
-
-  return parsed.output
+  return document
 }
 
 const drivePattern = /^[a-z]:/i
+// Characters that Windows does not allow in a file name, and control characters.
+// eslint-disable-next-line no-control-regex
+const reservedCharacterPattern = /[\u0000-\u001F<>:"|?*]/
+// Device names that Windows reserves, with or without an extension.
+const reservedNamePattern = /^(?:con|prn|aux|nul|com\d|lpt\d)(?:\..*)?$/i
 
 /** An install is in a rollout when its bucket is less than the percentage. No rollout means everyone. */
 export async function isInRollout(rollout: Rollout | undefined, installId: string): Promise<boolean> {
@@ -209,19 +268,25 @@ export async function isInRollout(rollout: Rollout | undefined, installId: strin
 }
 
 /**
- * Checks that a manifest file path stays inside its core directory on every platform.
+ * Checks that a manifest file path stays inside its core directory and names one file on every platform.
  *
- * A safe path is relative, uses `/` as its only separator, and has no empty, `.`, or `..` segment.
- * It has no backslash, no drive letter, and no NUL character.
+ * A safe path is relative, uses `/` as its only separator, and has no empty, `.`, or `..` segment. It has no
+ * backslash, no drive letter, no control character, and none of `<>:"|?*`. No segment is a Windows device name, such
+ * as `aux.js`, and no segment ends with a dot or a space, which Windows removes.
  */
 export function isSafeManifestPath(path: string): boolean {
-  if (path.length === 0 || path.includes('\\') || path.includes('\0'))
+  if (path.length === 0 || path.includes('\\') || reservedCharacterPattern.test(path))
     return false
 
   if (path.startsWith('/') || drivePattern.test(path))
     return false
 
-  return path.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..')
+  return path.split('/').every(segment => segment !== ''
+    && segment !== '.'
+    && segment !== '..'
+    && !segment.endsWith('.')
+    && !segment.endsWith(' ')
+    && !reservedNamePattern.test(segment))
 }
 
 /**
