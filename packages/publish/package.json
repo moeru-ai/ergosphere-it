@@ -1,7 +1,7 @@
 {
   "name": "@ergosphere-it/publish",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Publishing library of ergosphere-it: create keys, pack and sign cores, and write channel pointers",
   "author": {
     "name": "Moeru AI Project AIRI Team",
