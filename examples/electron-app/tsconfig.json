@@ -12,6 +12,7 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.vue",
-    "electron.vite.config.ts"
+    "electron.vite.config.ts",
+    "ergo.config.ts"
   ]
 }

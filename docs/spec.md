@@ -252,7 +252,7 @@ The SDK compares the file hashes of the staged bundle and the running bundle, co
 
 | Change | Requires |
 | --- | --- |
-| Only `web` files | `reload`: the windows reload in place, and the process keeps running. Reload the window that owns the synced stores (the leader window) first, then the other windows. For transparent stage windows, swap the window instead of reloading it, to avoid about 300 ms of blank frames. |
+| Only `web` files | `reload`: the windows reload in place, and the process keeps running. Every window that shows a page of the old bundle moves to the same page of the new one, with its query and hash. The window that owns the synced stores (the leader window) reloads first, then the other windows. For transparent stage windows, a later version can swap the window instead of reloading it, to avoid about 300 ms of blank frames. |
 | `electron-main`, `electron-preload`, or app resources | `restart`: the app restarts at the next safe moment, or when the user confirms. A staged bundle also takes effect on the next start. |
 | A newer installer | `install`: the app quits, and the platform installer runs. |
 
@@ -264,13 +264,14 @@ The apply mode of the app decides when an update takes effect:
 
 ### Health and rollback
 
-- After a reload or a start, the page calls `markBundleHealthy()` when the app is usable, for example after its stores load and the first screen renders.
+- After a reload or a start, the page calls `markBundleHealthy()` when the app is usable, for example after its stores load and the first screen renders. With a leader window, only the report of the leader counts.
+- The app sets the timeouts. A page that starts slowly for a good reason asks for more time with `delayHealthCheck(seconds)`, up to five minutes in all for one check. So a short timeout catches a broken bundle fast, and a slow start still passes.
   - The PoC reported healthy when the main window finished loading. A renderer that crashed right after that still counted as healthy.
-- If the report does not arrive in 15 seconds after a reload, the SDK rolls back in place:
+- If the report does not arrive in 15 seconds after a reload (the default), the SDK rolls back in place:
   1. It points `current` back to `previous`.
   2. It blocks the bad release, and records the rollback with the reason `not-marked-healthy`.
   3. It reloads the windows from the previous bundle.
-- After a start, the launcher waits 60 seconds. Without a report, it restarts the app. The client counts boot attempts. After 3 boots without a report, it blocks the bundle, records the rollback, and selects the next candidate.
+- After a start, the launcher waits 60 seconds (the default). Without a report, it restarts the app. The client counts boot attempts. After 3 boots (the default) without a report, it blocks the bundle, records the rollback, and selects the next candidate.
 - When the main code of a downloaded bundle throws at start, the launcher blocks the bundle at once, records the rollback with the reason `crashed-at-launch`, and restarts. A crash at import is not a slow start, so another attempt does not help.
 - When the installer bundle fails, nothing is left to fall back to. The launcher does not restart in a loop. It opens a minimal rescue window that tells the user to install the app again, with the error text for the developers.
 - A bundle that reports healthy and is broken later is not rolled back by the client. The publisher withdraws it, and every client leaves it at the next check.
@@ -385,6 +386,7 @@ Blind reviews by frontend developers decided the names. Readers who had never se
 2. The cadence of a channel is gone. A channel that moves once a day is a channel of its own, and CI promotes releases into it.
 3. The launcher detects store builds and the development server. The app does not pass a distribution.
 4. The page reports health with `markBundleHealthy()`.
+5. The app states its settings in `ergo.config.ts` with `defineConfig()`, not in `package.json`. The build reads the file, so the app does not read it at run time.
 
 ## Open questions
 

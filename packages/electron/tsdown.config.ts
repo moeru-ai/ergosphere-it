@@ -6,6 +6,7 @@ export default defineConfig({
   dts: true,
   entry: {
     'cli': 'src/cli/index.ts',
+    'config': 'src/define-config.ts',
     'electron-updater': 'src/electron-updater.ts',
     'launcher': 'src/launcher.ts',
     'main': 'src/main.ts',

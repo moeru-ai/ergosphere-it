@@ -2,6 +2,7 @@
 export const IPC = {
   apply: 'ergosphere-it:apply',
   check: 'ergosphere-it:check',
+  delayHealthCheck: 'ergosphere-it:delay-health-check',
   dismissRollback: 'ergosphere-it:dismiss-rollback',
   getActiveBundle: 'ergosphere-it:get-active-bundle',
   getStatus: 'ergosphere-it:get-status',

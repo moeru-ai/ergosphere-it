@@ -4,7 +4,7 @@
 declare module 'virtual:ergosphere-it/config' {
   import type { LauncherConfig } from '@ergosphere-it/electron/launcher'
 
-  /** The settings of the `updates` field of `package.json`, resolved at build time. */
+  /** The settings of `ergo.config.ts`, resolved at build time. */
   const config: LauncherConfig
   export default config
 }

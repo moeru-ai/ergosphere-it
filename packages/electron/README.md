@@ -22,29 +22,27 @@ Do not use it when:
 - your app is only on the Mac App Store or the Microsoft Store. Store rules forbid downloaded code, and the launcher turns updates off there.
 - every release changes native modules or Electron. Those changes need a full installer anyway.
 
-## 1. Configure it in `package.json`
+## 1. Configure it in `ergo.config.ts`
 
-```jsonc
-{
-  "name": "my-app",
-  "version": "1.5.0",
-  "main": "out/launcher/index.mjs",
-  "updates": {
-    "feedUrl": "https://updates.example.com",
-    "channel": "stable",
-    "nativeVersion": 1,
-    "publicKeys": ["ed25519:<base64 public key>"]
-  }
-}
+Put `ergo.config.ts` next to `package.json`:
+
+```ts
+import { defineConfig } from '@ergosphere-it/electron/config'
+
+export default defineConfig({
+  channel: 'stable',
+  feedUrl: 'https://updates.example.com',
+  nativeVersion: 1,
+  publicKeys: ['ed25519:<base64 public key>'],
+})
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `main` | The launcher. Electron starts it, and it starts your bundle. |
-| `updates.feedUrl` | The URL where the app reads updates: static files, for example a bucket behind a CDN. |
-| `updates.channel` | The channel that this build follows, for example `stable` or `beta`. The app can change it at run time. |
-| `updates.nativeVersion` | An integer for what only an installer can change. Increase it when you upgrade Electron, change a native module, or upgrade this package. Main and preload changes do not need it. |
-| `updates.publicKeys` | The keys that sign your updates. `ergosphere-it keygen` prints one. The private key stays in CI. |
+| `feedUrl` | The URL where the app reads updates: static files, for example a bucket behind a CDN. |
+| `channel` | The channel that this build follows, for example `stable` or `beta`. The app can change it at run time. |
+| `nativeVersion` | An integer for what only an installer can change. Increase it when you upgrade Electron, change a native module, or upgrade this package. Main and preload changes do not need it. |
+| `publicKeys` | The keys that sign your updates. `ergosphere-it keygen` prints one. The private key stays in CI. |
 
 Optional fields:
 
@@ -52,8 +50,19 @@ Optional fields:
 | --- | --- | --- |
 | `applyMode` | `prompt` | `prompt` waits for `applyUpdate()`. `auto` reloads page-only updates at once, and still waits for restarts and installs. `next-launch` waits for the next start. |
 | `checkIntervalMinutes` | `60` | Minutes between automatic checks. |
+| `health.launchTimeout` | `60` | Seconds for a new bundle to call `markBundleHealthy()` after a start |
+| `health.reloadTimeout` | `15` | Seconds for a new bundle to call `markBundleHealthy()` after a page-only update |
+| `health.maxLaunchAttempts` | `3` | Starts without a health report before the app leaves the bundle |
 | `disabled` | `false` | Turns updates off, for example in a Steam build. |
 | `singleInstance` | `true` | Quits a second instance at start. With `false`, a second instance runs without changing the update state. |
+
+The build reads the file and writes the settings into the launcher, so the app does not read it at run time. It can compute values, for example a channel from an environment variable of CI.
+
+Set `main` in `package.json` to the launcher:
+
+```json
+{ "main": "out/launcher/index.mjs" }
+```
 
 The app never states the product name, the release IDs, or the platform:
 
@@ -75,11 +84,11 @@ export default defineConfig(withUpdates({
 }))
 ```
 
-`withUpdates()` keeps the electron-vite source layout: `src/main/index.ts`, `src/preload/index.ts`, and `src/renderer/index.html`. The build writes:
+`withUpdates()` keeps the electron-vite source layout: `src/main/index.ts`, `src/preload/index.ts`, and `src/renderer/index.html`. An app with several HTML entries keeps its own `renderer.build.rolldownOptions.input`, and every page goes into the bundle. The build writes:
 
 | Path | Content |
 | --- | --- |
-| `out/launcher/index.mjs` | The launcher, with the settings of `package.json` built in |
+| `out/launcher/index.mjs` | The launcher, with the settings of `ergo.config.ts` built in |
 | `out/bundle/` | `main/`, `preload/` (CommonJS, so it works in a sandbox), and `renderer/` |
 | `out/bundle.json` | The files of the bundle with their hashes, the release IDs, and the version |
 
@@ -144,9 +153,35 @@ onMounted(async () => {
 </template>
 ```
 
-Call `markBundleHealthy()` when the app is usable: after the stores load and the first screen renders, not only after mount. A new bundle that does not call it in time goes back to the bundle before it: 15 seconds after a reload, and 60 seconds and three starts after a restart.
+Call `markBundleHealthy()` when the app is usable: after the stores load and the first screen renders, not only after mount. A new bundle that does not call it in time goes back to the bundle before it:
 
-Without Vue, use `@ergosphere-it/electron/renderer`: `markBundleHealthy()`, `watchUpdaterStatus(listener)`, and `getPageUpdater()`. In a page without `exposeUpdater()`, for example a web build of the same page, these functions do nothing.
+- After a page-only update, the windows reload. Without a report in `health.reloadTimeout` seconds (15 by default), the windows go back to the bundle before it in place.
+- After a restart, the launcher waits `health.launchTimeout` seconds (60 by default). Without a report, it restarts. After `health.maxLaunchAttempts` starts (3 by default), it leaves the bundle.
+
+When a start is slow for a good reason, for example a large model, ask for more time. Keep the timeouts short, so a broken bundle still goes back fast:
+
+```ts
+import { delayHealthCheck, markBundleHealthy } from '@ergosphere-it/electron/vue'
+
+delayHealthCheck(30) // seconds
+await loadModel()
+markBundleHealthy()
+```
+
+`delayHealthCheck()` adds at most five minutes in all to one health check, so a bundle that hangs still goes back.
+
+Without Vue, use `@ergosphere-it/electron/renderer`: `markBundleHealthy()`, `delayHealthCheck(seconds)`, `watchUpdaterStatus(listener)`, and `getPageUpdater()`. In a page without `exposeUpdater()`, for example a web build of the same page, these functions do nothing.
+
+## Many windows
+
+After a page-only update, the launcher moves every window that shows a page of the old bundle to the same page of the new one. It keeps the query and the hash, so each window stays on the route that it shows then. Windows do not need to register.
+
+- **Load pages from the active bundle.** Use `loadActiveBundle(window, { hash: '/settings' })`, or, when the app has its own loader, `activeBundle.pageUrl({ hash: '/settings' })`. Do not build page paths from `import.meta.dirname`: after a page-only update, the main code still runs from the bundle that started, and new windows would load old pages.
+- **Load other HTML entries** with `page`, for example `loadActiveBundle(window, { page: 'beat-sync.html' })`.
+- **Name the leader window.** `updater.leaderWindow = window` names the window that owns the state that other windows sync from. It reloads first, and only its health report counts. Without it, every window reloads at once, and the first report of any window counts.
+- **Follow the switch.** `updater.onBundleChange(listener)` calls the listener after a page-only update or a rollback in place, for code that keeps paths of the bundle.
+
+Transparent windows show a short blank frame while they reload.
 
 ## The status
 
@@ -188,7 +223,7 @@ Without Vue, use `@ergosphere-it/electron/renderer`: `markBundleHealthy()`, `wat
 
 ## Channels, rollouts, and cohorts
 
-- **Channel**: a stream of releases, for example `stable`, `beta`, or `beta-daily`. Set the default in `package.json`. Set `updater.channel = 'beta'` to switch at run time. The app keeps the choice. An app never goes back to an older release, so a switch to a channel that is behind waits for that channel to catch up.
+- **Channel**: a stream of releases, for example `stable`, `beta`, or `beta-daily`. Set the default in `ergo.config.ts`. Set `updater.channel = 'beta'` to switch at run time. The app keeps the choice. An app never goes back to an older release, so a switch to a channel that is behind waits for that channel to catch up.
 - **Rollout**: a percentage of installs that get a bundle. Each install keeps its bucket, so a higher percentage keeps the installs that already had the bundle.
 - **Cohorts**: names of groups, for example `['qa']`. Set `updater.cohorts` in main. A bundle published to cohorts goes only to installs in them. Cohorts filter releases. They are not access control, because the app sets them.
 - **Daily channel**: a channel that CI promotes once a day, for example from `beta` to `beta-daily`.
@@ -209,7 +244,7 @@ Make a key pair once:
 pnpm exec ergosphere-it keygen
 ```
 
-Put the public key into `updates.publicKeys`, and the private key into the CI secret `UPDATES_SIGNING_KEY`.
+Put the public key into `publicKeys` of `ergo.config.ts`, and the private key into the CI secret `UPDATES_SIGNING_KEY`.
 
 ```yaml
 # An OTA update, for example on manual dispatch
@@ -244,14 +279,14 @@ For other upload tools, `@ergosphere-it/electron/release` builds the signed file
 
 ## A custom launcher
 
-The generated launcher reads all settings from `package.json`. When the app must pass more, for example an installer for tests, write a launcher and pass it to `withUpdates(config, { launcher: 'src/launcher.ts' })`:
+The generated launcher takes all settings from `ergo.config.ts`. When the app must pass more, for example an installer for tests, write a launcher and pass it to `withUpdates(config, { launcher: 'src/launcher.ts' })`:
 
 ```ts
 import config from 'virtual:ergosphere-it/config'
 
 import { startLauncher } from '@ergosphere-it/electron/launcher'
 
-void startLauncher({ ...config, launcherUrl: import.meta.url, reloadHealthTimeoutMs: 30_000 })
+void startLauncher({ ...config, installer: myInstaller, launcherUrl: import.meta.url })
 ```
 
 Add `"types": ["@ergosphere-it/electron/virtual"]` to the tsconfig of the main process for the virtual module.
@@ -264,11 +299,12 @@ Set `ERGOSPHERE_IT_LOG` to a file path. The launcher writes each event as one JS
 
 | Entry | Use in | Exports |
 | --- | --- | --- |
+| `@ergosphere-it/electron/config` | `ergo.config.ts` | `defineConfig(config)` |
 | `@ergosphere-it/electron/vite` | `electron.vite.config.ts` | `withUpdates(config, options)` |
-| `@ergosphere-it/electron/main` | main | `activeBundle`, `loadActiveBundle(window, options)`, `updater`, `markBundleHealthy()` |
+| `@ergosphere-it/electron/main` | main | `activeBundle` (with `pageUrl()`), `loadActiveBundle(window, options)`, `updater` (with `leaderWindow`, `onBundleChange()`, `delayHealthCheck()`), `markBundleHealthy()` |
 | `@ergosphere-it/electron/preload` | preload | `exposeUpdater()` |
-| `@ergosphere-it/electron/renderer` | page | `markBundleHealthy()`, `watchUpdaterStatus(listener)`, `getPageUpdater()` |
-| `@ergosphere-it/electron/vue` | page with Vue | `useUpdater()`, `markBundleHealthy()` |
+| `@ergosphere-it/electron/renderer` | page | `markBundleHealthy()`, `delayHealthCheck(seconds)`, `watchUpdaterStatus(listener)`, `getPageUpdater()` |
+| `@ergosphere-it/electron/vue` | page with Vue | `useUpdater()`, `markBundleHealthy()`, `delayHealthCheck(seconds)` |
 | `ergosphere-it` | CI | the command above |
 | `@ergosphere-it/electron/release` | CI scripts | `bundleReleaseFromBuild()`, `installerReleaseFromBuild()`, `readBuildInfo()` |
 | `@ergosphere-it/electron/launcher` | a custom launcher | `startLauncher(options)` |

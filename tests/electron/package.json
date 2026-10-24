@@ -10,14 +10,6 @@
     "e2e": "node scripts/e2e.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "updates": {
-    "feedUrl": "http://127.0.0.1:4100",
-    "channel": "canary",
-    "nativeVersion": 1,
-    "publicKeys": [
-      "ed25519:MCowBQYDK2VwAyEAozeq+nTTpK7tLalY+wuh3B4cDTnP3+evtn1GQ3sQrbc="
-    ]
-  },
   "dependencies": {
     "@ergosphere-it/electron": "workspace:*",
     "electron-updater": "catalog:",

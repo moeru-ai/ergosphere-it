@@ -35,7 +35,7 @@ const electronBinary = electronPath as unknown as string
 export type AppEvent
   = | LauncherEvent
     | { mainTag: string, releaseId: number, type: 'bundle-main' }
-    | { releaseId: number, type: 'page-mounted', version: string }
+    | { releaseId: number, type: 'page-mounted', url: string, version: string }
 
 export interface BuildOptions {
   /** Build the installed app, so Electron starts it. */
@@ -71,6 +71,8 @@ export interface Variant {
   label: string
   mainTag?: string
   noHealth?: boolean
+  /** The page asks for more health time, then reports after the usual timeout. */
+  slowHealth?: boolean
 }
 
 export interface WorkspaceOptions {
@@ -354,6 +356,7 @@ async function buildApp(out: string, releaseId: number, variant: Variant): Promi
     TEST_MAIN_TAG: variant.mainTag ?? '1',
     TEST_NO_HEALTH: variant.noHealth ? '1' : '0',
     TEST_OUT: out,
+    TEST_SLOW_HEALTH: variant.slowHealth ? '1' : '0',
     // The installed app is installer release 1, so installer releases of the test are newer.
     UPDATES_INSTALLER_RELEASE_ID: '1',
     UPDATES_RELEASE_ID: String(releaseId),

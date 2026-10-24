@@ -6,7 +6,7 @@ import { onScopeDispose, readonly, shallowRef } from 'vue'
 
 import { getPageUpdater, watchUpdaterStatus } from './renderer'
 
-export { markBundleHealthy } from './renderer'
+export { delayHealthCheck, markBundleHealthy } from './renderer'
 export type * from './status'
 
 export interface UseUpdater {

@@ -5,6 +5,14 @@ import { PAGE_GLOBAL } from './ipc'
 export type * from './status'
 
 /**
+ * Gives a slow start more time: adds seconds to the time before a new bundle must call `markBundleHealthy()`, up to five
+ * minutes in all. Call it while the app still loads, for example a large model.
+ */
+export function delayHealthCheck(seconds: number): void {
+  getPageUpdater()?.delayHealthCheck(seconds)
+}
+
+/**
  * Returns the updater that `exposeUpdater()` gave the page, or `undefined` when the page runs without it, for example
  * as a web build.
  */

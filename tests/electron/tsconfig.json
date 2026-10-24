@@ -13,6 +13,7 @@
   "include": [
     "src/**/*.ts",
     "scripts/**/*.ts",
-    "electron.vite.config.ts"
+    "electron.vite.config.ts",
+    "ergo.config.ts"
   ]
 }

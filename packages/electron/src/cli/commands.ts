@@ -12,7 +12,7 @@ import { parse } from 'yaml'
 
 import { bundleReleaseFromBuild, installerReleaseFromBuild, readBuildInfo } from '../release'
 
-/** The prefix of keys in `UPDATES_SIGNING_KEY` and in `updates.publicKeys`. */
+/** The prefix of keys in `UPDATES_SIGNING_KEY` and in `publicKeys` of `ergo.config.ts`. */
 const KEY_PREFIX = 'ed25519:'
 
 export interface BundleCommandOptions {
@@ -39,7 +39,7 @@ export interface InstallerCommandOptions {
   signingKey: SigningKey
 }
 
-/** Creates a key pair. The private key goes into the CI secret `UPDATES_SIGNING_KEY`, the public key into `package.json`. */
+/** Creates a key pair. The private key goes into the CI secret `UPDATES_SIGNING_KEY`, the public key into `ergo.config.ts`. */
 export async function keygen(): Promise<{ privateKey: string, publicKey: string }> {
   const { signingKey, trustedKey } = await createKeyPair()
 

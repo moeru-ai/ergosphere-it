@@ -26,7 +26,7 @@ export default defineConfig(withUpdates({
   },
   renderer: {
     // Only the page reads this constant, so a variant that never reports health is still a page-only update.
-    define: { __TEST_NO_HEALTH__: JSON.stringify(env.TEST_NO_HEALTH === '1') },
+    define: { __TEST_NO_HEALTH__: JSON.stringify(env.TEST_NO_HEALTH === '1'), __TEST_SLOW_HEALTH__: JSON.stringify(env.TEST_SLOW_HEALTH === '1') },
     plugins: [Vue(), pageAsset(label, assetBytes)],
     resolve: { alias: [{ find: /^@ergosphere-it\/electron\/vue$/, replacement: resolve(import.meta.dirname, 'src/vue-shim.ts') }] },
     root: join(example, 'renderer'),

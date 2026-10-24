@@ -9,8 +9,8 @@ The end-to-end test and the release demo of `@ergosphere-it/electron`. They run 
 | Path | Role |
 | --- | --- |
 | `src/launcher.ts` | A custom launcher with settings from the environment, and an installer that downloads a file and quits instead of installing it |
-| `src/main.ts` | A wrapper around the main of the example. It plays the user: it applies every ready update and closes rollback notices. It logs when a page mounts, then loads the example main. |
-| `src/vue-shim.ts` | Replaces `@ergosphere-it/electron/vue` in the page. It logs the health report, and skips it for a variant that never reports health. |
+| `src/main.ts` | A wrapper around the main of the example. It plays the user: it applies every ready update and closes rollback notices. It opens a second window that it loads itself and moves to another route, logs when a page mounts, then loads the example main. |
+| `src/vue-shim.ts` | Replaces `@ergosphere-it/electron/vue` in the page. It logs the health report, skips it for a variant that never reports health, and asks for more time first for a slow variant. |
 
 The launcher writes its events to `ERGOSPHERE_IT_LOG`, one JSON line each. The test events of `src/main.ts` go to the same file.
 
@@ -24,6 +24,7 @@ A test variant changes one thing:
 | `TEST_ASSET_MB` | The size of a page asset, so a download takes time |
 | `TEST_CRASH` | The bundle main throws at start, so the launcher rolls it back |
 | `TEST_NO_HEALTH` | The page never reports health, so the launcher rolls it back. Only the page reads it, so main code stays the same. |
+| `TEST_SLOW_HEALTH` | The page calls `delayHealthCheck()`, then reports after the usual timeout |
 
 ## Run it
 

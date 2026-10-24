@@ -39,11 +39,11 @@ function e2eInstaller(): Installer {
 startLauncher({
   ...config,
   applyMode: env.ERGOSPHERE_APPLY_MODE === 'auto' ? 'auto' : 'prompt',
-  bootHealthTimeoutMs: Number(env.ERGOSPHERE_BOOT_HEALTH_MS ?? 60_000),
   checkIntervalMs: Number(env.ERGOSPHERE_CHECK_MS ?? config.checkIntervalMs),
   feedUrl: env.ERGOSPHERE_FEED_URL ?? config.feedUrl,
   installer: env.ERGOSPHERE_E2E_INSTALLER ? e2eInstaller() : undefined,
   launcherUrl: import.meta.url,
+  launchHealthTimeoutMs: Number(env.ERGOSPHERE_BOOT_HEALTH_MS ?? 60_000),
   reloadHealthTimeoutMs: Number(env.ERGOSPHERE_HEALTH_MS ?? 15_000),
   // Each test run signs with its own key.
   trustedKeys: env.ERGOSPHERE_TRUSTED_KEYS ? JSON.parse(env.ERGOSPHERE_TRUSTED_KEYS) as TrustedKey[] : config.trustedKeys,

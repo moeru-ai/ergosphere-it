@@ -20,6 +20,8 @@ export interface PageUpdater {
   applyUpdate: () => Promise<void>
   /** Checks now, also when a failed download waits for its retry time. */
   checkForUpdates: () => Promise<UpdaterStatus>
+  /** Adds seconds to the running health check, up to five minutes in all. */
+  delayHealthCheck: (seconds: number) => void
   dismissRollback: () => Promise<void>
   /** The bundle that runs now, for example to show its version. */
   getActiveBundle: () => Promise<BundleInfo>

@@ -13,7 +13,7 @@ const usage = `Usage: ergosphere-it <command> [options]
 
 Commands:
   keygen
-      Creates a key pair. Put the public key into "updates.publicKeys" of package.json, and the private key into the
+      Creates a key pair. Put the public key into "publicKeys" of ergo.config.ts, and the private key into the
       CI secret UPDATES_SIGNING_KEY.
   publish bundle --channel <name> [--rollout <percent>] [--cohorts <a,b>] [--min-native-version <n>]
       Uploads the bundle of the build output and serves it on a channel.
@@ -79,7 +79,7 @@ async function run(): Promise<string> {
   if (command === 'keygen') {
     const { privateKey, publicKey } = await keygen()
 
-    return `Public key, for "updates.publicKeys" in package.json:\n  ${publicKey}\n\nPrivate key, for the CI secret UPDATES_SIGNING_KEY. Keep it secret:\n  ${privateKey}`
+    return `Public key, for "publicKeys" in ergo.config.ts:\n  ${publicKey}\n\nPrivate key, for the CI secret UPDATES_SIGNING_KEY. Keep it secret:\n  ${privateKey}`
   }
 
   const bucket = openBucket(required('--bucket or UPDATES_BUCKET', values.bucket ?? env.UPDATES_BUCKET))

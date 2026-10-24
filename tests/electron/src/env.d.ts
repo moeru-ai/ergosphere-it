@@ -6,6 +6,7 @@ declare global {
   const __TEST_CRASH__: boolean
   const __TEST_MAIN_TAG__: string
   const __TEST_NO_HEALTH__: boolean
+  const __TEST_SLOW_HEALTH__: boolean
 }
 
 export {}

@@ -8,14 +8,15 @@ Read it to see what an app adds. [The Electron guide](../../packages/electron/RE
 
 | Path | Role |
 | --- | --- |
-| `package.json` | `main` points to the generated launcher. `updates` holds the feed URL, the channel, the native version, and the public key. |
+| `ergo.config.ts` | The feed URL, the channel, the native version, and the public key |
+| `package.json` | `main` points to the generated launcher. |
 | `electron.vite.config.ts` | `withUpdates()` around the electron-vite config |
-| `src/main/index.ts` | Opens the window with `activeBundle.preload` and `loadActiveBundle()` |
+| `src/main/index.ts` | Opens the window with `activeBundle.preload` and `loadActiveBundle()`, and names it the leader window |
 | `src/preload/index.ts` | `exposeUpdater()` |
 | `src/renderer/app.vue` | Shows the active bundle, calls `markBundleHealthy()` after the first render, and shows the toast and the dialog |
 | `src/renderer/components` | The toast and the dialog. They read `UpdaterStatus`. |
 
-The public key in `package.json` is an example. Replace it with your own key before you publish.
+The public key in `ergo.config.ts` is an example. Replace it with your own key before you publish.
 
 ## Build
 

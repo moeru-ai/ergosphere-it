@@ -1,7 +1,7 @@
 // End-to-end test of the example app, in a test build with variants that break on purpose.
 //
 // It publishes bundles to an update tree in memory and drives one real Electron install through these scenarios:
-//   1. a page-only bundle reloads in place, and the process stays the same
+//   1. a page-only bundle reloads every window in place, on the route each window shows, and the process stays the same
 //   2. a main-code bundle restarts the app
 //   3. a bundle that crashes at launch is rolled back at once and blocked, and the app says why
 //   4. a page that never reports healthy rolls back in place
@@ -9,6 +9,7 @@
 //   6. a bundle for a newer native version is not taken
 //   7. the server goes back to a backup: the app ignores the old channel file, never goes back, and takes the next release
 //   8. after page reloads, a page that never reports healthy rolls back, and the earlier page still loads its preload
+//  8b. a slow page asks for more time with delayHealthCheck(), and is not rolled back
 //   9. a download breaks in the middle, and the next request resumes it with a range
 //  10. an installer update: a file that does not match the signed manifest is refused, and a good one installs
 //
@@ -119,7 +120,11 @@ try {
   const changed = pageOnly.manifest.components.flatMap(component => component.files.filter(file => !known.has(`objects/sha256/${file.sha256.slice(0, 2)}/${file.sha256}`)))
   const downloaded = requests.slice(objectRequests).filter(r => r.path.startsWith('/objects/')).length
   const onlyPage = changed.length > 0 && changed.every(file => file.path.startsWith('renderer/'))
-  await step('1. page-only bundle reloads in place', reloaded.pid === first.pid && onlyPage && downloaded === changed.length, `pid ${reloaded.pid}, ${downloaded} of ${pageOnly.objects.length} objects downloaded: ${changed.map(file => file.path).join(', ')}`)
+  // Both windows move to the new bundle: the main window, and the window that the app loaded itself on a route that
+  // changed after load.
+  const second = await waitFor('second window on v2', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v2' && e.url.includes('#/second')))
+  const movedRoute = second.url.endsWith('#/second-moved') && /[/\\]bundles[/\\]2[/\\]renderer[/\\]/.test(decodeURIComponent(new URL(second.url).pathname))
+  await step('1. page-only bundle reloads every window in place', reloaded.pid === first.pid && onlyPage && downloaded === changed.length && movedRoute, `pid ${reloaded.pid}, ${downloaded} of ${pageOnly.objects.length} objects downloaded: ${changed.map(file => file.path).join(', ')}, second window at ${new URL(second.url).hash}`)
 
   // 2. main-code change
   mark = lastIndex()
@@ -214,6 +219,16 @@ try {
   const remounted = await waitFor('page v11 after rollback', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v11'))
   const restartedAgain = since(mark)(readEvents()).some(e => e.type === 'boot')
   await step('8. after page reloads, an unhealthy page rolls back to a working page', !restartedAgain, `page v11 mounted again in pid ${remounted.pid}`)
+
+  // 8b. a slow page asks for more time, and reports after the usual timeout
+  mark = lastIndex()
+  const slow = createReleaseId()
+  await workspace.publish(slow, { label: 'v12-slow', mainTag: '2', slowHealth: true })
+  await workspace.point(slow)
+  const delayed = await waitFor('health delay of the slow page', list => findEvent(since(mark)(list), 'health-delayed', e => e.releaseId === slow))
+  await waitFor('slow page healthy', list => findEvent(since(mark)(list), 'healthy', e => e.releaseId === slow))
+  const slowRolledBack = since(mark)(readEvents()).some(e => e.type === 'rollback' && e.from === slow)
+  await step('8b. a slow page that asks for more time is not rolled back', !slowRolledBack, `added ${delayed.addedMs} ms`)
 
   // 9. a download breaks in the middle and resumes
   mark = lastIndex()

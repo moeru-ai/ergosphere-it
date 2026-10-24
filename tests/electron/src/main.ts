@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { env, pid } from 'node:process'
 
 import { activeBundle, updater } from '@ergosphere-it/electron/main'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 
 // A crash variant throws at start, so the launcher falls back to an earlier bundle.
 if (__TEST_CRASH__)
@@ -41,7 +41,7 @@ app.on('browser-window-created', (_event, window) => {
     if (message !== '[ergosphere-test] mounted')
       return
 
-    logEvent({ releaseId: activeBundle.releaseId, type: 'page-mounted', version: activeBundle.version })
+    logEvent({ releaseId: activeBundle.releaseId, type: 'page-mounted', url: window.webContents.getURL(), version: activeBundle.version })
     const captureDir = env.ERGOSPHERE_CAPTURE_DIR
     if (captureDir) {
       setTimeout(async () => {
@@ -51,6 +51,14 @@ app.on('browser-window-created', (_event, window) => {
       }, 300)
     }
   })
+})
+
+// A second window that the app loads itself, as AIRI does, on a route that changes after load. A page-only update must
+// move it to the new bundle on the route that it shows then.
+void app.whenReady().then(async () => {
+  const window = new BrowserWindow({ show: false, webPreferences: { preload: activeBundle.preload, sandbox: true } })
+  await window.loadURL(activeBundle.pageUrl({ hash: '/second' }))
+  await window.webContents.executeJavaScript(`location.hash = '#/second-moved'`)
 })
 
 void import('../../../examples/electron-app/src/main/index')

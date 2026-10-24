@@ -15,13 +15,13 @@ import { mergeConfig } from 'vite'
 import { loadLauncherConfig, productOf, readPackageJson } from './config'
 import { BUNDLE_LAYOUT, OUT_LAYOUT } from './layout'
 
-export type { UpdatesConfig } from './config'
+export type { ErgoConfig } from './define-config'
 
 export interface WithUpdatesOptions {
   /**
    * A launcher file of your own, instead of the generated one. It must call `startLauncher` from
    * `@ergosphere-it/electron/launcher` with the config from `virtual:ergosphere-it/config`. Use it only when the app must
-   * pass options that `package.json` cannot hold, for example an installer for tests.
+   * pass options that `ergo.config.ts` cannot hold, for example an installer for tests.
    */
   launcher?: string
   /** The main entry of the bundle. Defaults to `src/main/index.ts`. */
@@ -45,7 +45,7 @@ const LAUNCHER_ID = 'virtual:ergosphere-it/launcher'
  * - `out/launcher/index.mjs` is the launcher. Set `main` in `package.json` to it. Only a full installer changes it.
  * - `out/bundle/` holds `main`, `preload`, and `renderer`. It updates over the air. `out/bundle.json` describes it.
  *
- * The settings come from the `updates` field of `package.json`. The release IDs come from the clock at build time, or
+ * The settings come from `ergo.config.ts` next to `package.json`. The release IDs come from the clock at build time, or
  * from `UPDATES_RELEASE_ID` and `UPDATES_INSTALLER_RELEASE_ID`. `UPDATES_VERSION` overrides the version of
  * `package.json`, for example for a nightly build.
  */
@@ -87,21 +87,29 @@ export function withUpdates(config: UserConfig = {}, options: WithUpdatesOptions
     },
   }
   const rendererRoot = resolve(root, config.renderer?.root ?? 'src/renderer')
+  const { renderer: userRenderer, ...rest } = config
+  // An app with several HTML entries keeps them all, for example `index.html` and `beat-sync.html`.
+  const rendererInput = userRenderer?.build?.rolldownOptions?.input ?? join(rendererRoot, 'index.html')
   const renderer: UserConfig['renderer'] = {
     // A downloaded bundle lives in another directory, so page assets must load with relative paths.
     base: './',
     build: {
       outDir: join(bundleDir, 'renderer'),
-      rolldownOptions: { input: join(rendererRoot, 'index.html') },
+      rolldownOptions: { input: rendererInput },
     },
     plugins: [buildInfoPlugin(root, outDir, { installerReleaseId, releaseId, version: env.UPDATES_VERSION ?? packageJson.version ?? '0.0.0' })],
     root: rendererRoot,
   }
 
+  // The input of the renderer is set above. Merging two inputs would join their entries into a broken list.
+  const { input: _input, ...userRolldown } = userRenderer?.build?.rolldownOptions ?? {}
+  const userRendererConfig = { ...userRenderer, build: { ...userRenderer?.build, rolldownOptions: userRolldown } }
+
   return {
+    ...rest,
     main: mergeConfig(config.main ?? {}, main),
     preload: mergeConfig(config.preload ?? {}, preload),
-    renderer: mergeConfig(config.renderer ?? {}, renderer),
+    renderer: mergeConfig(userRendererConfig, renderer),
   }
 }
 
@@ -137,7 +145,7 @@ function buildInfoPlugin(root: string, outDir: string, base: Pick<BuildInfo, 'in
   }
 }
 
-/** Gives the main build the generated launcher and the config from `package.json`. */
+/** Gives the main build the generated launcher and the config from `ergo.config.ts`. */
 function launcherPlugin(root: string): Plugin {
   return {
     async load(id) {

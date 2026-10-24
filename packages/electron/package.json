@@ -16,6 +16,11 @@
     "directory": "packages/electron"
   },
   "exports": {
+    "./config": {
+      "@ergosphere-it/source": "./src/define-config.ts",
+      "types": "./dist/config.d.mts",
+      "default": "./dist/config.mjs"
+    },
     "./electron-updater": {
       "@ergosphere-it/source": "./src/electron-updater.ts",
       "types": "./dist/electron-updater.d.mts",

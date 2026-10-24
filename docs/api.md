@@ -109,11 +109,12 @@ Internal: the object store and the state file.
 
 | Entry | Exports |
 | --- | --- |
-| `/vite` | `withUpdates(config, { launcher, main, preload, outDir, root })`. Types: `UpdatesConfig`. |
-| `/main` | `activeBundle`, `loadActiveBundle(window, options)`, `updater`, `markBundleHealthy()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
+| `/config` | `defineConfig(config)` for `ergo.config.ts`. Types: `ErgoConfig`. |
+| `/vite` | `withUpdates(config, { launcher, main, preload, outDir, root })`. It reads `ergo.config.ts`, and keeps every HTML entry of the renderer. |
+| `/main` | `activeBundle` with `pageUrl(options)`, `loadActiveBundle(window, { page, hash, query })`, `updater` with `leaderWindow`, `onBundleChange()`, and `delayHealthCheck()`, and `markBundleHealthy()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
 | `/preload` | `exposeUpdater()` |
-| `/renderer` | `markBundleHealthy()`, `watchUpdaterStatus(listener)`, `getPageUpdater()` |
-| `/vue` | `useUpdater()` with `status`, `activeBundle`, `applyUpdate()`, `checkForUpdates()`, `dismissRollback()`, and `markBundleHealthy()` |
+| `/renderer` | `markBundleHealthy()`, `delayHealthCheck(seconds)`, `watchUpdaterStatus(listener)`, `getPageUpdater()` |
+| `/vue` | `useUpdater()` with `status`, `activeBundle`, `applyUpdate()`, `checkForUpdates()`, `dismissRollback()`, and `markBundleHealthy()` and `delayHealthCheck(seconds)` |
 | `/release` | `bundleReleaseFromBuild(options)`, `installerReleaseFromBuild(options)`, `readBuildInfo(outDir)` |
 | `/launcher` | `startLauncher(options)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Installer`. |
 | `/electron-updater` | `createElectronUpdaterInstaller(updater?)`. Without an argument, it creates its own electron-updater instance. |

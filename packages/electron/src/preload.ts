@@ -16,6 +16,7 @@ export function exposeUpdater(): void {
   const updater: PageUpdater = {
     applyUpdate: () => ipcRenderer.invoke(IPC.apply),
     checkForUpdates: () => ipcRenderer.invoke(IPC.check),
+    delayHealthCheck: seconds => ipcRenderer.send(IPC.delayHealthCheck, seconds),
     dismissRollback: () => ipcRenderer.invoke(IPC.dismissRollback),
     getActiveBundle: () => ipcRenderer.invoke(IPC.getActiveBundle),
     getStatus: () => ipcRenderer.invoke(IPC.getStatus),

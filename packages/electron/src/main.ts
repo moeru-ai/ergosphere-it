@@ -23,6 +23,7 @@ export const activeBundle: ActiveBundle = {
   get fromInstaller() {
     return runtime().activeBundle.fromInstaller
   },
+  pageUrl: options => runtime().activeBundle.pageUrl(options),
   get preload() {
     return runtime().activeBundle.preload
   },
@@ -54,7 +55,15 @@ export const updater: Updater = {
   set cohorts(cohorts) {
     runtime().updater.cohorts = cohorts
   },
+  delayHealthCheck: seconds => runtime().updater.delayHealthCheck(seconds),
   dismissRollback: () => runtime().updater.dismissRollback(),
+  get leaderWindow() {
+    return runtime().updater.leaderWindow
+  },
+  set leaderWindow(window) {
+    runtime().updater.leaderWindow = window
+  },
+  onBundleChange: listener => runtime().updater.onBundleChange(listener),
   onEvent: listener => runtime().updater.onEvent(listener),
   onStatus: listener => runtime().updater.onStatus(listener),
   get status() {
@@ -63,8 +72,9 @@ export const updater: Updater = {
 }
 
 /**
- * Loads the page of the active bundle into a window: the `renderer/index.html` of the bundle, or the development
- * server under `electron-vite dev`. After a page-only update, it loads the window again from the new bundle.
+ * Loads a page of the active bundle into a window: `renderer/index.html` of the bundle by default, or the development
+ * server under `electron-vite dev`. After a page-only update, the launcher loads the window again from the new bundle,
+ * with the route that the window shows then.
  */
 export function loadActiveBundle(window: BrowserWindow, options?: LoadOptions): Promise<void> {
   return runtime().loadActiveBundle(window, options)
