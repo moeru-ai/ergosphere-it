@@ -440,7 +440,7 @@ pnpm -F @ergosphere-it/tests-electron demo
 
 The demo builds the example app, starts it, and opens the console in a browser. The console publishes a new version as a page change, a code change, a crash, a page that never reports health, or a bundle for a newer native version, and it withdraws releases. The demo slows downloads, so you can watch the progress of each update.
 
-On macOS, `pnpm -F ergosphere-example-electron-sparkle demo` installs a new installer with a Sparkle delta. See [the Sparkle example](examples/electron-sparkle-app).
+On macOS, `pnpm -F @ergosphere-it/tests-electron-sparkle demo` installs a new installer with a Sparkle delta. See [the Sparkle example](examples/electron-sparkle-app).
 
 ## Concepts
 

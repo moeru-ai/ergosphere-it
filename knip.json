@@ -14,8 +14,7 @@
     "examples/electron-sparkle-app": {
       "entry": [
         "electron-builder.config.ts",
-        "ergo.config.ts",
-        "scripts/*.ts"
+        "ergo.config.ts"
       ]
     },
     "packages/protocol": {

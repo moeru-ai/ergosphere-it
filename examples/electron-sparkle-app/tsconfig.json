@@ -7,11 +7,10 @@
     ],
     "types": [
       "node"
-    ],
-    "allowImportingTsExtensions": true
+    ]
   },
   "include": [
-    "scripts/**/*.ts",
+    "src/**/*.ts",
     "electron.vite.config.ts",
     "electron-builder.config.ts",
     "ergo.config.ts"

@@ -154,7 +154,7 @@ jobs:
 
       # Builds two packaged versions, installs the older one, and installs the newer one through a Sparkle delta.
       - name: Install an update with Sparkle
-        run: pnpm -F ergosphere-example-electron-sparkle demo --verify
+        run: pnpm -F @ergosphere-it/tests-electron-sparkle e2e
 
   publish:
     if: inputs.publish

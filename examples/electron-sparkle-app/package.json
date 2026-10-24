@@ -3,29 +3,24 @@
   "type": "module",
   "version": "0.0.1",
   "private": true,
-  "description": "The example app with Sparkle as the installer on macOS: bundles update over the air, and app updates download Sparkle deltas",
+  "description": "A small Electron app that installs new versions with Sparkle on macOS, and updates its bundle over the air",
   "main": "out/launcher/index.mjs",
   "scripts": {
     "build": "electron-vite build",
-    "demo": "node scripts/demo.ts",
     "package": "electron-builder --mac --publish never --config electron-builder.config.ts",
     "rebuild:sparkle": "electron-sparkle-updater rebuild",
-    "typecheck": "vue-tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@ergosphere-it/electron": "workspace:*",
-    "electron-sparkle-updater": "catalog:",
-    "vue": "catalog:"
+    "electron-sparkle-updater": "catalog:"
   },
   "devDependencies": {
-    "@ergosphere-it/protocol": "workspace:*",
     "@types/node": "catalog:",
-    "@vitejs/plugin-vue": "catalog:",
     "electron": "catalog:",
     "electron-builder": "catalog:",
     "electron-vite": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:",
-    "vue-tsc": "catalog:"
+    "vite": "catalog:"
   }
 }

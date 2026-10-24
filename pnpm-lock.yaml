@@ -216,19 +216,10 @@ importers:
       electron-sparkle-updater:
         specifier: 'catalog:'
         version: 0.5.3(electron@43.4.1(supports-color@7.2.0))
-      vue:
-        specifier: 'catalog:'
-        version: 3.5.44(typescript@6.0.3)
     devDependencies:
-      '@ergosphere-it/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
-      '@vitejs/plugin-vue':
-        specifier: 'catalog:'
-        version: 6.0.10(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.44(typescript@6.0.3))
       electron:
         specifier: 'catalog:'
         version: 43.4.1(supports-color@7.2.0)
@@ -244,9 +235,6 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
-      vue-tsc:
-        specifier: 'catalog:'
-        version: 3.3.13(typescript@6.0.3)
 
   packages/client:
     dependencies:
@@ -402,6 +390,18 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
+
+  tests/electron-sparkle:
+    devDependencies:
+      '@ergosphere-it/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
 
 packages:
 
