@@ -38,6 +38,7 @@ When a new bundle crashes or never reports that it works, the app goes back to t
 - [Documentation Automation](#documentation-automation)
 - [Development](#development)
 - [Status](#status)
+- [Acknowledgements](#acknowledgements)
 - [License](#license)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -508,6 +509,10 @@ pnpm -F @ergosphere-it/protocol conformance
 ## Status
 
 Version 1 is in development, and the packages are not on npm yet. The end-to-end test passes on macOS, Linux, and Windows, in a plain app directory and in `app.asar`. The protocol passes all conformance cases in Node.js and in the main process and the renderer of Electron.
+
+## Acknowledgements
+
+[Innei](https://github.com/innei) built the over-the-air update of the app code in [LobeHub](https://github.com/lobehub/lobehub) Desktop, and its specification. It showed that this kind of update works in production for an Electron app, and its ideas shaped the protocol and the first client of ergosphere-it. This project takes ideas from it, not code, because the LobeHub Community License is not compatible with MIT.
 
 ## License
 
