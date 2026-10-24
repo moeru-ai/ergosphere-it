@@ -1,4 +1,4 @@
-import type { BundleManifest, ChannelFile, Component, ComponentType, InstallerManifest, NativeVersionRange, SignedDocument, SigningKey } from '@ergosphere-it/protocol'
+import type { BundleManifest, ChannelFile, Component, ComponentType, InstallerArtifact, InstallerManifest, NativeVersionRange, SignedDocument, SigningKey } from '@ergosphere-it/protocol'
 
 import { contentHash, signDocument, validateBundleManifest, validateChannelFile, validateInstallerManifest } from '@ergosphere-it/protocol'
 import { sumBy } from 'es-toolkit'
@@ -84,23 +84,38 @@ export interface ComponentSpec {
   type: ComponentType
 }
 
-/** One installer file of an installer release, for example the macOS zip for arm64. */
-export interface InstallerFileInput {
-  /** The platform of the file, for example `darwin-arm64` or `win32-x64`. */
-  platform: string
-  /** SHA-512 of the file as base64, as electron-updater writes it. */
-  sha512: string
-  size: number
-  /** The absolute URL of the file. Installers can live anywhere, for example on GitHub Releases. */
-  url: string
-}
+/**
+ * One installer file of an installer release.
+ *
+ * - `electron-updater`: an installer that lives elsewhere, for example the macOS zip on GitHub Releases.
+ * - `sparkle`: a Sparkle appcast. The release hosts it at `installers/<releaseId>/sparkle/<platform>/appcast.xml`, so the
+ *   appcast of a release never changes.
+ */
+export type InstallerFileInput
+  = | {
+    /** The appcast from `generate_appcast`. Its archive and delta URLs must be absolute. */
+    appcast: Uint8Array<ArrayBuffer>
+    format: 'sparkle'
+    /** The platform of the appcast, for example `darwin-arm64`. */
+    platform: string
+  }
+  | {
+    format: 'electron-updater'
+    /** The platform of the file, for example `darwin-arm64` or `win32-x64`. */
+    platform: string
+    /** SHA-512 of the file as base64, as electron-updater writes it. */
+    sha512: string
+    size: number
+    /** The absolute URL of the file. */
+    url: string
+  }
 
 export interface InstallerRelease {
-  /** One electron-updater feed per platform, in `installers/<releaseId>/feeds/<platform>/`. */
-  feeds: TreeFile[]
   manifest: InstallerManifest
   /** The signed manifest and its signature. */
   manifestFiles: TreeFile[]
+  /** Files that installers read: one electron-updater feed per platform, and the Sparkle appcasts. */
+  platformFiles: TreeFile[]
   releaseId: number
   version: string
 }
@@ -111,6 +126,10 @@ export interface InstallerReleaseInput {
   bundleReleaseId: number
   /** Defaults to now. */
   createdAt?: string
+  /** A page where people download the installer by hand. Apps show it when the installer keeps failing. */
+  downloadPage?: string
+  /** The URL that apps read updates from. Needed for a Sparkle appcast, which the release hosts. */
+  feedUrl?: string
   host: string
   /** A hash of the native build inputs, for the CI guard. Clients do not read it. */
   inputsHash?: string
@@ -213,18 +232,49 @@ export async function buildChannelFile(input: ChannelFileInput): Promise<Channel
 }
 
 /**
- * Builds the files of an installer release: the signed manifest, and one electron-updater feed for each platform.
+ * Builds the files of an installer release: the signed manifest, one electron-updater feed for each electron-updater
+ * file, and each Sparkle appcast.
  *
- * The installer files are not part of the tree. Upload them first, to the URLs that the artifacts name.
+ * electron-updater files are not part of the tree. Upload them first, to the URLs that the artifacts name.
  */
 export async function buildInstallerRelease(input: InstallerReleaseInput): Promise<InstallerRelease> {
   const releaseId = input.releaseId ?? createReleaseId()
   const createdAt = input.createdAt ?? new Date().toISOString()
+  const platformFiles: TreeFile[] = []
+  const artifacts = await Promise.all(input.artifacts.map(async (artifact): Promise<InstallerArtifact> => {
+    if (artifact.format === 'electron-updater') {
+      const { format, platform, sha512, size, url } = artifact
+      platformFiles.push(treeFile(
+        `installers/${releaseId}/feeds/${platform}/${feedFileName(platform)}`,
+        new TextEncoder().encode(feedYaml(artifact, input.version, createdAt)) as Uint8Array<ArrayBuffer>,
+        'application/x-yaml',
+        true,
+      ))
+
+      return { format, platform, sha512, size, url }
+    }
+
+    if (!input.feedUrl)
+      throw new Error('buildInstallerRelease: a Sparkle appcast needs feedUrl, because the release hosts the appcast.')
+    checkSparkleAppcast(artifact.appcast, input.version)
+
+    const key = `installers/${releaseId}/sparkle/${artifact.platform}/appcast.xml`
+    platformFiles.push(treeFile(key, artifact.appcast, 'application/xml', true))
+
+    return {
+      format: 'sparkle',
+      platform: artifact.platform,
+      sha512: await sha512Base64(artifact.appcast),
+      size: artifact.appcast.byteLength,
+      url: `${input.feedUrl.replace(/\/+$/, '')}/${key}`,
+    }
+  }))
 
   const manifest = {
-    artifacts: input.artifacts.map(({ platform, sha512, size, url }) => ({ platform, sha512, size, url })),
+    artifacts,
     bundleReleaseId: input.bundleReleaseId,
     createdAt,
+    downloadPage: input.downloadPage,
     host: input.host,
     inputsHash: input.inputsHash,
     kind: 'installer',
@@ -235,17 +285,11 @@ export async function buildInstallerRelease(input: InstallerReleaseInput): Promi
     version: input.version,
   } as const
   const signed = await signValidated(manifest, input.signingKey, validateInstallerManifest)
-  const feeds = input.artifacts.map(artifact => treeFile(
-    `installers/${releaseId}/feeds/${artifact.platform}/${feedFileName(artifact.platform)}`,
-    new TextEncoder().encode(feedYaml(artifact, input.version, createdAt)) as Uint8Array<ArrayBuffer>,
-    'application/x-yaml',
-    true,
-  ))
 
   return {
-    feeds,
     manifest: { ...manifest, signature: { alg: 'ed25519', keyId: input.signingKey.keyId } } as InstallerManifest,
     manifestFiles: documentFiles(`installers/${releaseId}/installer.json`, signed, true),
+    platformFiles,
     releaseId,
     version: input.version,
   }
@@ -253,6 +297,21 @@ export async function buildInstallerRelease(input: InstallerReleaseInput): Promi
 
 /** The last release ID that `createReleaseId` returned in this process. */
 let lastReleaseId = 0
+
+/**
+ * Checks that an appcast offers the version of the installer release, and that it names its archives with absolute
+ * URLs. Sparkle offers the newest item, so an appcast without this version would fail on every install.
+ */
+export function checkSparkleAppcast(appcast: Uint8Array, version: string): void {
+  const text = new TextDecoder().decode(appcast)
+  const relative = [...text.matchAll(/<enclosure\s(?:[^>]*\s)?url="([^"]*)"/g)].map(match => match[1]!).find(url => !URL.canParse(url))
+  if (relative !== undefined)
+    throw new Error(`The appcast names the archive ${relative} with a relative URL. Pass --download-url-prefix to generate_appcast.`)
+
+  const versions = [...text.matchAll(/<sparkle:shortVersionString>([^<]+)<\/sparkle:shortVersionString>|sparkle:shortVersionString="([^"]+)"/g)].map(match => (match[1] ?? match[2])!.trim())
+  if (!versions.includes(version))
+    throw new Error(`The appcast offers ${versions.join(', ') || 'no version'}, and the installer release is ${version}.`)
+}
 
 /**
  * Returns the ID of the next release: the current time in milliseconds, or one more than `minimum`.
@@ -305,7 +364,7 @@ export async function reissueChannelFile(channelFile: ChannelFile, signingKey: S
  */
 export function uploadStages(releases: readonly (BundleRelease | InstallerRelease)[], channelFiles: readonly ChannelFileRelease[] = []): TreeFile[][] {
   const objects = new Map(releases.flatMap(release => ('objects' in release ? release.objects : [])).map(object => [object.key, object]))
-  const documents = releases.flatMap(release => ('feeds' in release ? [...release.manifestFiles, ...release.feeds] : release.manifestFiles))
+  const documents = releases.flatMap(release => ('platformFiles' in release ? [...release.platformFiles, ...release.manifestFiles] : release.manifestFiles))
 
   return [[...objects.values()], documents, channelFiles.flatMap(channelFile => channelFile.files)].filter(stage => stage.length > 0)
 }
@@ -318,10 +377,17 @@ function documentFiles(key: string, { bytes, signature }: SignedDocument, immuta
 }
 
 /** Writes an electron-updater feed with one file, in the shape that electron-builder writes. */
-function feedYaml(artifact: InstallerFileInput, version: string, releaseDate: string): string {
+function feedYaml(artifact: Extract<InstallerFileInput, { format: 'electron-updater' }>, version: string, releaseDate: string): string {
   const file = { sha512: artifact.sha512, size: artifact.size, url: artifact.url }
 
   return stringify({ files: [file], path: artifact.url, releaseDate, sha512: artifact.sha512, version })
+}
+
+/** SHA-512 as base64, as electron-updater and the installer manifest write it. */
+async function sha512Base64(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-512', bytes))
+
+  return btoa(String.fromCharCode(...digest))
 }
 
 /**

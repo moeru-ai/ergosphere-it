@@ -8,7 +8,7 @@ The update state machine of one install, for TypeScript hosts. The host injects 
 - Stages a bundle: it reuses files on disk, downloads the rest a few at a time, resumes broken downloads, checks every hash, and builds the bundle directory.
 - Selects the bundle to boot, counts boot attempts, and blocks a bundle that never reports healthy.
 - Rolls back, records why, and keeps the record until the app dismisses it.
-- Checks a channel file for a newer installer, and returns the installer file for this platform.
+- Checks a channel file for a newer installer, and returns the installer file for this platform in a format that the app takes.
 
 It never runs code. The host loads the bundle that the client selects.
 

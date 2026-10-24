@@ -1,5 +1,7 @@
 import type { SigningKey, TrustedKey } from '@ergosphere-it/protocol'
 
+import { createHash } from 'node:crypto'
+
 import { checkInstallerCandidate, contentHash, createKeyPair, verifyBundleManifest, verifyChannelFile, verifyInstallerManifest } from '@ergosphere-it/protocol'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
@@ -107,19 +109,20 @@ describe('createReleaseId', () => {
 
 describe('buildInstallerRelease', () => {
   const artifacts = [
-    { platform: 'darwin-arm64', sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-0.13.0-arm64-mac.zip' },
-    { platform: 'win32-x64', sha512: 'd2lu', size: 200, url: 'https://downloads.test/AIRI-0.13.0-setup.exe' },
-  ]
+    { format: 'electron-updater', platform: 'darwin-arm64', sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-0.13.0-arm64-mac.zip' },
+    { format: 'electron-updater', platform: 'win32-x64', sha512: 'd2lu', size: 200, url: 'https://downloads.test/AIRI-0.13.0-setup.exe' },
+  ] as const
+  const appcast = encode('<rss><channel><item><sparkle:shortVersionString>0.13.0</sparkle:shortVersionString><enclosure url="https://downloads.test/AIRI-0.13.0.zip" length="100"/></item></channel></rss>')
 
   it('builds a signed manifest and one electron-updater feed per platform', async () => {
-    const built = await buildInstallerRelease({ artifacts, bundleReleaseId: 100, createdAt: '2026-10-24T00:00:00.000Z', host: 'electron', nativeVersion: 2, product: 'app', releaseId: 7, signingKey, version: '0.13.0' })
+    const built = await buildInstallerRelease({ artifacts: [...artifacts], bundleReleaseId: 100, createdAt: '2026-10-24T00:00:00.000Z', host: 'electron', nativeVersion: 2, product: 'app', releaseId: 7, signingKey, version: '0.13.0' })
     const [manifest, signature] = built.manifestFiles
     const verified = await verifyInstallerManifest(manifest!.bytes, decode(signature!.bytes), [trustedKey])
 
     expect(manifest!.key).toBe('installers/7/installer.json')
-    expect(checkInstallerCandidate(verified, { host: 'electron', installerReleaseId: 6, platform: 'win32-x64', product: 'app' })).toMatchObject({ url: artifacts[1]!.url })
-    expect(built.feeds.map(feed => feed.key)).toEqual(['installers/7/feeds/darwin-arm64/latest-mac.yml', 'installers/7/feeds/win32-x64/latest.yml'])
-    expect(parse(decode(built.feeds[0]!.bytes))).toEqual({
+    expect(checkInstallerCandidate(verified, { formats: ['electron-updater'], host: 'electron', installerReleaseId: 6, platform: 'win32-x64', product: 'app' })).toMatchObject({ url: artifacts[1]!.url })
+    expect(built.platformFiles.map(feed => feed.key)).toEqual(['installers/7/feeds/darwin-arm64/latest-mac.yml', 'installers/7/feeds/win32-x64/latest.yml'])
+    expect(parse(decode(built.platformFiles[0]!.bytes))).toEqual({
       files: [{ sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-0.13.0-arm64-mac.zip' }],
       path: 'https://downloads.test/AIRI-0.13.0-arm64-mac.zip',
       releaseDate: '2026-10-24T00:00:00.000Z',
@@ -128,8 +131,44 @@ describe('buildInstallerRelease', () => {
     })
   })
 
+  it('hosts a Sparkle appcast in the release, and pins its bytes in the manifest', async () => {
+    const built = await buildInstallerRelease({
+      artifacts: [artifacts[0], { appcast, format: 'sparkle', platform: 'darwin-arm64' }],
+      bundleReleaseId: 100,
+      downloadPage: 'https://example.test/download',
+      feedUrl: 'https://updates.test/app/',
+      host: 'electron',
+      nativeVersion: 2,
+      product: 'app',
+      releaseId: 7,
+      signingKey,
+      version: '0.13.0',
+    })
+    const [manifest, signature] = built.manifestFiles
+    const verified = await verifyInstallerManifest(manifest!.bytes, decode(signature!.bytes), [trustedKey])
+    const sparkle = checkInstallerCandidate(verified, { formats: ['sparkle', 'electron-updater'], host: 'electron', installerReleaseId: 6, platform: 'darwin-arm64', product: 'app' })
+
+    expect(verified.downloadPage).toBe('https://example.test/download')
+    expect(sparkle).toEqual({
+      format: 'sparkle',
+      platform: 'darwin-arm64',
+      sha512: createHash('sha512').update(appcast).digest('base64'),
+      size: appcast.byteLength,
+      url: 'https://updates.test/app/installers/7/sparkle/darwin-arm64/appcast.xml',
+    })
+    expect(built.platformFiles.map(file => [file.key, file.headers['Content-Type'], file.immutable])).toEqual([
+      ['installers/7/feeds/darwin-arm64/latest-mac.yml', 'application/x-yaml', true],
+      ['installers/7/sparkle/darwin-arm64/appcast.xml', 'application/xml', true],
+    ])
+    expect(built.platformFiles[1]!.bytes).toEqual(appcast)
+  })
+
+  it('needs the feed URL for a Sparkle appcast', async () => {
+    await expect(buildInstallerRelease({ artifacts: [{ appcast, format: 'sparkle', platform: 'darwin-arm64' }], bundleReleaseId: 1, host: 'electron', nativeVersion: 1, product: 'app', signingKey, version: '1' })).rejects.toThrow('feedUrl')
+  })
+
   it('rejects a relative installer file URL', async () => {
-    await expect(buildInstallerRelease({ artifacts: [{ ...artifacts[0]!, url: 'AIRI.zip' }], bundleReleaseId: 1, host: 'electron', nativeVersion: 1, product: 'app', signingKey, version: '1' })).rejects.toThrow('not absolute')
+    await expect(buildInstallerRelease({ artifacts: [{ ...artifacts[0], url: 'AIRI.zip' }], bundleReleaseId: 1, host: 'electron', nativeVersion: 1, product: 'app', signingKey, version: '1' })).rejects.toThrow('not absolute')
   })
 
   it('names the feed file that electron-updater reads on each platform', () => {
@@ -137,7 +176,7 @@ describe('buildInstallerRelease', () => {
   })
 
   it('names the newest installer in the channel file, keeps it when signed again, and uploads installers before channel files', async () => {
-    const installer = await buildInstallerRelease({ artifacts, bundleReleaseId: 100, host: 'electron', nativeVersion: 2, product: 'app', releaseId: 7, signingKey, version: '0.13.0' })
+    const installer = await buildInstallerRelease({ artifacts: [...artifacts], bundleReleaseId: 100, host: 'electron', nativeVersion: 2, product: 'app', releaseId: 7, signingKey, version: '0.13.0' })
     const channelFile = await buildChannelFile({ channel: 'canary', installer: { releaseId: 7 }, product: 'app', signingKey })
 
     expect(channelFile.channelFile.installer).toEqual({ releaseId: 7 })

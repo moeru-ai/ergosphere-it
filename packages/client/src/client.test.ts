@@ -502,7 +502,10 @@ describe('updateClient downloads', () => {
 describe('updateClient installer check', () => {
   async function publishInstaller(releaseId: number, overrides: Record<string, unknown> = {}) {
     await server.signed(`/installers/${releaseId}/installer.json`, {
-      artifacts: [{ platform: 'darwin-arm64', sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-arm64-mac.zip' }],
+      artifacts: [
+        { format: 'electron-updater', platform: 'darwin-arm64', sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-arm64-mac.zip' },
+        { format: 'sparkle', platform: 'darwin-arm64', sha512: 'YXBw', size: 50, url: `${server.feedUrl}/installers/${releaseId}/sparkle/darwin-arm64/appcast.xml` },
+      ],
       bundleReleaseId: 20,
       createdAt: '2026-10-23T00:00:00.000Z',
       host: 'electron',
@@ -519,7 +522,7 @@ describe('updateClient installer check', () => {
   it('returns a newer installer with the file and the feed of this platform', async () => {
     await publishInstaller(8)
     await server.publishChannel(undefined, { installer: { releaseId: 8 } })
-    const client = await createClient({ installerReleaseId: 7 })
+    const client = await createClient({ installedApp: { formats: ['electron-updater'], releaseId: 7 } })
 
     expect(await client.checkInstaller()).toMatchObject({
       artifact: { url: 'https://downloads.test/AIRI-arm64-mac.zip' },
@@ -529,28 +532,48 @@ describe('updateClient installer check', () => {
     })
   })
 
-  it('reports the installed app as up to date, and does nothing without an installer release ID', async () => {
+  it('reports the installed app as up to date, and does nothing without the installed app', async () => {
     await publishInstaller(8)
     await server.publishChannel(undefined, { installer: { releaseId: 8 } })
 
-    expect(await (await createClient({ installerReleaseId: 8 })).checkInstaller()).toEqual({ status: 'up-to-date' })
+    expect(await (await createClient({ installedApp: { formats: ['electron-updater'], releaseId: 8 } })).checkInstaller()).toEqual({ status: 'up-to-date' })
     expect(await (await createClient()).checkInstaller()).toEqual({ status: 'up-to-date' })
   })
 
   it('rejects an installer of another product, and an installer without a file for this platform', async () => {
     await publishInstaller(8, { product: 'other' })
     await server.publishChannel(undefined, { installer: { releaseId: 8 } })
-    expect(await (await createClient({ installerReleaseId: 7 })).checkInstaller()).toMatchObject({ error: { code: 'installer-mismatch' }, status: 'verification-failed' })
+    expect(await (await createClient({ installedApp: { formats: ['electron-updater'], releaseId: 7 } })).checkInstaller()).toMatchObject({ error: { code: 'installer-mismatch' }, status: 'verification-failed' })
 
     await publishInstaller(9)
     await server.publishChannel(undefined, { installer: { releaseId: 9 }, issuedAt: '2026-10-23T01:00:00.000Z' })
-    expect(await (await createClient({ installerReleaseId: 7, platform: 'win32-x64' })).checkInstaller()).toMatchObject({ error: { code: 'platform-mismatch' }, status: 'verification-failed' })
+    expect(await (await createClient({ installedApp: { formats: ['electron-updater'], releaseId: 7 }, platform: 'win32-x64' })).checkInstaller()).toMatchObject({ error: { code: 'platform-mismatch' }, status: 'verification-failed' })
+  })
+
+  it('returns the file in the first format that the app takes', async () => {
+    await publishInstaller(8)
+    await server.publishChannel(undefined, { installer: { releaseId: 8 } })
+
+    expect(await (await createClient({ installedApp: { formats: ['sparkle', 'electron-updater'], releaseId: 7 } })).checkInstaller()).toMatchObject({
+      artifact: { format: 'sparkle', url: `${server.feedUrl}/installers/8/sparkle/darwin-arm64/appcast.xml` },
+      status: 'available',
+    })
+    expect(await (await createClient({ installedApp: { formats: [], releaseId: 7 } })).checkInstaller()).toMatchObject({ error: { code: 'format-mismatch' }, status: 'verification-failed' })
+  })
+
+  it('rejects a withdrawn installer, and records it so the host drops its download', async () => {
+    await publishInstaller(8)
+    await server.publishChannel(undefined, { installer: { releaseId: 8 }, withdrawn: [8] })
+    const client = await createClient({ installedApp: { formats: ['electron-updater'], releaseId: 7 } })
+
+    expect(await client.checkInstaller()).toMatchObject({ error: { code: 'withdrawn' }, status: 'verification-failed' })
+    expect((await client.state()).withdrawn).toContain(8)
   })
 
   it('fetches the channel file once for a bundle check and an installer check in a row', async () => {
     await publishInstaller(8)
     await server.publishChannel(undefined, { installer: { releaseId: 8 } })
-    const client = await createClient({ installerReleaseId: 7 })
+    const client = await createClient({ installedApp: { formats: ['electron-updater'], releaseId: 7 } })
     await client.check()
     await client.checkInstaller()
 
