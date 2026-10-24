@@ -21,8 +21,12 @@ export interface BundleReleaseFromBuildOptions {
 }
 
 export interface InstallerReleaseFromBuildOptions {
-  /** One installer file per platform, for example from the `latest*.yml` files of electron-builder. */
+  /** The installer files, for example from the `latest*.yml` files of electron-builder, and Sparkle appcasts. */
   artifacts: InstallerFileInput[]
+  /** A page where people download the installer by hand. Apps show it when the installer keeps failing. */
+  downloadPage?: string
+  /** The feed URL of the app. A Sparkle appcast needs it, because the release hosts the appcast. */
+  feedUrl?: string
   /** The output directory of the ergosphere-it plugins. Defaults to `out`. */
   outDir?: string
   signingKey: SigningKey
@@ -51,12 +55,14 @@ export async function bundleReleaseFromBuild({ nativeVersion, outDir = 'out', si
 }
 
 /** Builds a signed installer release for the installers that electron-builder made from the output of the ergosphere-it plugins. */
-export async function installerReleaseFromBuild({ artifacts, outDir = 'out', signingKey }: InstallerReleaseFromBuildOptions): Promise<InstallerRelease> {
+export async function installerReleaseFromBuild({ artifacts, downloadPage, feedUrl, outDir = 'out', signingKey }: InstallerReleaseFromBuildOptions): Promise<InstallerRelease> {
   const info = readBuildInfo(outDir)
 
   return buildInstallerRelease({
     artifacts,
     bundleReleaseId: info.releaseId,
+    downloadPage,
+    feedUrl,
     host: 'electron',
     nativeVersion: info.nativeVersion,
     product: info.product,

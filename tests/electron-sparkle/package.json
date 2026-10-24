@@ -1,0 +1,17 @@
+{
+  "name": "@ergosphere-it/tests-electron-sparkle",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The end-to-end test and the demo of Sparkle as the installer, built from the Sparkle example app",
+  "scripts": {
+    "demo": "node scripts/demo.ts",
+    "e2e": "node scripts/e2e.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@ergosphere-it/protocol": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

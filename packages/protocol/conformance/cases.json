@@ -6,11 +6,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "9hAZClMNDNHM9MvshbEN/l56LCEnZiIpmen1ZuSbM36rN/u8VuHTc6ZghcbURwCFoMHM7Bd6MlffwmO9DjM6Cg==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "ok": true
@@ -22,11 +22,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"any\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "PInD36sXqLdT+WkrGvvjoO1ATRX3yyAEcVKhi/k5GESu3f8HDjHWDD0/2neJpgaa/kayM3QdnYvVEJ5+n1EkCQ==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "ok": true
@@ -34,11 +34,11 @@
     },
     {
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":43,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "expect": {
@@ -51,11 +51,11 @@
     },
     {
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "expect": {
@@ -72,11 +72,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"e2a9fce76b8ca8b6\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "8qkHL0L5hcl1jezVkK4sYSIXYImN/FIBe2KWaV8PFeYdkGsKezk+BUR9paRDkEZw2LVVIJYBdLQlFoxxTYQvAg==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "untrusted-key",
@@ -89,11 +89,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "QmTezcdYfBAZlmW9wJfONpYxNTw7rpmcSkx43+5UIgZvDBpNSKt8nNsiCdQVAGbmQ4kMRKqTlb64K9WgUCuDDA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "invalid-signature",
@@ -102,11 +102,11 @@
     },
     {
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "expect": {
@@ -119,11 +119,11 @@
     },
     {
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "document": "{\"schema\":1,",
       "expect": {
@@ -140,11 +140,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":0,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "D132LYmuGYOMdm1RSRPm65bbkfv6YmKPNlmj7woKliykSgF59Ryu+afbqEUI/NcaGIUV/A7z/7AC7SGOO2dGCA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "invalid-schema",
@@ -157,11 +157,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-ota.42\"}",
       "signature": "AzZtwYA4ecl3sGRYZBXKIse4yuCgC5UqXOSzuEHmL8jWjrPLG+lcaUTH1Smj3A8qqWqRDsaKKZ3qq6DXeqA3CA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "invalid-schema",
@@ -174,11 +174,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":5},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "WIv1ciLjIeE/qs+mowhYT8f1ksq9FctOHp88mKor1aOV/aTGQdyWJD2gGSHEQK40TVjn+08jmFTKddQdAevXBg==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "invalid-schema",
@@ -191,11 +191,11 @@
       "document": "{\"components\":[{\"files\":[{\"path\":\"../escape.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-ota.42\"}",
       "signature": "AUUy4V9pXKfB2enfNIqWtT2jFJwCX3YB7YvWOIIPcOukGWaysNIuqgRCR/f6NAyD6y9oxgL5s0djDoJUBdwvDA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -208,11 +208,11 @@
       "document": "{\"components\":[{\"files\":[{\"path\":\"/etc/passwd\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-ota.42\"}",
       "signature": "r+aj859/Oe05twpRuNEuXukUcI6KHveqA31+VuwAJHE3eFQD5E0kT1oU1/hK4lgLAjk+S0PCmd09OfxK06tbBA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -225,11 +225,11 @@
       "document": "{\"components\":[{\"files\":[{\"path\":\"C:/x.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-ota.42\"}",
       "signature": "6U9dGOXyZtfiDJ/GODVKU5pVkKXRny5uBXuSCTHVLviEdfSfYH80sDVr3qwb2CBgXHesAIKQ0quZUR+IMwuhDA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -242,11 +242,11 @@
       "document": "{\"components\":[{\"files\":[{\"path\":\"main\\\\index.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-ota.42\"}",
       "signature": "qfMIrHg9G32kacK+6bdHSo24MzxPuzd+D/Vbr7vB/L+Pj1cCMElc/r5fDX2PwJqOk9D+dmW3XUOfEYMNVnYfBw==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -259,11 +259,11 @@
       "document": "{\"components\":[{\"files\":[{\"path\":\"main/./index.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-ota.42\"}",
       "signature": "YYbKYxp9aZjGc7LsvSVT6QFI2y3kWWjrdiToNPj487NyPhs3Vv38jopawTTa15+nmJwOqbBwN2OO05CEABxDBg==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -276,11 +276,11 @@
       "document": "{\"components\":[{\"files\":[{\"path\":\"main//index.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":1,\"version\":\"0.13.0-ota.42\"}",
       "signature": "wXsroXS5h+dUvk4oP7iE9A3EgHz2ha1XjMQctqujO8kDAqY5DUppRO2tIY05wVLYM4zALfTGxhcipvijn53RBA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -293,11 +293,11 @@
       "document": "{\"components\":[{\"files\":[{\"path\":\"shared.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":1}],\"type\":\"electron-main\"},{\"files\":[{\"path\":\"shared.js\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":2,\"version\":\"0.13.0-ota.42\"}",
       "signature": "bNUAEcKVniOkUBpbU4YlWZesniUHd09/j3c/6RtnYTrbrbLJCu2FAo8MD8pTPCAto49kejslo9XWE2Z+JUGpBA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "duplicate-path",
@@ -310,11 +310,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300},{\"path\":\"renderer/App.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1},{\"path\":\"renderer/app.js\",\"sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":422,\"version\":\"0.13.0-ota.42\"}",
       "signature": "XL4mQml3OJUBvi0K+5XmxUlGCkEa9CZ/+UoTvHLv4qgbnt32Gf7qTNJiICGNzb+dxazihGZsmi5e85xxxGkvCA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "duplicate-path",
@@ -327,11 +327,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300},{\"path\":\"renderer/café.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1},{\"path\":\"renderer/café.js\",\"sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":422,\"version\":\"0.13.0-ota.42\"}",
       "signature": "f0rmJcjWEzGO65YMXRA0PdEh4u2T4UONRw7qSHUyIp2tkUrVXgnWlyBT1lkpJDQCXLHbaod33PTsjy8px7XGBw==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "duplicate-path",
@@ -344,11 +344,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300},{\"path\":\"renderer/lib\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1},{\"path\":\"renderer/lib/a.js\",\"sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":422,\"version\":\"0.13.0-ota.42\"}",
       "signature": "atqjKFlP4K5ZlcD2jAJsleGORnx37CIubiwi5pP6SVFmmWz2PVG/0Atrs3H57Ek9S/IhsxEK9gHWdvLtjA3ADA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "duplicate-path",
@@ -361,11 +361,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300},{\"path\":\"renderer/aux.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":421,\"version\":\"0.13.0-ota.42\"}",
       "signature": "mVG0yOAjnzds96a9H8ZmWbDJmcFMHQMrqVvcPOiB+Z5VsciF2UFOk7iEJ7SYlQTEatmrefDtiamn7xg0KkRqAA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -378,11 +378,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300},{\"path\":\"renderer/app.js.\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":421,\"version\":\"0.13.0-ota.42\"}",
       "signature": "wMRf9+/QQ5g8fRkLloTjEcvVJqhrsiIP9Elbk65wvCbuX4uNq1/lobpmCx4oA8nCme+Pyjj1jCvkmgpMLxf7DA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -395,11 +395,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300},{\"path\":\"renderer/app.js \",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":421,\"version\":\"0.13.0-ota.42\"}",
       "signature": "rBS95sqv2y2saDgozdGPnyAfzpjJwvAAx4Y8PFcW0rPURqoeevGd50u1cJ99rYaZf0Rzuh1EhGDB6MlC2hFZBw==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -412,11 +412,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300},{\"path\":\"renderer/app.js:stream\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":421,\"version\":\"0.13.0-ota.42\"}",
       "signature": "2SkgXC4VnJQfDhZO59R24J1LqjkNIBzXWVehkkgr9RPPto/LMiK0NnSblNKXE6tzbfy62c34q96QPTD8Cs9eAw==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -429,11 +429,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300},{\"path\":\"renderer/a?b.js\",\"sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"size\":1}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":421,\"version\":\"0.13.0-ota.42\"}",
       "signature": "ovVeFYqFvdPij7s84D2cVx89ZaDdaEqteDiEJ3zV9UBZgcqdFvpyyIQ9tKjTbsLLT2Nt54GtANW6lfRNaQsuAw==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "unsafe-path",
@@ -446,11 +446,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"other\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "zqPtMfml2+E3YvAJf/RcTsGjBZeZvTPHfZUFq5obBM5uIzYKFDW7IYxwNtc3x8ElDc6eslZXXxFEzGQaaFrDAA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "bundle-mismatch",
@@ -463,11 +463,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"kirie\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "bbZ/7bqOf5HcFi9Av4qxU7C1Mf0jqaMGvuMFTFmaaMyVEFW/e0W9pFTwTIQXj2/ZQu3Hkp67oKFBtsUIQAoMCA==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "bundle-mismatch",
@@ -480,11 +480,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "9hAZClMNDNHM9MvshbEN/l56LCEnZiIpmen1ZuSbM36rN/u8VuHTc6ZghcbURwCFoMHM7Bd6MlffwmO9DjM6Cg==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "win32-x64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "platform-mismatch",
@@ -497,11 +497,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "9hAZClMNDNHM9MvshbEN/l56LCEnZiIpmen1ZuSbM36rN/u8VuHTc6ZghcbURwCFoMHM7Bd6MlffwmO9DjM6Cg==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 2,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 2
+        "product": "airi"
       },
       "expect": {
         "code": "native-version-mismatch",
@@ -514,11 +514,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "9hAZClMNDNHM9MvshbEN/l56LCEnZiIpmen1ZuSbM36rN/u8VuHTc6ZghcbURwCFoMHM7Bd6MlffwmO9DjM6Cg==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 5,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 5
+        "product": "airi"
       },
       "expect": {
         "code": "native-version-mismatch",
@@ -531,11 +531,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "9hAZClMNDNHM9MvshbEN/l56LCEnZiIpmen1ZuSbM36rN/u8VuHTc6ZghcbURwCFoMHM7Bd6MlffwmO9DjM6Cg==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
         "product": "airi",
-        "nativeVersion": 3,
         "withdrawn": [
           42
         ]
@@ -551,11 +551,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "9hAZClMNDNHM9MvshbEN/l56LCEnZiIpmen1ZuSbM36rN/u8VuHTc6ZghcbURwCFoMHM7Bd6MlffwmO9DjM6Cg==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
         "product": "airi",
-        "nativeVersion": 3,
         "blocked": [
           42
         ]
@@ -571,11 +571,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "9hAZClMNDNHM9MvshbEN/l56LCEnZiIpmen1ZuSbM36rN/u8VuHTc6ZghcbURwCFoMHM7Bd6MlffwmO9DjM6Cg==",
       "context": {
-        "installerBundleReleaseId": 42,
         "host": "electron",
+        "installerBundleReleaseId": 42,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "nativeVersion": 3
+        "product": "airi"
       },
       "expect": {
         "code": "not-newer",
@@ -588,11 +588,11 @@
       "document": "{\"components\":[{\"entry\":\"main/index.js\",\"files\":[{\"path\":\"main/index.js\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":100}],\"type\":\"electron-main\"},{\"entry\":\"renderer/index.html\",\"files\":[{\"path\":\"renderer/index.html\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"size\":20},{\"path\":\"renderer/assets/app.js\",\"sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"size\":300}],\"type\":\"web\"}],\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"bundle\",\"nativeVersion\":{\"max\":4,\"min\":3},\"platform\":\"darwin-arm64\",\"product\":\"airi\",\"releaseId\":42,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"totalSize\":420,\"version\":\"0.13.0-ota.42\"}",
       "signature": "9hAZClMNDNHM9MvshbEN/l56LCEnZiIpmen1ZuSbM36rN/u8VuHTc6ZghcbURwCFoMHM7Bd6MlffwmO9DjM6Cg==",
       "context": {
-        "installerBundleReleaseId": 10,
         "host": "electron",
+        "installerBundleReleaseId": 10,
+        "nativeVersion": 3,
         "platform": "darwin-arm64",
         "product": "airi",
-        "nativeVersion": 3,
         "currentReleaseId": 50
       },
       "expect": {
@@ -603,32 +603,35 @@
     {
       "kind": "installer-manifest",
       "name": "installer: valid manifest",
-      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
-      "signature": "/TlG/4g+WhebyZ7ysSUT++a1sZ376SMe9PLP0EUb5hFHFBBCxe+lrlROyRvzaattGtF9JnfSmNoa7sdrotAHCw==",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg==",
       "expect": {
         "ok": true
       }
     },
     {
-      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":9,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":9,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
       "expect": {
         "code": "invalid-signature",
         "ok": false
       },
       "kind": "installer-manifest",
       "name": "installer: changed byte after signing",
-      "signature": "/TlG/4g+WhebyZ7ysSUT++a1sZ376SMe9PLP0EUb5hFHFBBCxe+lrlROyRvzaattGtF9JnfSmNoa7sdrotAHCw=="
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg=="
     },
     {
       "kind": "installer-manifest",
       "name": "installer: newer installer with a file for this platform",
-      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
-      "signature": "/TlG/4g+WhebyZ7ysSUT++a1sZ376SMe9PLP0EUb5hFHFBBCxe+lrlROyRvzaattGtF9JnfSmNoa7sdrotAHCw==",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg==",
       "context": {
+        "formats": [
+          "electron-updater"
+        ],
         "host": "electron",
+        "installerReleaseId": 6,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "installerReleaseId": 6
+        "product": "airi"
       },
       "expect": {
         "ok": true
@@ -637,13 +640,16 @@
     {
       "kind": "installer-manifest",
       "name": "installer: another product with the same key",
-      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"other\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
-      "signature": "aPJIqm8pHdve/sooOVqurFaxo3oHMqkXoYCFYEtGxR6c1krj2wKZ7ciZnmM/e/zDZQsGzczex84A2SQ0aqzMCg==",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"other\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "LyCkSalydEUBdGMvAjK8QmoxX7DS5cclWvgTkbz6e38MXEV5YqCP+6dLw2tRjQ4aoixJLuL45P14/CgjDW5VBg==",
       "context": {
+        "formats": [
+          "electron-updater"
+        ],
         "host": "electron",
+        "installerReleaseId": 6,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "installerReleaseId": 6
+        "product": "airi"
       },
       "expect": {
         "code": "installer-mismatch",
@@ -653,13 +659,16 @@
     {
       "kind": "installer-manifest",
       "name": "installer: another host",
-      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"kirie\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
-      "signature": "C3JOhdM4spisc6SLgbAM13NtF0/ts9A65Fj6zBztQnEHX/RiVfrHQiwoSHH5Y2oExNbAwAuSOk9CkRN9loMDCQ==",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"kirie\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "gtwgnYw0VJymU9PgtMgrg8f8WgaXsaw17VWpG9I5wVRulk2TW1GtcsMkgBD2kvC3GMOF9EbqXavRBMVmKXueBg==",
       "context": {
+        "formats": [
+          "electron-updater"
+        ],
         "host": "electron",
+        "installerReleaseId": 6,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "installerReleaseId": 6
+        "product": "airi"
       },
       "expect": {
         "code": "installer-mismatch",
@@ -669,13 +678,16 @@
     {
       "kind": "installer-manifest",
       "name": "installer: no file for this platform",
-      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
-      "signature": "/TlG/4g+WhebyZ7ysSUT++a1sZ376SMe9PLP0EUb5hFHFBBCxe+lrlROyRvzaattGtF9JnfSmNoa7sdrotAHCw==",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg==",
       "context": {
+        "formats": [
+          "electron-updater"
+        ],
         "host": "electron",
-        "platform": "win32-x64",
-        "product": "airi",
-        "installerReleaseId": 6
+        "installerReleaseId": 6,
+        "platform": "linux-x64",
+        "product": "airi"
       },
       "expect": {
         "code": "platform-mismatch",
@@ -685,13 +697,16 @@
     {
       "kind": "installer-manifest",
       "name": "installer: releaseId equals the installed app",
-      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
-      "signature": "/TlG/4g+WhebyZ7ysSUT++a1sZ376SMe9PLP0EUb5hFHFBBCxe+lrlROyRvzaattGtF9JnfSmNoa7sdrotAHCw==",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg==",
       "context": {
+        "formats": [
+          "electron-updater"
+        ],
         "host": "electron",
+        "installerReleaseId": 7,
         "platform": "darwin-arm64",
-        "product": "airi",
-        "installerReleaseId": 7
+        "product": "airi"
       },
       "expect": {
         "code": "not-newer",
@@ -701,8 +716,8 @@
     {
       "kind": "installer-manifest",
       "name": "installer: a relative installer URL",
-      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
-      "signature": "2p+7/H8qspWCDrP6hcIjNjiPOrBrv0YCBHf9FZrxId54WB8vKJCNqzNUgFEn0M1/wkxO1cmorh8dEM1QQQasDA==",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"AIRI.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "CuY4HLjZGq/HyZ/k54TOqF0kJnEg7sMSfflf4nLbJD4aKDFO87dRGM068y+/wc8G9eDWdf0nZrby7Cgg0+aBBg==",
       "expect": {
         "code": "invalid-schema",
         "ok": false
@@ -710,11 +725,169 @@
     },
     {
       "kind": "installer-manifest",
-      "name": "installer: two files for one platform",
-      "document": "{\"artifacts\":[{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
-      "signature": "GuizjXPP/rTmvykI48Q+SalehqN7SFrOyNmXuNgtG6FEOOgcXHbH+eZ5MWvjdhRkTrVv0gPaRfQajHJZc7D+Dw==",
+      "name": "installer: two files of one format for one platform",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "jiOeWuT3NRp1T77ahhsNTSQ+CIBj6Pj67EHqB2AChjXh5W66Jj+bSx34sE9seu2GlcCEfnfIZcVTFo6CmPadCQ==",
       "expect": {
         "code": "invalid-schema",
+        "ok": false
+      }
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: a file of an unknown format",
+      "document": "{\"artifacts\":[{\"format\":\"squirrel\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "2OAggo/Q+noWT7RajA/s/tB1RC+Y1OOO95QY1CrdeXaJ6RWGM5oUGfORl5jiFJedqQk1OOWItLUg77rdVtXcBA==",
+      "expect": {
+        "code": "invalid-schema",
+        "ok": false
+      }
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: a relative download page",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"downloadPage\":\"download\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "IcJy+L8t9BUiuLF82oMlof/2nt/eqo2gtr8Ia0PF7qHFqRroMV/RgHHsAdE9c6DSdgAiEkCdlzeSSNRytTBwCQ==",
+      "expect": {
+        "code": "invalid-schema",
+        "ok": false
+      }
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: an absolute download page",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"downloadPage\":\"https://example.com/download\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "C06PnhG15JdOPXscBQVKl+4JX8a+Ca9+KD56laxNuVShdkAa6n9UQpoGc+Y+QDOCDXAnNqK/QF1G65VrcEwuBw==",
+      "context": {
+        "formats": [
+          "electron-updater"
+        ],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "darwin-arm64",
+        "product": "airi"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: the install takes sparkle first",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg==",
+      "context": {
+        "formats": [
+          "sparkle",
+          "electron-updater"
+        ],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "darwin-arm64",
+        "product": "airi"
+      },
+      "expect": {
+        "ok": true
+      },
+      "takes": "sparkle"
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: the install takes electron-updater first",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg==",
+      "context": {
+        "formats": [
+          "electron-updater",
+          "sparkle"
+        ],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "darwin-arm64",
+        "product": "airi"
+      },
+      "expect": {
+        "ok": true
+      },
+      "takes": "electron-updater"
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: no file in a format that the install takes",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg==",
+      "context": {
+        "formats": [
+          "sparkle"
+        ],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "win32-x64",
+        "product": "airi"
+      },
+      "expect": {
+        "code": "format-mismatch",
+        "ok": false
+      }
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: the install takes no format",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg==",
+      "context": {
+        "formats": [],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "darwin-arm64",
+        "product": "airi"
+      },
+      "expect": {
+        "code": "format-mismatch",
+        "ok": false
+      }
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: withdrawn",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg==",
+      "context": {
+        "formats": [
+          "electron-updater"
+        ],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "withdrawn": [
+          7
+        ]
+      },
+      "expect": {
+        "code": "withdrawn",
+        "ok": false
+      }
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: withdrawn comes before not newer",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"},{\"format\":\"sparkle\",\"platform\":\"darwin-arm64\",\"sha512\":\"YXBwY2FzdA==\",\"size\":2048,\"url\":\"https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml\"},{\"format\":\"electron-updater\",\"platform\":\"win32-x64\",\"sha512\":\"c2hhNTEyd2lu\",\"size\":4096,\"url\":\"https://downloads.example.com/AIRI-0.13.0-setup.exe\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "43WiESPdjrKUzSlg9sa/hMq8AKIxgyunF98u/w2P5REfstMgt1Tvpm1pE5tnpFBRs7+YKvq5YQO/KGFt7v/pBg==",
+      "context": {
+        "formats": [
+          "electron-updater"
+        ],
+        "host": "electron",
+        "installerReleaseId": 7,
+        "platform": "darwin-arm64",
+        "product": "airi",
+        "withdrawn": [
+          7
+        ]
+      },
+      "expect": {
+        "code": "withdrawn",
         "ok": false
       }
     },
@@ -1046,41 +1219,41 @@
       "expect": true,
       "kind": "native-version",
       "name": "native-version: 3 in 3..3",
+      "nativeVersion": 3,
       "range": {
         "max": 3,
         "min": 3
-      },
-      "nativeVersion": 3
+      }
     },
     {
       "expect": true,
       "kind": "native-version",
       "name": "native-version: 3 in 1..5",
+      "nativeVersion": 3,
       "range": {
         "max": 5,
         "min": 1
-      },
-      "nativeVersion": 3
+      }
     },
     {
       "expect": false,
       "kind": "native-version",
       "name": "native-version: 2 in 3..4",
+      "nativeVersion": 2,
       "range": {
         "max": 4,
         "min": 3
-      },
-      "nativeVersion": 2
+      }
     },
     {
       "expect": false,
       "kind": "native-version",
       "name": "native-version: 5 in 3..4",
+      "nativeVersion": 5,
       "range": {
         "max": 4,
         "min": 3
-      },
-      "nativeVersion": 5
+      }
     }
   ],
   "trustedKeys": [

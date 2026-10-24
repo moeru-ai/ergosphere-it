@@ -5,8 +5,8 @@ Builds the signed files of releases in memory: bundle releases, installer releas
 ## What it does
 
 - Splits a bundle into content-addressed objects, and signs its manifest.
-- Signs an installer release with one electron-updater feed per platform.
-- Signs a channel file: the bundle it serves, its rollout and cohorts, the newest installer, and withdrawn bundles.
+- Signs an installer release with one electron-updater feed per electron-updater file, and a copy of each Sparkle appcast.
+- Signs a channel file: the bundle it serves, its rollout and cohorts, the newest installer, and withdrawn releases.
 - Orders uploads in three stages: objects, then manifests and feeds, then channel files. A client never sees a channel file that names a missing file.
 - Checks every document with the rules of the clients before it signs, so it never signs a document that clients reject.
 - Gives release IDs from the clock, so a pipeline needs no state from the server.

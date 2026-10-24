@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "scripts/**/*.ts"
+  ]
+}

@@ -33,10 +33,19 @@ export interface InstallerCommandOptions {
   channel: string
   /** The electron-builder output directory with the `latest*.yml` files. */
   distDir: string
-  /** The URL where the installer files are, for example `https://github.com/<owner>/<repo>/releases/download/v1.5.0`. */
-  filesUrl: string
+  /** A page where people download the installer by hand. */
+  downloadPage?: string
+  /** The feed URL of the app. A Sparkle appcast needs it. */
+  feedUrl?: string
+  /**
+   * The URL where the electron-builder installer files are, for example
+   * `https://github.com/<owner>/<repo>/releases/download/v1.5.0`. Without it, the release has no electron-updater file.
+   */
+  filesUrl?: string
   outDir: string
   signingKey: SigningKey
+  /** Sparkle appcasts by platform, for example `{ 'darwin-arm64': 'dist/appcast.xml' }`. */
+  sparkleAppcasts?: Record<string, string>
 }
 
 /** Creates a key pair. The private key goes into the CI secret `UPDATES_SIGNING_KEY`, the public key into `ergo.config.ts`. */
@@ -91,15 +100,26 @@ export async function publishBundle(options: BundleCommandOptions): Promise<{ re
 }
 
 /**
- * Records the installers that electron-builder made as an installer release, and names it on a channel.
+ * Records an installer release, and names it on a channel. The release has the installers that electron-builder made,
+ * and the Sparkle appcasts.
  *
- * electron-builder uploads the installer files. This command uploads the signed manifest and the feeds that point to
- * them.
+ * electron-builder uploads the installer files, and Sparkle tools upload the archives and deltas. This command uploads
+ * the signed manifest, the electron-updater feeds, and the appcasts. Each release keeps its own copy of the appcast.
  */
-export async function registerInstaller(options: InstallerCommandOptions): Promise<{ platforms: string[], releaseId: number }> {
+export async function registerInstaller(options: InstallerCommandOptions): Promise<{ files: string[], releaseId: number }> {
   const { bucket, channel, signingKey } = options
-  const artifacts = readElectronBuilderFeeds(options.distDir, options.filesUrl)
-  const release = await installerReleaseFromBuild({ artifacts, outDir: options.outDir, signingKey })
+  const artifacts: InstallerFileInput[] = [
+    ...(options.filesUrl === undefined ? [] : readElectronBuilderFeeds(options.distDir, options.filesUrl)),
+    ...Object.entries(options.sparkleAppcasts ?? {}).map(([platform, path]): InstallerFileInput => ({
+      appcast: new Uint8Array(readFileSync(path)) as Uint8Array<ArrayBuffer>,
+      format: 'sparkle',
+      platform,
+    })),
+  ]
+  if (artifacts.length === 0)
+    throw new Error('ergosphere-it: register installer needs --files-url for electron-builder installers, or --sparkle <platform>=<appcast>.')
+
+  const release = await installerReleaseFromBuild({ artifacts, downloadPage: options.downloadPage, feedUrl: options.feedUrl, outDir: options.outDir, signingKey })
   for (const file of uploadStages([release]).flat())
     await bucket.put(file)
 
@@ -109,7 +129,7 @@ export async function registerInstaller(options: InstallerCommandOptions): Promi
     withdrawn: current?.withdrawn,
   }))
 
-  return { platforms: artifacts.map(artifact => artifact.platform), releaseId: release.releaseId }
+  return { files: release.manifest.artifacts.map(artifact => `${artifact.platform} ${artifact.format}`), releaseId: release.releaseId }
 }
 
 /** Changes the rollout percentage of the bundle of a channel. Installs keep their buckets. */
@@ -128,8 +148,11 @@ export async function setRollout(bucket: Bucket, channel: string, percentage: nu
 }
 
 /**
- * Withdraws a bundle on the given channels, or on every channel. A channel that serves it stops serving a bundle, and
- * apps that run it go back to the bundle before it.
+ * Withdraws a bundle or an installer on the given channels, or on every channel.
+ *
+ * A channel that serves the bundle stops serving a bundle, and apps that run it go back to the bundle before it. A
+ * channel that names the installer stops naming an installer, and apps drop a download of it. Installers only move
+ * forward, so apps that installed it keep it until a newer installer.
  */
 export async function withdraw(bucket: Bucket, releaseId: number, signingKey: SigningKey, channels?: string[]): Promise<string[]> {
   const names = channels ?? (await bucket.list('channels/')).filter(key => key.endsWith('.json')).map(key => key.slice('channels/'.length, -'.json'.length))
@@ -142,7 +165,7 @@ export async function withdraw(bucket: Bucket, releaseId: number, signingKey: Si
       bundle: current.bundle && current.bundle.releaseId !== releaseId
         ? { cohorts: current.bundle.cohorts, releaseId: current.bundle.releaseId, rollout: current.bundle.rollout?.percentage, salt: current.bundle.rollout?.salt }
         : undefined,
-      installer: current.installer,
+      installer: current.installer?.releaseId === releaseId ? undefined : current.installer,
       withdrawn: [...new Set([...current.withdrawn ?? [], releaseId])],
     }))
   }
@@ -183,7 +206,7 @@ function readElectronBuilderFeeds(distDir: string, filesUrl: string): InstallerF
     for (const file of feed.files ?? []) {
       const platform = platformsOf(name, file.url)
       if (platform && !artifacts.has(platform))
-        artifacts.set(platform, { platform, sha512: file.sha512, size: file.size, url: `${base}/${encodeURIComponent(file.url)}` })
+        artifacts.set(platform, { format: 'electron-updater', platform, sha512: file.sha512, size: file.size, url: `${base}/${encodeURIComponent(file.url)}` })
     }
   }
   if (artifacts.size === 0)

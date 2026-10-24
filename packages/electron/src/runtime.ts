@@ -22,6 +22,7 @@ export type LauncherEvent
     | { error: string, releaseId: number, type: 'boot-failed' }
     | { from: number, reason: RollbackReason, to: number, type: 'rollback' }
     | { fromInstaller: boolean, rejected: { problem: string, releaseId: number }[], releaseId: number, type: 'boot', version: string }
+    | { reason: 'withdrawn', releaseId: number, type: 'installer-discarded' }
     | { reason: string, releaseId: number, type: 'restart' }
     | { releaseId: number, type: 'health-timeout' }
     | { releaseId: number, type: 'healthy' }

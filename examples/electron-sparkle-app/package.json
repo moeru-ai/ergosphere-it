@@ -1,0 +1,26 @@
+{
+  "name": "ergosphere-example-electron-sparkle",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A small Electron app that installs new versions with Sparkle on macOS, and updates its bundle over the air",
+  "main": "out/launcher/index.mjs",
+  "scripts": {
+    "build": "electron-vite build",
+    "package": "electron-builder --mac --publish never --config electron-builder.config.ts",
+    "rebuild:sparkle": "electron-sparkle-updater rebuild",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ergosphere-it/electron": "workspace:*",
+    "electron-sparkle-updater": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "electron": "catalog:",
+    "electron-builder": "catalog:",
+    "electron-vite": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

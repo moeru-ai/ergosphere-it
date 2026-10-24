@@ -1,11 +1,19 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreBinaries": [
+    "ditto",
+    "pkill",
     "Xvfb"
   ],
   "workspaces": {
     "examples/electron-app": {
       "entry": [
+        "ergo.config.ts"
+      ]
+    },
+    "examples/electron-sparkle-app": {
+      "entry": [
+        "electron-builder.config.ts",
         "ergo.config.ts"
       ]
     },

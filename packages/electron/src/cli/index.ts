@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // The `ergosphere-it` command: publishes releases of an app that builds with the ergosphere-it plugins.
 
-import { argv, env, exit } from 'node:process'
+import { argv, cwd, env, exit } from 'node:process'
 import { parseArgs } from 'node:util'
 
 import { errorMessageFrom } from '@moeru/std/error'
 
+import { loadLauncherConfig } from '../config'
 import { openBucket } from './bucket'
 import { keygen, parseSigningKey, promote, publishBundle, registerInstaller, setRollout, withdraw } from './commands'
 
@@ -17,15 +18,19 @@ Commands:
       CI secret UPDATES_SIGNING_KEY.
   publish bundle --channel <name> [--rollout <percent>] [--cohorts <a,b>] [--min-native-version <n>]
       Uploads the bundle of the build output and serves it on a channel.
-  register installer --channel <name> --files-url <url> [--dist <dir>]
-      Records the installers that electron-builder made, and names them on a channel. --files-url is where the
-      installer files are, for example the download URL of a GitHub release.
+  register installer --channel <name> [--files-url <url>] [--dist <dir>] [--sparkle <platform>=<appcast>]
+                     [--feed-url <url>] [--download-page <url>]
+      Records an installer release, and names it on a channel. --files-url is where the electron-builder installer
+      files are, for example the download URL of a GitHub release. --sparkle adds a Sparkle appcast for a platform,
+      for example darwin-arm64=dist/appcast.xml. The release hosts the appcast under --feed-url, which defaults to
+      feedUrl of ergo.config.ts. --download-page is where people download the app by hand.
   promote --from <channel> --to <channel>
       Serves the bundle and the installer of one channel on another, for example from beta to beta-daily.
   rollout --channel <name> <percent>
       Changes the rollout percentage of the bundle of a channel.
   withdraw <releaseId> [--channel <name>]
-      Withdraws a bundle on one channel, or on every channel. Apps that run it go back to the bundle before it.
+      Withdraws a bundle or an installer on one channel, or on every channel. Apps that run the bundle go back to the
+      bundle before it. Apps drop a download of the installer.
 
 Options:
   --bucket <url>  s3://<bucket>/<prefix>, file://<dir>, or a directory. Defaults to UPDATES_BUCKET.
@@ -46,12 +51,15 @@ const { positionals, values } = parseArgs({
     'channel': { multiple: true, type: 'string' },
     'cohorts': { type: 'string' },
     'dist': { default: 'dist', type: 'string' },
+    'download-page': { type: 'string' },
+    'feed-url': { type: 'string' },
     'files-url': { type: 'string' },
     'from': { type: 'string' },
     'help': { short: 'h', type: 'boolean' },
     'min-native-version': { type: 'string' },
     'out': { default: 'out', type: 'string' },
     'rollout': { type: 'string' },
+    'sparkle': { multiple: true, type: 'string' },
     'to': { type: 'string' },
   },
 })
@@ -100,9 +108,27 @@ async function run(): Promise<string> {
     return `Published bundle ${result.releaseId} on ${channel} in ${bucket.url} (${result.uploaded} files uploaded).`
   }
   if (command === 'register' && subcommand === 'installer') {
-    const result = await registerInstaller({ bucket, channel: required('--channel', channel), distDir: values.dist, filesUrl: required('--files-url', values['files-url']), outDir: values.out, signingKey })
+    const sparkleAppcasts = Object.fromEntries((values.sparkle ?? []).map((entry) => {
+      const [platform, path] = entry.split('=', 2)
+      if (!platform || !path)
+        throw new Error(`ergosphere-it: --sparkle takes <platform>=<appcast>, for example darwin-arm64=dist/appcast.xml. Got ${entry}.`)
 
-    return `Registered installer ${result.releaseId} for ${result.platforms.join(', ')} on ${channel}.`
+      return [platform, path]
+    }))
+    const feedUrl = values['feed-url'] ?? (Object.keys(sparkleAppcasts).length > 0 ? (await loadLauncherConfig(cwd())).feedUrl : undefined)
+    const result = await registerInstaller({
+      bucket,
+      channel: required('--channel', channel),
+      distDir: values.dist,
+      downloadPage: values['download-page'],
+      feedUrl,
+      filesUrl: values['files-url'],
+      outDir: values.out,
+      signingKey,
+      sparkleAppcasts,
+    })
+
+    return `Registered installer ${result.releaseId} with ${result.files.join(', ')} on ${channel}.`
   }
   if (command === 'promote') {
     const file = await promote(bucket, required('--from', values.from), required('--to', values.to), signingKey)
@@ -125,7 +151,7 @@ async function run(): Promise<string> {
 
     const channels = await withdraw(bucket, releaseId, signingKey, values.channel)
 
-    return `Withdrew bundle ${releaseId} on ${channels.join(', ') || 'no channel'}.`
+    return `Withdrew release ${releaseId} on ${channels.join(', ') || 'no channel'}.`
   }
 
   throw new Error(`ergosphere-it: unknown command ${[command, subcommand, argument].filter(Boolean).join(' ')}. Run ergosphere-it --help.`)

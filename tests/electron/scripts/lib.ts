@@ -4,7 +4,7 @@ import type { ChildProcess } from 'node:child_process'
 
 import type { LauncherEvent, UpdaterStatus } from '@ergosphere-it/electron/launcher'
 import type { ChannelFile, NativeVersionRange, SigningKey, TrustedKey } from '@ergosphere-it/protocol'
-import type { BundleRelease, InstallerRelease, TreeFile } from '@ergosphere-it/publish'
+import type { BundleRelease, InstallerFileInput, InstallerRelease, TreeFile } from '@ergosphere-it/publish'
 
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -51,10 +51,10 @@ export interface LaunchOptions {
   capture?: string
   checkMs?: number
   debugPort?: string
-  /** Installs with the installer of the e2e test, which downloads and quits instead of installing. */
-  e2eInstaller?: boolean
   feedUrl: string
   healthMs?: number
+  /** Installs with an installer of the e2e test, which downloads and quits instead of installing. */
+  installer?: 'file' | 'sparkle'
   show?: boolean
 }
 
@@ -81,6 +81,11 @@ export interface WorkspaceOptions {
   /** Keep the tree in the work directory, so the next run continues from it. */
   persist?: boolean
 }
+
+/** The statuses of one kind. Some members of `UpdaterStatus` share a shape, for example `downloading` and `preparing`. */
+type StatusOf<Kind extends UpdaterStatus['status']> = UpdaterStatus extends infer Status
+  ? Status extends { status: infer Known } ? Kind extends Known ? Status & { status: Kind } : never : never
+  : never
 
 /**
  * A memory tree that also writes each file to a directory, and loads them again at start.
@@ -228,19 +233,19 @@ export class Workspace {
   async publishInstaller(releaseId: number, { bytes, feedUrl, sha512 }: { bytes: Uint8Array<ArrayBuffer>, feedUrl: string, sha512?: string }): Promise<InstallerRelease> {
     const key = `files/example-${releaseId}.zip`
     this.tree.put([{ bytes, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/zip' }, immutable: true, key }])
-    const release = await buildInstallerRelease({
-      artifacts: [{ platform: `${platform}-${arch}`, sha512: sha512 ?? createHash('sha512').update(bytes).digest('base64'), size: bytes.byteLength, url: `${feedUrl}/${key}` }],
-      bundleReleaseId: 1,
-      host: 'electron',
-      nativeVersion: 1,
-      product: this.product,
-      releaseId,
-      signingKey: this.signingKey,
-      version: `1.0.${releaseId}`,
-    })
-    this.tree.put(uploadStages([release]).flat())
 
-    return release
+    return this.publishInstallerRelease(releaseId, feedUrl, [{
+      format: 'electron-updater',
+      platform: `${platform}-${arch}`,
+      sha512: sha512 ?? createHash('sha512').update(bytes).digest('base64'),
+      size: bytes.byteLength,
+      url: `${feedUrl}/${key}`,
+    }])
+  }
+
+  /** Publishes an installer release with a Sparkle appcast for this platform. The release hosts the appcast. */
+  async publishSparkleInstaller(releaseId: number, { appcast, feedUrl }: { appcast: string, feedUrl: string }): Promise<InstallerRelease> {
+    return this.publishInstallerRelease(releaseId, feedUrl, [{ appcast: new TextEncoder().encode(appcast) as Uint8Array<ArrayBuffer>, format: 'sparkle', platform: `${platform}-${arch}` }])
   }
 
   /** Reads the app events from the log file, in order. */
@@ -287,6 +292,24 @@ export class Workspace {
       await createPackage(this.appSource, join(this.appDir, 'app.asar'))
     }
   }
+
+  private async publishInstallerRelease(releaseId: number, feedUrl: string, artifacts: InstallerFileInput[]): Promise<InstallerRelease> {
+    const release = await buildInstallerRelease({
+      artifacts,
+      bundleReleaseId: 1,
+      downloadPage: 'https://example.test/download',
+      feedUrl,
+      host: 'electron',
+      nativeVersion: 1,
+      product: this.product,
+      releaseId,
+      signingKey: this.signingKey,
+      version: `1.0.${releaseId}`,
+    })
+    this.tree.put(uploadStages([release]).flat())
+
+    return release
+  }
 }
 
 /** Returns the first event of a type that matches, with the type of that event. */
@@ -302,23 +325,23 @@ export function findEvent<Type extends AppEvent['type']>(
 export function findStatus<Kind extends UpdaterStatus['status']>(
   events: readonly LoggedEvent[],
   kind: Kind,
-  match: (status: Extract<UpdaterStatus, { status: Kind }>) => boolean = () => true,
-): Extract<UpdaterStatus, { status: Kind }> | undefined {
-  const isMatch = (status: UpdaterStatus): status is Extract<UpdaterStatus, { status: Kind }> => status.status === kind && match(status as Extract<UpdaterStatus, { status: Kind }>)
+  match: (status: StatusOf<Kind>) => boolean = () => true,
+): StatusOf<Kind> | undefined {
+  const isMatch = (status: UpdaterStatus): status is StatusOf<Kind> => status.status === kind && match(status as StatusOf<Kind>)
 
-  return findEvent(events, 'status', event => isMatch(event.status))?.status as Extract<UpdaterStatus, { status: Kind }> | undefined
+  return findEvent(events, 'status', event => isMatch(event.status))?.status as StatusOf<Kind> | undefined
 }
 
 /** Starts the test build of the example app against an update server. Returns a function that stops every app process. */
 export async function launchApp(workspace: Workspace, options: LaunchOptions): Promise<() => void> {
-  const { applyAll = true, capture, checkMs = 1000, debugPort, e2eInstaller = false, feedUrl, healthMs = 4000, show = false } = options
+  const { applyAll = true, capture, checkMs = 1000, debugPort, feedUrl, healthMs = 4000, installer, show = false } = options
   const { display, xvfb } = await ensureDisplay()
   const appEnv = {
     ...env,
     ...(display ? { DISPLAY: display } : {}),
     ...(capture ? { ERGOSPHERE_CAPTURE_DIR: capture } : {}),
     ...(show ? { ERGOSPHERE_SHOW_WINDOW: '1' } : {}),
-    ...(e2eInstaller ? { ERGOSPHERE_E2E_INSTALLER: '1' } : {}),
+    ...(installer ? { ERGOSPHERE_E2E_INSTALLER: installer } : {}),
     ...(applyAll ? { ERGOSPHERE_E2E_APPLY: '1' } : {}),
     ERGOSPHERE_BOOT_HEALTH_MS: '15000',
     ERGOSPHERE_CHECK_MS: String(checkMs),

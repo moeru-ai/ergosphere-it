@@ -50,7 +50,7 @@ Merged prerequisites: #3078, #3079, #3080, #3081, #3082, #3083.
 
 ### Layers
 
-1. **Installer layer.** The platform installer performs the install: electron-updater with Squirrel.Mac, NSIS, or AppImage for Electron. Kirie selects its installer later. The protocol only describes installer files and the channel files that name them. The publish API generates the native feed of each installer, for example `latest-mac.yml`, from the protocol data.
+1. **Installer layer.** A platform installer performs the install. For Electron, it is electron-updater with Squirrel.Mac, NSIS, or AppImage, or Sparkle on macOS. Kirie selects its installer later. The protocol describes installer files in [formats](#installer-formats), and the channel files that name them. The publish API generates what each installer reads, for example `latest-mac.yml` or a copy of a Sparkle appcast.
 2. **Bundle layer.** The client SDK does all of the work: discover, download, verify, stage, activate, check health, and roll back.
 
 One trusted Ed25519 key signs both layers. The native part contains the public key. The client never fetches a key at runtime.
@@ -104,6 +104,7 @@ The server is static files on R2 or S3. Any static server works, including the t
   installers/<releaseId>/installer.json                 # immutable, cache forever
   installers/<releaseId>/installer.json.sig
   installers/<releaseId>/feeds/<platform>/<feed file>   # immutable, for example latest-mac.yml
+  installers/<releaseId>/sparkle/<platform>/appcast.xml # immutable, the Sparkle appcast of the release
   channels/<channel>.json                               # mutable, no-store
   channels/<channel>.json.sig
 ```
@@ -147,12 +148,27 @@ The manifest is canonical JSON (JCS, RFC 8785). The signature covers the exact b
 
 ### Installer manifest
 
-`installer.json` has the same envelope. It lists the installer file for each platform with `sha512` and size. It also records the native version, the release ID of its installer bundle (`bundleReleaseId`), and the CI input hash. Host installers keep their own checks: electron-updater checks `sha512` from the generated feed.
+`installer.json` has the same envelope. It lists installer files with `format`, `platform`, `sha512`, size, and URL. It also records the native version, the release ID of its installer bundle (`bundleReleaseId`), the CI input hash, and an optional `downloadPage`.
 
-- Installer URLs are absolute. Installer files can live anywhere, for example on GitHub Releases.
-- Each installer release has one electron-updater feed per platform at `installers/<releaseId>/feeds/<platform>/`, with one file. One feed per platform keeps an install from reading the installer of another architecture.
-- A feed is not signed. After the platform installer downloads a file, the launcher checks it against the `sha512` of the signed manifest before it installs. A mismatch fails the update with `installer-mismatch`, and the next attempt waits longer, as a failed bundle download does.
+- A platform can have one file of each format, for example a zip for electron-updater and an appcast for Sparkle. An install takes the first format that its installer takes. So an app moves from electron-updater to Sparkle with one release that has both files: installs of the old app take the zip, and the new app takes the appcast.
+- Installer URLs and `downloadPage` are absolute. Installer files can live anywhere, for example on GitHub Releases.
 - A channel file names the newest installer with `installer.releaseId`. An install with an older installer release downloads the new installer before any bundle, because the new installer ships a newer installer bundle.
+- `downloadPage` is where people download the app by hand. The app shows it when an installer keeps failing.
+
+### Installer formats
+
+| Format | The file at `url` | Who downloads the update | What the launcher checks |
+| --- | --- | --- | --- |
+| `electron-updater` | The installer: a zip, an NSIS installer, or an AppImage | electron-updater, from the feed `installers/<releaseId>/feeds/<platform>/` that the release generates | The `sha512` of the downloaded file, before it installs |
+| `sparkle` | A Sparkle appcast, which the release hosts at `installers/<releaseId>/sparkle/<platform>/appcast.xml` | Sparkle, which takes the smallest delta chain or the archive | The `sha512` of the appcast before Sparkle reads it, and the version that Sparkle prepared |
+
+- The launcher owns the schedule. It decides when to check, download, and install. An installer turns off any schedule of its own, for example the automatic checks of Sparkle. Otherwise the installer skips the channel, the rollout, and the withdrawn list.
+- An electron-updater feed is not signed. After electron-updater downloads a file, the launcher checks it against the signed manifest. A mismatch fails the update with `installer-mismatch`, and the next attempt waits longer, as a failed bundle download does.
+- Sparkle reads an appcast only from HTTP or HTTPS, not from `file://`. So the launcher downloads the appcast, checks it, and serves the checked bytes at a random path on 127.0.0.1. Sparkle reads exactly the checked bytes. The server stays until the update installs or is dropped, because Sparkle can read the appcast again when it installs.
+- The appcast signs each archive and delta with EdDSA, and Sparkle checks them against `SUPublicEDKey` in `Info.plist`. So the `sparkle` format has two keys: the key of ergosphere-it signs the appcast through the manifest, and the Sparkle key signs the archives. Both keys must stay secret, and a rotation of either key takes an installer release.
+- Sparkle offers the newest item of an appcast. When the version that Sparkle prepared is not the version of the manifest, the launcher drops it and fails with `installer-mismatch`. The publish API refuses an appcast without the version of the release, and an appcast with a relative archive URL.
+- Each release keeps its own copy of the appcast, so the bytes that the manifest pins never change. Sparkle tools keep one appcast that grows with each release. The CLI copies it into the release.
+- An installer lives in the launcher, so only a newer installer fixes a broken installer. Bundles keep coming while an installer fails, and the status shows the failure with its count of attempts and `downloadPage`, so the app can send people to download the app by hand.
 
 ### Channel file
 
@@ -179,7 +195,8 @@ The manifest is canonical JSON (JCS, RFC 8785). The signature covers the exact b
 - `cohorts` limits a bundle to the listed cohorts. An install is always in the cohort `all`, plus the cohorts that the app sets. An empty list serves no cohort. A file without `cohorts` serves every install. Cohorts filter releases. They are not access control, because the app sets them.
 - Signing a channel file again keeps its rollout salt, so installs stay in their buckets. Raising the percentage keeps earlier installs in the rollout.
 - Stable channel files have no `bundle` field by default. So stable gets no OTA because of an explicit rule. In the PoC, stable got no OTA only because of version comparison, by accident.
-- `withdrawn` lists bad bundles. A client that runs a withdrawn bundle restarts into `previous` or the installer bundle, records the rollback with the reason `withdrawn`, and adds the bundle to its local block list. A staged bundle that becomes withdrawn is dropped, and is never activated. A withdrawn bundle does not count as newer than what the channel serves, so the channel can serve an older bundle again. A withdrawn bundle is never downloaded again.
+- `withdrawn` lists bad bundles and bad installers. A client that runs a withdrawn bundle restarts into `previous` or the installer bundle, records the rollback with the reason `withdrawn`, and adds the bundle to its local block list. A staged bundle that becomes withdrawn is dropped, and is never activated. A withdrawn bundle does not count as newer than what the channel serves, so the channel can serve an older bundle again. A withdrawn bundle is never downloaded again.
+- A withdrawn installer is not offered, and a downloaded installer that becomes withdrawn is dropped before it installs. Installers only move forward: an install that already has a withdrawn installer keeps it until a newer installer. To withdraw an installer, the publisher also stops naming it in `installer`.
 - Rollout bucket: the first 4 bytes of `sha256(salt + ":" + installId)` as a big-endian integer, mod 100. The client is in the rollout when the bucket is less than `percentage`. `installId` is a random ID in the data directory. The bucket does not use the user account, so the client sends no identity to the server.
 
 ### Client state
@@ -260,7 +277,7 @@ The apply mode of the app decides when an update takes effect:
 
 - `prompt` waits for the app to apply it, for example after the user confirms.
 - `auto` reloads at once for a `reload` update. A `restart` or `install` update still waits for the app, so the app never closes under the user without a prompt.
-- `next-launch` waits for the next start. A downloaded installer installs when the app quits.
+- `next-launch` waits for the next start. A prepared installer installs when the app quits. The app can still install it at once with `applyUpdate()`.
 
 ### Health and rollback
 
@@ -313,8 +330,9 @@ A verifier returns the verified document, or fails with one reason code. The Typ
 | `duplicate-path` | Two files land on the same file on some file system: the same path, paths that differ only in case or in Unicode normalization, or a file that another path needs as a directory. |
 | `native-version-mismatch` | The native version of the install is outside the bundle range. |
 | `platform-mismatch` | The bundle is for another platform, or the installer release has no file for this platform. |
+| `format-mismatch` | The installer release has files for this platform, but none in a format that the install takes. |
 | `not-newer` | The release ID is not greater than the installer bundle or the current bundle. |
-| `withdrawn` | A channel file withdrew this bundle. |
+| `withdrawn` | A channel file withdrew this bundle or installer. |
 | `blocked` | The client blocked this bundle after failures. |
 | `channel-replayed` | The channel file `issuedAt` is older than the newest channel file that the client has seen. |
 | `channel-expired` | The current time is after the channel file `expiresAt`. |
@@ -388,6 +406,18 @@ Blind reviews by frontend developers decided the names. Readers who had never se
 4. The app reports health with `updater.markBundleHealthy()` in main.
 5. The app states its settings in `ergo.config.ts` with `defineConfig()`, not in `package.json`. The build reads the file, so the app does not read it at run time.
 6. The library gives a minimal API in main only. How pages reach it, with IPC, Eventa, or another channel, is up to the app. The library has no concept of a main or leader window: every window that shows a page of the old bundle moves to the new one.
+
+## Decided on 2026-10-25
+
+Tests with Sparkle through electron-sparkle-updater showed what the first installer contract did not cover. Version 0.1 changes the contract without a compatibility layer.
+
+1. An installer file has a `format`: `electron-updater` or `sparkle`. A platform can have one file of each format.
+2. The launcher owns the schedule and the trust check of each format. An installer must turn off its own schedule.
+3. For Sparkle, the launcher serves the checked appcast on 127.0.0.1, and checks the version that Sparkle prepared.
+4. Each installer release hosts its own copy of the appcast, so the pinned bytes never change.
+5. `withdrawn` covers installers. Installers only move forward.
+6. An installer release can name a `downloadPage`. A failing installer does not stop bundles, and the status counts its attempts.
+7. The status has `preparing` for work after a download, for example a Sparkle patch.
 
 ## Open questions
 

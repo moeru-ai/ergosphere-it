@@ -1,16 +1,19 @@
+import type { AddressInfo } from 'node:net'
+
 import type { BootSelection, CheckResult, InstallerCheckResult } from '@ergosphere-it/client'
 import type { BundleManifest, ErrorCode } from '@ergosphere-it/protocol'
 
 import type { LauncherConfig } from './config'
-import type { Installer } from './installer'
+import type { Installer, InstallerProgress } from './installer'
 import type { BuildInfo } from './layout'
 import type { ActiveBundle, LauncherEvent, LoadOptions, Runtime, Updater } from './runtime'
 import type { BundleInfo, DisabledReason, UpdateError, UpdateErrorCode, UpdateInfo, UpdaterStatus } from './status'
 
 import process, { arch, env, pid, platform } from 'node:process'
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, createReadStream, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { dirname, join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -26,7 +29,7 @@ import { BUNDLE_LAYOUT, OUT_LAYOUT } from './layout'
 import { registerBundleModuleHooks } from './module-hooks'
 
 export type { LauncherConfig } from './config'
-export type { Installer, InstallerDownload } from './installer'
+export type { ElectronUpdaterInstaller, Installer, InstallerFile, InstallerFormat, InstallerProgress, SparkleAppcast, SparkleInstaller } from './installer'
 export type { ActiveBundle, LauncherEvent, LoadOptions, Updater } from './runtime'
 export type * from './status'
 
@@ -35,8 +38,8 @@ export interface LauncherOptions extends LauncherConfig {
   /** Defaults to `<userData>/ergosphere-it`. */
   dataDir?: string
   /**
-   * Installs new versions of the app. Defaults to electron-updater when it is installed. `false` turns off installer
-   * updates, so the app updates only its bundle.
+   * Installs new versions of the app, instead of the installer that `installers` of `ergo.config.ts` names for this
+   * platform. `false` turns off installer updates, so the app updates only its bundle.
    */
   installer?: false | Installer
   /** `import.meta.url` of the launcher. Bare imports of downloaded bundles resolve from here. */
@@ -46,12 +49,19 @@ export interface LauncherOptions extends LauncherConfig {
   platform?: string
 }
 
+/** A file that the launcher serves on 127.0.0.1. */
+interface LoopbackFile { close: () => void, url: string }
+
 interface PendingBundle { components: BundleManifest['components'], info: UpdateInfo }
+
+/** A downloaded installer that waits for `applyUpdate()`, and the server that gives Sparkle its appcast. */
+interface PendingInstaller { appcast?: LoopbackFile, info: UpdateInfo }
 
 interface Preferences { channel?: string, cohorts?: string[] }
 
 /** First wait before an installer that failed to download is tried again. It doubles up to one hour. */
 const INSTALLER_FAILURE_DELAY_MS = 30_000
+const MAX_INSTALLER_FAILURE_DELAY_MS = 3_600_000
 /** Wait after the app is ready before the first automatic check, so the check does not slow the start. */
 const FIRST_CHECK_DELAY_MS = 3_000
 /** The most that `delayHealthCheck()` adds to one health check, so a bundle that hangs cannot wait forever. */
@@ -73,11 +83,11 @@ class Launcher implements Runtime {
   private health: undefined | { addedMs: number, deadline: number, onTimeout: () => void, timer: ReturnType<typeof setTimeout> }
   private healthy = false
   private installer: Installer | undefined
-  private readonly installerFailures = new Map<number, { count: number, retryAt: number }>()
+  /** Failures of each installer release in this process, and the status that the last failure showed. */
+  private readonly installerFailures = new Map<number, { count: number, retryAt: number, status: UpdaterStatus }>()
   private readonly options: LauncherOptions
   private pending: PendingBundle | undefined
-  /** A downloaded installer that waits for `applyUpdate()`. */
-  private pendingInstaller: undefined | UpdateInfo
+  private pendingInstaller: PendingInstaller | undefined
   private preferences: Preferences = {}
   /** A second instance of the app reads the update state and never writes it. */
   private readOnly = false
@@ -148,8 +158,8 @@ class Launcher implements Runtime {
     this.dataDir = this.options.dataDir ?? join(app.getPath('userData'), 'ergosphere-it')
     this.preferences = readPreferences(this.dataDir)
     registerBundleModuleHooks(this.options.launcherUrl, join(this.dataDir, 'bundles'))
-    this.client = this.createClient()
     this.installer = await this.resolveInstaller()
+    this.client = this.createClient()
 
     const selection = await this.client.boot({ readOnly: this.readOnly })
     this.running = selection
@@ -170,7 +180,7 @@ class Launcher implements Runtime {
 
   private async apply(): Promise<void> {
     if (this.pendingInstaller && this.installer) {
-      const update = this.pendingInstaller
+      const update = this.pendingInstaller.info
       this.setStatus({ status: 'applying', update })
       this.emit({ releaseId: update.releaseId, type: 'install' })
       this.prepareQuitForInstall()
@@ -268,8 +278,8 @@ class Launcher implements Runtime {
       feedUrl: this.options.feedUrl,
       fs: createNodeFileSystem(),
       host: 'electron',
+      installedApp: this.installer ? { formats: [this.installer.format], releaseId: installerReleaseId } : undefined,
       installerBundle: { components, dir: this.bundleRoot, releaseId, version },
-      installerReleaseId,
       maxBootAttempts: this.options.maxLaunchAttempts,
       nativeVersion: this.options.nativeVersion,
       platform: this.options.platform ?? `${platform}-${arch}`,
@@ -327,6 +337,20 @@ class Launcher implements Runtime {
     }
   }
 
+  /** Drops a downloaded installer that the channel now withdraws. */
+  private async dropWithdrawnInstaller(client: UpdateClient): Promise<void> {
+    const pending = this.pendingInstaller
+    if (!pending || !(await client.state()).withdrawn.includes(pending.info.releaseId))
+      return
+
+    this.pendingInstaller = undefined
+    pending.appcast?.close()
+    this.installer?.discard()
+    this.installerFailures.delete(pending.info.releaseId)
+    this.emit({ reason: 'withdrawn', releaseId: pending.info.releaseId, type: 'installer-discarded' })
+    this.setStatus({ status: 'idle' })
+  }
+
   private emit(event: LauncherEvent): void {
     this.options.onEvent?.(event)
     for (const listener of this.eventListeners)
@@ -345,14 +369,21 @@ class Launcher implements Runtime {
         this.setStatus({ error: { code: 'download-failed', message: result.error }, retryAt: result.retryAt.toISOString(), status: 'download-failed', update: this.updateInfo(result.manifest) })
 
         return
-      case 'up-to-date':
+      case 'up-to-date': {
+        // An installer that waits for its retry is the update that the app knows about, not "up to date".
+        const installerFailure = [...this.installerFailures.values()].at(-1)
         if (this.pending)
           this.setStatus({ status: 'ready', update: this.pending.info })
         // A rollback notice stays until the app dismisses it or a newer update arrives.
-        else if (this.status.status !== 'rolled-back')
+        else if (this.status.status === 'rolled-back')
+          return
+        else if (installerFailure)
+          this.setStatus(installerFailure.status)
+        else
           this.setStatus({ detail: result.detail, status: 'up-to-date' })
 
         return
+      }
       case 'verification-failed':
         this.setStatus({ error: { code: result.error.code, message: result.error.message }, status: 'verification-failed' })
     }
@@ -414,9 +445,19 @@ class Launcher implements Runtime {
     }
   }
 
+  /** The installer of `options.installer`, or the one that `installers` names for this platform. */
   private async resolveInstaller(): Promise<Installer | undefined> {
     if (this.options.installer !== undefined)
       return this.options.installer || undefined
+
+    const format = this.options.installers[platform as keyof LauncherConfig['installers']] ?? 'electron-updater'
+    if (format === 'sparkle') {
+      const { createSparkleInstaller } = await import('./sparkle')
+
+      return createSparkleInstaller()
+    }
+    if (format === false)
+      return undefined
 
     try {
       const { createElectronUpdaterInstaller } = await import('./electron-updater')
@@ -462,20 +503,29 @@ class Launcher implements Runtime {
       this.setStatus({ status: 'checking' })
 
     try {
-      // A new installer comes first. It ships a newer bundle, so a bundle update before it is wasted.
-      if (this.pendingInstaller) {
-        this.setStatus({ status: 'ready', update: this.pendingInstaller })
-
-        return this.status
-      }
       if (this.installer) {
         const installer = await client.checkInstaller()
+        // Failures of an installer that the channel no longer offers are over.
+        for (const releaseId of this.installerFailures.keys()) {
+          if (installer.status !== 'available' || installer.manifest.releaseId !== releaseId)
+            this.installerFailures.delete(releaseId)
+        }
+        await this.dropWithdrawnInstaller(client)
+        // A new installer comes first. It ships a newer bundle, so a bundle update before it is wasted.
+        if (this.pendingInstaller) {
+          this.setStatus({ status: 'ready', update: this.pendingInstaller.info })
+
+          return this.status
+        }
+
         const failure = installer.status === 'available' ? this.installerFailures.get(installer.manifest.releaseId) : undefined
         if (installer.status === 'available' && (!failure || force || Date.now() >= failure.retryAt)) {
           await this.stageInstaller(installer, this.installer)
 
           return this.status
         }
+        // An installer that waits for its retry does not block bundles. A broken installer must not stop the fixes that
+        // ship as bundles.
       }
 
       await this.checkBundle(client, force)
@@ -528,39 +578,62 @@ class Launcher implements Runtime {
       await this.apply()
   }
 
-  /** Downloads an installer, and checks the file against the signed manifest before it can install. */
+  /**
+   * Downloads an installer, and checks it against the signed manifest before it can install.
+   *
+   * An electron-updater file is checked after the download. A Sparkle appcast is checked before Sparkle reads it, and
+   * the version that Sparkle prepared is checked after.
+   */
   private async stageInstaller(available: Extract<InstallerCheckResult, { status: 'available' }>, installer: Installer): Promise<void> {
-    const { artifact, manifest: { releaseId, version } } = available
-    const info: UpdateInfo = { fromInstaller: true, releaseId, requires: 'install', version }
+    const { artifact, manifest: { downloadPage, releaseId, version } } = available
+    const info: UpdateInfo = { downloadPage, fromInstaller: true, releaseId, requires: 'install', version }
     const fail = (error: UpdateError) => {
       const count = (this.installerFailures.get(releaseId)?.count ?? 0) + 1
-      const retryAt = Date.now() + Math.min(INSTALLER_FAILURE_DELAY_MS * 2 ** (count - 1), 3_600_000)
-      this.installerFailures.set(releaseId, { count, retryAt })
-      this.setStatus({ error, retryAt: new Date(retryAt).toISOString(), status: 'download-failed', update: info })
+      const retryAt = Date.now() + Math.min(INSTALLER_FAILURE_DELAY_MS * 2 ** (count - 1), MAX_INSTALLER_FAILURE_DELAY_MS)
+      const status: UpdaterStatus = { attempts: count, error, retryAt: new Date(retryAt).toISOString(), status: 'download-failed', update: info }
+      this.installerFailures.set(releaseId, { count, retryAt, status })
+      this.setStatus(status)
     }
+    const onProgress = (progress: InstallerProgress) => this.setStatus(progress.phase === 'prepare'
+      ? { percent: progress.percent, status: 'preparing', update: info }
+      : { percent: percentOf(progress.transferredBytes, progress.totalBytes), status: 'downloading', update: info })
 
-    let file: string
+    let appcast: LoopbackFile | undefined
     try {
-      file = await installer.download(
-        { feedUrl: available.feedUrl, sha512: artifact.sha512, size: artifact.size, url: artifact.url, version },
-        (downloadedBytes, totalBytes) => this.setStatus({ percent: percentOf(downloadedBytes, totalBytes), status: 'downloading', update: info }),
-      )
+      if (installer.format === 'electron-updater') {
+        if (artifact.format !== 'electron-updater')
+          throw new Error(`The installer takes electron-updater files, and the release offers ${artifact.format}.`)
+
+        const file = await installer.download({ feedUrl: available.feedUrl, sha512: artifact.sha512, size: artifact.size, url: artifact.url, version }, onProgress)
+        if (await sha512Of(file) !== artifact.sha512)
+          return fail({ code: 'installer-mismatch', message: `${file} does not match the sha512 of the signed installer manifest.` })
+      }
+      else {
+        const bytes = await fetchChecked(artifact.url, artifact.sha512)
+        if (!bytes)
+          return fail({ code: 'installer-mismatch', message: `The appcast at ${artifact.url} does not match the sha512 of the signed installer manifest.` })
+
+        appcast = await serveOnLoopback(bytes)
+        const prepared = await installer.prepare({ url: appcast.url, version }, onProgress)
+        if (prepared.version !== version) {
+          installer.discard()
+          appcast.close()
+
+          return fail({ code: 'installer-mismatch', message: `Sparkle prepared ${prepared.version}, and the signed installer manifest says ${version}.` })
+        }
+      }
     }
     catch (error) {
-      fail({ code: 'download-failed', message: errorMessageFrom(error) ?? 'the installer download failed' })
+      appcast?.close()
 
-      return
-    }
-    if (await sha512Of(file) !== artifact.sha512) {
-      fail({ code: 'installer-mismatch', message: `${file} does not match the sha512 of the signed installer manifest.` })
-
-      return
+      return fail({ code: 'download-failed', message: errorMessageFrom(error) ?? 'the installer download failed' })
     }
 
     this.installerFailures.delete(releaseId)
-    this.pendingInstaller = info
+    // Sparkle can read the appcast again when it installs later, so the server stays until the update is gone.
+    this.pendingInstaller = { appcast, info }
     if (this.options.applyMode !== 'prompt')
-      installer.installOnQuit?.()
+      installer.installOnQuit()
     this.setStatus({ status: 'ready', update: info })
   }
 
@@ -621,6 +694,17 @@ function classifyError(error: unknown): UpdateError {
   return { code: kind, message }
 }
 
+/** Downloads a small file, and returns its bytes when their SHA-512 is `sha512`. */
+async function fetchChecked(url: string, sha512: string): Promise<Uint8Array | undefined> {
+  const response = await fetch(url, { cache: 'no-store' })
+  if (!response.ok)
+    throw new Error(`${url} returned HTTP ${response.status}.`)
+
+  const bytes = new Uint8Array(await response.arrayBuffer())
+
+  return createHash('sha512').update(bytes).digest('base64') === sha512 ? bytes : undefined
+}
+
 function percentOf(done: number, total: number): number {
   return total > 0 ? Math.min(100, Math.floor(done / total * 100)) : 100
 }
@@ -653,6 +737,30 @@ function rendererDirOf(): string {
 /** The file URL of the renderer directory of a bundle, with a trailing slash. */
 function rendererUrlOf(bundleDir: string): string {
   return `${pathToFileURL(join(bundleDir, rendererDirOf())).href}/`
+}
+
+/**
+ * Serves bytes at a random path on 127.0.0.1, on a free port. Other local programs can reach the port, so the path is
+ * random, and the bytes are already checked: the server only hands them on.
+ */
+async function serveOnLoopback(bytes: Uint8Array): Promise<LoopbackFile> {
+  const path = `/${randomUUID()}/appcast.xml`
+  const server = createServer((request, response) => {
+    if (request.url !== path) {
+      response.writeHead(404).end()
+
+      return
+    }
+    response.writeHead(200, { 'Cache-Control': 'no-store', 'Content-Type': 'application/xml' }).end(bytes)
+  })
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  server.unref()
+  const { port } = server.address() as AddressInfo
+
+  return { close: () => server.close(), url: `http://127.0.0.1:${port}${path}` }
 }
 
 /** Returns the SHA-512 of a file as base64, as installer manifests and electron-updater feeds write it. */

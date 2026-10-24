@@ -16,6 +16,7 @@ export default defineConfig({
     'CLAUDE.md',
     // Build output of the example app and its test build
     'examples/electron-app/out/**',
+    'examples/electron-sparkle-app/out/**',
     'tests/electron/out/**',
     'tests/electron/.work/**',
   ],

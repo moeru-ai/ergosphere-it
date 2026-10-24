@@ -1,4 +1,4 @@
-import type { BundleManifest, ChannelFile, Component, InstallerArtifact, InstallerManifest, TrustedKey } from '@ergosphere-it/protocol'
+import type { BundleManifest, ChannelFile, Component, InstallerArtifact, InstallerFormat, InstallerManifest, TrustedKey } from '@ergosphere-it/protocol'
 
 import type { Fetch, UpdateFileSystem } from './io'
 import type { BundleRef, ClientState, RollbackReason } from './state'
@@ -42,6 +42,14 @@ export type CheckResult
     | { error: string, manifest: BundleManifest, retryAt: Date, status: 'retry-scheduled' }
     | { manifest: BundleManifest, manifestBytes: Uint8Array<ArrayBuffer>, signature: string, status: 'available' }
 
+/** The installed app, for installer checks. */
+export interface InstalledApp {
+  /** The installer formats that the app can install, the preferred format first. */
+  formats: readonly InstallerFormat[]
+  /** The release ID of the installer that installed the app. */
+  releaseId: number
+}
+
 /** The bundle that ships inside the installer. The installer is signed, so the client trusts it without a signature. */
 export interface InstallerBundle {
   components: Component[]
@@ -50,7 +58,10 @@ export interface InstallerBundle {
   version: string
 }
 
-/** The result of an installer check. `feedUrl` is the electron-updater feed of this platform. */
+/**
+ * The result of an installer check. For an `electron-updater` file, `feedUrl` is the electron-updater feed of this
+ * platform in the release.
+ */
 export type InstallerCheckResult
   = | { artifact: InstallerArtifact, feedUrl: string, manifest: InstallerManifest, status: 'available' }
     | { error: ErgosphereError, status: 'verification-failed' }
@@ -87,9 +98,9 @@ export interface UpdateClientOptions {
   host: string
   /** A request stops when no bytes arrive for this long. Defaults to 30 seconds. */
   idleTimeoutMs?: number
+  /** The installed app. Without it, the client does not check for installer updates. */
+  installedApp?: InstalledApp
   installerBundle: InstallerBundle
-  /** The release ID of the installed app. Without it, the client does not check for installer updates. */
-  installerReleaseId?: number
   /** Boots without a healthy report before a bundle is blocked. */
   maxBootAttempts?: number
   /** The native version of this install. A bundle runs only when its range includes it. */
@@ -226,19 +237,21 @@ export class UpdateClient {
   }
 
   /**
-   * Checks the channel file for a newer installer, and returns its verified manifest and the installer for this platform.
+   * Checks the channel file for a newer installer, and returns its verified manifest and the file for this platform in
+   * the first format that the app takes.
    *
-   * The host installs it with its platform installer, for example electron-updater with `feedUrl`. A protocol rejection
-   * is a result. Network errors throw.
+   * A protocol rejection is a result. Network errors throw. A withdrawn installer is a rejection, and `state().withdrawn`
+   * lists it, so the host can drop a download of it.
    */
   async checkInstaller(): Promise<InstallerCheckResult> {
-    const { feedUrl, installerReleaseId, platform, product, trustedKeys } = this.options
-    if (installerReleaseId === undefined)
+    const { feedUrl, installedApp, platform, product, trustedKeys } = this.options
+    if (installedApp === undefined)
       return { status: 'up-to-date' }
 
     try {
-      const target = (await this.fetchChannelFile({ reuse: true })).installer?.releaseId
-      if (target === undefined || target <= installerReleaseId)
+      const channelFile = await this.fetchChannelFile({ reuse: true })
+      const target = channelFile.installer?.releaseId
+      if (target === undefined || target <= installedApp.releaseId)
         return { status: 'up-to-date' }
 
       const manifestUrl = `${feedUrl}/installers/${target}/installer.json`
@@ -246,7 +259,14 @@ export class UpdateClient {
       if (manifest.releaseId !== target)
         throw new DocumentError('invalid-schema', `The installer manifest releaseId ${manifest.releaseId} is not the channel releaseId ${target}.`)
 
-      const artifact = checkInstallerCandidate(manifest, { host: this.options.host, installerReleaseId, platform, product })
+      const artifact = checkInstallerCandidate(manifest, {
+        formats: installedApp.formats,
+        host: this.options.host,
+        installerReleaseId: installedApp.releaseId,
+        platform,
+        product,
+        withdrawn: channelFile.withdrawn,
+      })
 
       return { artifact, feedUrl: `${feedUrl}/installers/${target}/feeds/${platform}`, manifest, status: 'available' }
     }
