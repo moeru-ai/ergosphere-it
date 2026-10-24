@@ -49,9 +49,6 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
-      - name: Find unused files and exports
-        run: pnpm run knip
-
       # The README of @ergosphere-it/electron is a copy of the repository README. A change of README.md must update it.
       - name: Check generated docs
         run: |
@@ -85,6 +82,10 @@ jobs:
 
       - name: Check package exports
         run: pnpm run publint
+
+      # knip loads the electron-vite configs, which import the plugins from the build output.
+      - name: Find unused files and exports
+        run: pnpm run knip
 
       - name: Run tests
         run: pnpm run test:run
