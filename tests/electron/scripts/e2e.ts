@@ -1,16 +1,16 @@
 // End-to-end test of the example app, in a test build with variants that break on purpose.
 //
-// It publishes cores to an update tree in memory and drives one real Electron install through these scenarios:
-//   1. a page-only core reloads in place, and the process stays the same
-//   2. a main-code core restarts the app
-//   3. a core that crashes at boot falls back after three attempts and is blocked
+// It publishes bundles to an update tree in memory and drives one real Electron install through these scenarios:
+//   1. a page-only bundle reloads in place, and the process stays the same
+//   2. a main-code bundle restarts the app
+//   3. a bundle that crashes at launch is rolled back at once and blocked, and the app says why
 //   4. a page that never reports healthy rolls back in place
-//   5. a pointer that revokes the running core sends the app back to the previous core
-//   6. a core for a newer host API is not taken
-//   7. the server goes back to a backup: the app ignores the old pointer, never goes back, and takes the next release
+//   5. a channel file that withdraws the running bundle sends the app back to the previous bundle
+//   6. a bundle for a newer native version is not taken
+//   7. the server goes back to a backup: the app ignores the old channel file, never goes back, and takes the next release
 //   8. after page reloads, a page that never reports healthy rolls back, and the earlier page still loads its preload
 //   9. a download breaks in the middle, and the next request resumes it with a range
-//  10. a shell update: an installer that does not match the signed manifest is refused, and a good one installs
+//  10. an installer update: a file that does not match the signed manifest is refused, and a good one installs
 //
 // Usage: node scripts/e2e.ts [--asar] [--keep] [--show] [--pause <ms>] [--capture <dir>]
 //
@@ -19,7 +19,7 @@
 
 import type { RequestRecord, TreeServer } from '@ergosphere-it/server'
 
-import type { LoggedEvent } from '../../../examples/electron-app/src/events'
+import type { LoggedEvent } from './lib.ts'
 
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -27,14 +27,14 @@ import { join } from 'node:path'
 import { argv, exit, platform } from 'node:process'
 import { parseArgs } from 'node:util'
 
-import { createSeq } from '@ergosphere-it/publish'
+import { createReleaseId } from '@ergosphere-it/publish'
 import { createTreeApp, listen } from '@ergosphere-it/server'
 import { Format, setGlobalFormat, useLogg } from '@guiiai/logg'
 import { errorMessageFrom } from '@moeru/std/error'
 import { delay } from 'es-toolkit'
 import { Hono } from 'hono'
 
-import { findCheck, findEvent, launchApp, Workspace } from './lib.ts'
+import { findEvent, findStatus, launchApp, Workspace } from './lib.ts'
 
 const { values: options } = parseArgs({
   args: argv.slice(2),
@@ -85,7 +85,7 @@ const lastIndex = () => readEvents().length
 let server: TreeServer | undefined
 try {
   workspace = await Workspace.create(work, { asar: options.asar })
-  const builtin = await workspace.publish(1, { label: 'v1', mainTag: '1' }, { builtin: true })
+  const installed = await workspace.publish(1, { label: 'v1', mainTag: '1' }, { installed: true })
   await workspace.point(undefined)
   // Paths whose next request breaks after half of the file, to test a resumed download.
   const interrupt = new Set<string>()
@@ -104,9 +104,9 @@ try {
   server = await listen(app)
   log.withFields({ asar: options.asar, platform, server: server.url, work }).log('started')
 
-  stopApp = await launchApp(workspace, { baseUrl: server.url, capture: options.capture, e2eInstaller: true, show: options.show })
-  const first = await waitFor('builtin page v1', list => findEvent(list, 'page-mounted', e => e.version === 'v1'))
-  await step('0. boots the builtin core', true, `pid ${first.pid}`)
+  stopApp = await launchApp(workspace, { capture: options.capture, e2eInstaller: true, feedUrl: server.url, show: options.show })
+  const first = await waitFor('installed page v1', list => findEvent(list, 'page-mounted', e => e.version === 'v1'))
+  await step('0. boots the bundle of the installer', true, `pid ${first.pid}`)
 
   // 1. page-only change
   let mark = lastIndex()
@@ -115,108 +115,109 @@ try {
   await workspace.point(2)
   const reloaded = await waitFor('page v2', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v2'))
   // The app downloads only the files that changed, and they are all page files.
-  const known = new Set(builtin.objects.map(object => object.key))
+  const known = new Set(installed.objects.map(object => object.key))
   const changed = pageOnly.manifest.components.flatMap(component => component.files.filter(file => !known.has(`objects/sha256/${file.sha256.slice(0, 2)}/${file.sha256}`)))
   const downloaded = requests.slice(objectRequests).filter(r => r.path.startsWith('/objects/')).length
   const onlyPage = changed.length > 0 && changed.every(file => file.path.startsWith('renderer/'))
-  await step('1. page-only core reloads in place', reloaded.pid === first.pid && onlyPage && downloaded === changed.length, `pid ${reloaded.pid}, ${downloaded} of ${pageOnly.objects.length} objects downloaded: ${changed.map(file => file.path).join(', ')}`)
+  await step('1. page-only bundle reloads in place', reloaded.pid === first.pid && onlyPage && downloaded === changed.length, `pid ${reloaded.pid}, ${downloaded} of ${pageOnly.objects.length} objects downloaded: ${changed.map(file => file.path).join(', ')}`)
 
   // 2. main-code change
   mark = lastIndex()
   await workspace.publish(3, { label: 'v3', mainTag: '2' })
   await workspace.point(3)
   const restarted = await waitFor('page v3', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v3'))
-  const restartEvent = findEvent(since(mark)(readEvents()), 'restart', e => e.seq === 3)
-  await step('2. main-code core restarts the app', Boolean(restartEvent) && restarted.pid !== reloaded.pid, `pid ${reloaded.pid} -> ${restarted.pid}`)
+  const restartEvent = findEvent(since(mark)(readEvents()), 'restart', e => e.releaseId === 3)
+  await step('2. main-code bundle restarts the app', Boolean(restartEvent) && restarted.pid !== reloaded.pid, `pid ${reloaded.pid} -> ${restarted.pid}`)
 
   // 3. crash at boot
   mark = lastIndex()
   await workspace.publish(4, { crash: true, label: 'v4', mainTag: '3' })
   await workspace.point(4)
-  const fallback = await waitFor('fallback to core 3', list => findEvent(since(mark)(list), 'boot', e => e.seq === 3 && e.rejected.some(r => r.seq === 4)), 90_000)
-  const failures = since(mark)(readEvents()).filter(e => e.type === 'boot-failed' && e.seq === 4).length
+  const fallback = await waitFor('fallback to bundle 3', list => findEvent(since(mark)(list), 'boot', e => e.releaseId === 3 && since(mark)(list).some(other => other.type === 'boot-failed' && other.releaseId === 4)), 90_000)
   await waitFor('page v3 after fallback', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v3'))
-  await step('3. crashing core falls back and is blocked', failures === 3, `${failures} failed boots, then core ${fallback.seq}`)
+  const notice = await waitFor('rollback notice', list => findStatus(since(mark)(list), 'rolled-back', status => status.from.releaseId === 4))
+  await step('3. a bundle that crashes at launch is rolled back and blocked', notice.reason === 'crashed-at-launch' && notice.to.releaseId === 3, `rolled back from ${notice.from.version} to ${notice.to.version} in pid ${fallback.pid}`)
 
   // 4. page never reports healthy
   mark = lastIndex()
   await workspace.publish(5, { label: 'v5-broken', mainTag: '2', noHealth: true })
   await workspace.point(5)
-  const rollback = await waitFor('rollback of core 5', list => findEvent(since(mark)(list), 'rollback', e => e.from === 5))
+  const rollback = await waitFor('rollback of bundle 5', list => findEvent(since(mark)(list), 'rollback', e => e.from === 5))
   const back = await waitFor('page v3 after rollback', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v3'))
-  const sameProcess = since(mark)(readEvents()).every(e => e.type !== 'shell-start')
+  const sameProcess = since(mark)(readEvents()).every(e => e.type !== 'boot')
   await step('4. unhealthy page rolls back in place', rollback.to === 3 && sameProcess, `rolled back to ${rollback.to} in pid ${back.pid}`)
 
-  // 5. revoke the running core
+  // 5. withdraw the running bundle
   mark = lastIndex()
   await workspace.publish(6, { label: 'v6', mainTag: '2' })
   await workspace.point(6)
   await waitFor('page v6', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v6'))
   mark = lastIndex()
   await workspace.point(6, [6])
-  const revokedBoot = await waitFor('boot after revoke', list => findEvent(since(mark)(list), 'boot'))
-  await waitFor('page v3 after revoke', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v3'))
-  await step('5. revoked core is left', revokedBoot.seq === 3, `booted core ${revokedBoot.seq}`)
+  const withdrawnBoot = await waitFor('boot after withdraw', list => findEvent(since(mark)(list), 'boot'))
+  await waitFor('page v3 after withdraw', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v3'))
+  const withdrawnNotice = findStatus(since(mark)(readEvents()), 'rolled-back', status => status.reason === 'withdrawn')
+  await step('5. a withdrawn bundle is left, and the app says why', withdrawnBoot.releaseId === 3 && withdrawnNotice?.from.releaseId === 6, `booted bundle ${withdrawnBoot.releaseId}`)
 
-  // 6. core for a newer host API
+  // 6. bundle for a newer native version
   mark = lastIndex()
-  await workspace.publish(7, { label: 'v7', mainTag: '4' }, { hostApi: { max: 2, min: 2 } })
+  await workspace.publish(7, { label: 'v7', mainTag: '4' }, { nativeVersion: { max: 2, min: 2 } })
   await workspace.point(7)
-  const rejected = await waitFor('rejected core 7', list => findCheck(since(mark)(list), 'rejected'))
+  const skipped = await waitFor('skipped bundle 7', list => findStatus(since(mark)(list), 'up-to-date', status => status.detail === 'needs-newer-native-version'))
   await delay(3000)
   const moved = since(mark)(readEvents()).some(e => e.type === 'boot' || e.type === 'reload')
-  await step('6. core for a newer host API is not taken', rejected.code === 'host-api-incompatible' && !moved, rejected.code)
+  await step('6. a bundle for a newer native version is not taken', !moved, skipped.detail)
 
   // 7. the server goes back to a backup after a release reached the app
   const backup = workspace.tree.snapshot()
   mark = lastIndex()
-  const lost = createSeq(7)
+  const lost = createReleaseId(7)
   await workspace.publish(lost, { label: 'v8-lost', mainTag: '2' })
   await workspace.point(lost)
   await waitFor('page v8-lost', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v8-lost'))
 
   mark = lastIndex()
   workspace.tree.restore(backup)
-  const replayed = await waitFor('ignored old pointer', list => findCheck(since(mark)(list), 'rejected', result => result.code === 'pointer-replayed'))
+  const replayed = await waitFor('ignored old channel file', list => findStatus(since(mark)(list), 'verification-failed', status => status.error.code === 'channel-replayed'))
 
   mark = lastIndex()
   await workspace.reissue()
-  const behind = await waitFor('server behind', list => findCheck(since(mark)(list), 'server-behind'))
+  const behind = await waitFor('app newer than feed', list => findStatus(since(mark)(list), 'up-to-date', status => status.detail === 'app-newer-than-feed'))
   const wentBack = since(mark)(readEvents()).some(e => e.type === 'boot' || e.type === 'reload' || e.type === 'rollback')
 
   mark = lastIndex()
-  // The server does not know the lost release. A seq from the clock is still above it.
-  const fix = createSeq()
+  // The server does not know the lost release. A release ID from the clock is still above it.
+  const fix = createReleaseId()
   await workspace.publish(fix, { label: 'v9-fix', mainTag: '2' })
   await workspace.point(fix)
   const fixed = await waitFor('page v9-fix', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v9-fix'))
   await step(
     '7. server back to a backup: the app stays, then takes the next release',
-    Boolean(replayed) && behind.current === lost && !wentBack && fix > lost && fixed.seq === fix,
-    `ignored the old pointer, reported server-behind (app ${behind.current} > server ${behind.seq}), took ${fix}`,
+    Boolean(replayed) && Boolean(behind) && !wentBack && fix > lost && fixed.releaseId === fix,
+    `ignored the old channel file, reported ${behind.detail}, took ${fix}`,
   )
 
-  // 8. page reloads move current and previous away from the booted core, then a page never reports healthy
+  // 8. page reloads move current and previous away from the booted bundle, then a page never reports healthy
   mark = lastIndex()
   for (const label of ['v10', 'v11']) {
-    const seq = createSeq()
-    await workspace.publish(seq, { label, mainTag: '2' })
-    await workspace.point(seq)
+    const releaseId = createReleaseId()
+    await workspace.publish(releaseId, { label, mainTag: '2' })
+    await workspace.point(releaseId)
     await waitFor(`page ${label}`, list => findEvent(since(mark)(list), 'page-mounted', e => e.version === label))
   }
   mark = lastIndex()
-  const broken = createSeq()
+  const broken = createReleaseId()
   await workspace.publish(broken, { label: 'v12-broken', mainTag: '2', noHealth: true })
   await workspace.point(broken)
   await waitFor('rollback of v12', list => findEvent(since(mark)(list), 'rollback', e => e.from === broken))
-  // The page reports through its preload script, so a mounted page proves that the preload of the booted core is there.
+  // The page reports through its preload script, so a mounted page proves that the preload of the booted bundle is there.
   const remounted = await waitFor('page v11 after rollback', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v11'))
-  const restartedAgain = since(mark)(readEvents()).some(e => e.type === 'shell-start')
+  const restartedAgain = since(mark)(readEvents()).some(e => e.type === 'boot')
   await step('8. after page reloads, an unhealthy page rolls back to a working page', !restartedAgain, `page v11 mounted again in pid ${remounted.pid}`)
 
   // 9. a download breaks in the middle and resumes
   mark = lastIndex()
-  const resumed = createSeq()
+  const resumed = createReleaseId()
   const release = await workspace.publish(resumed, { assetMb: 2, label: 'v13', mainTag: '2' })
   const asset = release.manifest.components.flatMap(component => component.files).find(file => file.path.endsWith('blob.bin'))!
   const assetPath = `/objects/sha256/${asset.sha256.slice(0, 2)}/${asset.sha256}`
@@ -231,19 +232,19 @@ try {
     assetRequests.map(request => `${request.status}${request.range ? ` ${request.range}` : ''}${request.fault ? ` ${request.fault}` : ''}`).join(', '),
   )
 
-  // 10. a shell update
+  // 10. an installer update
   mark = lastIndex()
-  const installer = new TextEncoder().encode('example shell installer') as Uint8Array<ArrayBuffer>
-  await workspace.publishShell(2, { baseUrl: server.url, bytes: installer, sha512: 'AAAA' })
-  await workspace.point(resumed, [], { shell: 2 })
-  const refused = await waitFor('refused installer', list => findCheck(since(mark)(list), 'failed', result => result.detail.includes('sha512')))
+  const installerFile = new TextEncoder().encode('example installer') as Uint8Array<ArrayBuffer>
+  await workspace.publishInstaller(2, { bytes: installerFile, feedUrl: server.url, sha512: 'AAAA' })
+  await workspace.point(resumed, [], { installer: 2 })
+  const refused = await waitFor('refused installer', list => findStatus(since(mark)(list), 'download-failed', status => status.error.code === 'installer-mismatch'))
   const installedTooEarly = since(mark)(readEvents()).some(e => e.type === 'install')
 
   mark = lastIndex()
-  await workspace.publishShell(3, { baseUrl: server.url, bytes: installer })
-  await workspace.point(resumed, [], { shell: 3 })
-  const install = await waitFor('install of shell 3', list => findEvent(since(mark)(list), 'install', e => e.seq === 3))
-  await step('10. a shell update refuses a wrong installer, then installs a good one', Boolean(refused) && !installedTooEarly && install.seq === 3, `refused shell 2 (${refused.detail.split(' ').slice(-2).join(' ')}), installed shell 3`)
+  await workspace.publishInstaller(3, { bytes: installerFile, feedUrl: server.url })
+  await workspace.point(resumed, [], { installer: 3 })
+  const install = await waitFor('install of installer 3', list => findEvent(since(mark)(list), 'install', e => e.releaseId === 3))
+  await step('10. an installer update refuses a wrong file, then installs a good one', Boolean(refused) && !installedTooEarly && install.releaseId === 3, `refused installer 2 (${refused.error.code}), installed installer 3`)
 }
 catch (error) {
   await step('run', false, errorMessageFrom(error) ?? 'unknown error')

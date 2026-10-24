@@ -1,4 +1,4 @@
-import type { Component, CoreManifest } from '@ergosphere-it/protocol'
+import type { BundleManifest, Component } from '@ergosphere-it/protocol'
 
 import type { Fetch, FetchInit } from './io'
 
@@ -16,13 +16,13 @@ export const trustedKeys = [{ keyId: keys.trusted.keyId, publicKey: keys.trusted
 
 const encode = (text: string) => new TextEncoder().encode(text)
 
-export type CoreFiles = Partial<Record<Component['type'], Record<string, string>>>
+export type BundleFiles = Partial<Record<Component['type'], Record<string, string>>>
 
 /** A static update server in memory, signed with the protocol test key. */
 export class FakeServer {
-  readonly baseUrl = 'https://updates.test'
   /** Requests with their headers, for tests that check a resumed download. */
   readonly calls: { range?: string, url: string }[] = []
+  readonly feedUrl = 'https://updates.test'
   readonly files = new Map<string, Uint8Array>()
 
   /** Answers a request before the files do, for example to break a download. Return `undefined` to serve the file. */
@@ -32,7 +32,7 @@ export class FakeServer {
   readonly fetch: Fetch = async (url, init) => {
     this.requests.push(url)
     this.calls.push({ range: init?.headers?.Range, url })
-    const path = url.slice(this.baseUrl.length)
+    const path = url.slice(this.feedUrl.length)
     const body = this.files.get(path)
     const intercepted = await this.intercept?.(path, init, body)
     if (intercepted)
@@ -51,8 +51,8 @@ export class FakeServer {
     return new Response(body.slice(start), { headers: { 'Content-Range': `bytes ${start}-${body.byteLength - 1}/${body.byteLength}` }, status: 206 })
   }
 
-  /** Publishes a core: its objects, its signed manifest. Returns the manifest. */
-  async publishCore(seq: number, files: CoreFiles, overrides: Partial<CoreManifest> = {}): Promise<CoreManifest> {
+  /** Publishes a bundle: its objects, its signed manifest. Returns the manifest. */
+  async publishBundle(releaseId: number, files: BundleFiles, overrides: Partial<BundleManifest> = {}): Promise<BundleManifest> {
     const components = await buildComponents(files)
     for (const entries of Object.values(files)) {
       for (const content of Object.values(entries ?? {})) {
@@ -65,35 +65,34 @@ export class FakeServer {
       components,
       createdAt: '2026-10-23T00:00:00.000Z',
       host: 'electron',
-      hostApi: { max: 3, min: 3 },
-      kind: 'core',
+      kind: 'bundle',
+      nativeVersion: { max: 3, min: 3 },
       platform: 'any',
       product: 'airi',
+      releaseId,
       schema: 1,
-      seq,
       totalSize: sumBy(components.flatMap(component => component.files), file => file.size),
-      version: `0.13.0-core.${seq}`,
+      version: `0.13.0-ota.${releaseId}`,
       ...overrides,
     }
-    await this.signed(`/cores/${seq}/manifest.json`, manifest)
+    await this.signed(`/bundles/${releaseId}/bundle.json`, manifest)
 
-    return { ...manifest, signature: { alg: 'ed25519', keyId: keys.trusted.keyId } } as CoreManifest
+    return { ...manifest, signature: { alg: 'ed25519', keyId: keys.trusted.keyId } } as BundleManifest
   }
 
-  /** Publishes a pointer at the path of its own channel and cadence, unless `path` says otherwise. */
-  async publishPointer(seq: number | undefined, overrides: Record<string, unknown> = {}, path?: string): Promise<void> {
-    const pointer = {
-      cadence: 'realtime',
+  /** Publishes a channel file at the path of its own channel, unless `path` says otherwise. */
+  async publishChannel(releaseId: number | undefined, overrides: Record<string, unknown> = {}, path?: string): Promise<void> {
+    const channelFile = {
       channel: 'canary',
       expiresAt: '2026-11-06T00:00:00.000Z',
       issuedAt: '2026-10-23T00:00:00.000Z',
-      kind: 'pointer',
+      kind: 'channel',
       product: 'airi',
       schema: 1,
-      ...(seq === undefined ? {} : { core: { seq } }),
+      ...(releaseId === undefined ? {} : { bundle: { releaseId } }),
       ...overrides,
     }
-    await this.signed(path ?? `/pointers/${pointer.channel}/${pointer.cadence}.json`, pointer)
+    await this.signed(path ?? `/channels/${channelFile.channel}.json`, channelFile)
   }
 
   async put(path: string, bytes: Uint8Array): Promise<void> {
@@ -125,7 +124,7 @@ export function brokenResponse(body: Uint8Array, sent: number, init?: ResponseIn
   }), init)
 }
 
-export async function buildComponents(files: CoreFiles): Promise<Component[]> {
+export async function buildComponents(files: BundleFiles): Promise<Component[]> {
   const components: Component[] = []
   for (const [type, entries] of Object.entries(files) as [Component['type'], Record<string, string>][]) {
     const list = []

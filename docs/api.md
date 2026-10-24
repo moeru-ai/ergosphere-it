@@ -1,14 +1,15 @@
 # API design
 
-This document defines the public API of each package. [The specification](spec.md) defines the protocol.
+This document lists the public API of each package. [The specification](spec.md) defines the protocol. [The Electron guide](../packages/electron/README.md) shows how an app uses it.
 
 ## Rules
 
 - **Publishing is data.** The publish API turns inputs into files: a key, bytes, and HTTP headers. It does no I/O. The caller uploads the files to any backend, for example S3, R2, a directory, or a map in memory.
-- **Publishing is stateless.** The caller declares what to publish. Nothing reads earlier state to decide the next step. A `seq` comes from the clock.
+- **Publishing is stateless.** The caller declares what to publish. Nothing reads earlier state to decide the next step. A release ID comes from the clock.
 - **Built-ins first.** Use WebCrypto, `Uint8Array` base64 and hex, `@moeru/std`, and `es-toolkit`. Do not write encoding or crypto helpers.
 - **Errors are classes.** A failed verification throws an `ErgosphereError` subclass with a `code` from the specification and a `cause`.
 - **Small surfaces.** A package exports what its users call. Schemas, helpers, and wiring stay internal.
+- **Names come from the readers.** A name stays when developers who never saw the project understand it without help. See the decisions of 2026-10-24 in the specification.
 
 Runtimes: Node.js 26 or later, Electron 43 or later, and current browsers. `protocol` and `publish` also run in Deno, Bun, and workers.
 
@@ -21,17 +22,17 @@ Formats, keys, signatures, and verification. No I/O.
 | `createKeyPair()` | Creates a `SigningKey` and its `TrustedKey` with WebCrypto. |
 | `trustedKeyFromPublicKey(publicKey)` | Builds a `TrustedKey` from a base64 SPKI public key. |
 | `signDocument(document, signingKey)` | Returns the canonical bytes of a document and their detached signature. |
-| `verifyCoreManifest(bytes, signature, trustedKeys)` | Returns the verified `CoreManifest`, or throws. |
-| `verifyPointer(bytes, signature, trustedKeys, context)` | Returns the verified `Pointer`, or throws. `context` names the product, channel, and cadence that the client asked for. |
-| `verifyShellManifest(bytes, signature, trustedKeys)` | Returns the verified `ShellManifest`, or throws. |
-| `validateCoreManifest(document)`, `validatePointer(document)`, `validateShellManifest(document)` | Check the schema and rules of a document without its signature. Clients run them after the signature verifies, and publishers run them before they sign. |
-| `checkCoreCandidate(manifest, context)` | Throws a `CandidateError` when an install cannot take a verified core. |
-| `checkShellCandidate(manifest, context)` | Returns the installer of a verified shell for this platform, or throws a `CandidateError`. |
-| `isInRollout(rollout, installId)`, `isHostApiCompatible(shellHostApi, range)`, `isSafeManifestPath(path)` | Policy helpers. |
+| `verifyBundleManifest(bytes, signature, trustedKeys)` | Returns the verified `BundleManifest`, or throws. |
+| `verifyChannelFile(bytes, signature, trustedKeys, context)` | Returns the verified `ChannelFile`, or throws. `context` names the product and channel that the client asked for. |
+| `verifyInstallerManifest(bytes, signature, trustedKeys)` | Returns the verified `InstallerManifest`, or throws. |
+| `validateBundleManifest(document)`, `validateChannelFile(document)`, `validateInstallerManifest(document)` | Check the schema and rules of a document without its signature. Clients run them after the signature verifies, and publishers run them before they sign. |
+| `checkBundleCandidate(manifest, context)` | Throws a `CandidateError` when an install cannot take a verified bundle. |
+| `checkInstallerCandidate(manifest, context)` | Returns the installer file of a verified installer release for this platform, or throws a `CandidateError`. |
+| `isInRollout(rollout, installId)`, `isNativeVersionCompatible(nativeVersion, range)`, `isSafeManifestPath(path)` | Policy helpers. |
 | `contentHash(bytes)` | The content address: SHA-256 as lowercase hex. |
 | `canonicalJson(value)` | The canonical JSON that signatures cover: JCS (RFC 8785) through `canonicalize`. |
-| `ErgosphereError`, `SignatureError`, `DocumentError`, `PointerError`, `CandidateError`, `ErrorCode` | Errors. |
-| Types: `CoreManifest`, `ShellManifest`, `ShellArtifact`, `Pointer`, `Component`, `ComponentType`, `FileEntry`, `HostApiRange`, `Rollout`, `Cadence`, `Distribution`, `SigningKey`, `TrustedKey` | Data. |
+| `ErgosphereError`, `SignatureError`, `DocumentError`, `ChannelError`, `CandidateError`, `ErrorCode` | Errors. |
+| Types: `BundleManifest`, `InstallerManifest`, `InstallerArtifact`, `ChannelFile`, `Component`, `ComponentType`, `FileEntry`, `NativeVersionRange`, `Rollout`, `SigningKey`, `TrustedKey` | Data. |
 | `@ergosphere-it/protocol/conformance` | Conformance cases. A case expects `ok` or an error `code`. |
 
 Internal: Valibot schemas, signature primitives, base64 decoding.
@@ -42,48 +43,46 @@ Internal: Valibot schemas, signature primitives, base64 decoding.
 | --- | --- |
 | `SignatureError` | `invalid-signature`, `untrusted-key` |
 | `DocumentError` | `invalid-json`, `invalid-schema`, `unsafe-path`, `duplicate-path` |
-| `PointerError` | `pointer-expired`, `pointer-replayed`, `pointer-mismatch` |
-| `CandidateError` | `core-mismatch`, `shell-mismatch`, `platform-mismatch`, `host-api-incompatible`, `revoked`, `blocked`, `not-newer` |
+| `ChannelError` | `channel-expired`, `channel-replayed`, `channel-mismatch` |
+| `CandidateError` | `bundle-mismatch`, `installer-mismatch`, `platform-mismatch`, `native-version-mismatch`, `withdrawn`, `blocked`, `not-newer` |
 
 ## `@ergosphere-it/publish`
 
 Builds the files of a release. No I/O, no state.
 
 ```ts
-const release = await buildCoreRelease({
+const release = await buildBundleRelease({
   components, // [{ dir: 'main', type: 'electron-main', entry: 'main/index.mjs' }, ...]
   files, // [{ path: 'main/index.mjs', bytes }]
   host,
-  hostApi,
+  nativeVersion, // { min, max }
   platform,
   product,
   signingKey,
   version,
 })
 // release.objects: TreeFile[] (immutable, content addressed)
-// release.manifest: the CoreManifest, release.manifestFiles: TreeFile[] (manifest and signature)
-// release.builtin: BuiltinCore descriptor for an installer that ships this core
+// release.manifest: the BundleManifest, release.manifestFiles: TreeFile[] (manifest and signature)
+// release.descriptor: what an installer ships next to the bundle
 
-const pointer = await buildPointer({ cadence, channel, core: { rollout: 100, seq: release.seq }, product, revoked, signingKey })
+const channel = await buildChannelFile({ bundle: { releaseId: release.releaseId, rollout: 20 }, channel, product, signingKey, withdrawn })
 
-for (const stage of uploadStages([release], [pointer]))
+for (const stage of uploadStages([release], [channel]))
   await Promise.all(stage.map(file => backend.put(file.key, file.bytes, file.headers)))
 ```
 
 | Export | Purpose |
 | --- | --- |
-| `buildCoreRelease(input)` | Returns the objects, the signed manifest, and the builtin descriptor of a core. |
-| `buildPointer(input)` | Returns the signed pointer files. The caller declares the whole pointer. |
-| `reissuePointer(pointer, signingKey)` | Signs a pointer again with a new issue time, for example after a backup restore. |
-| `uploadStages(releases, pointers)` | Groups files in upload order: objects, then manifests, then pointers. |
-| `createSeq(minimum?)` | The next `seq`: the current time in milliseconds, or one more than `minimum`. |
-| `buildShellRelease(input)` | Returns the signed shell manifest, and one electron-updater feed per platform. Installer URLs must be absolute. |
+| `buildBundleRelease(input)` | Returns the objects, the signed manifest, and the descriptor of a bundle. |
+| `buildChannelFile(input)` | Returns the signed channel file. The caller declares the whole file. |
+| `reissueChannelFile(channelFile, signingKey)` | Signs a channel file again with a new issue time, for example after a backup restore. |
+| `buildInstallerRelease(input)` | Returns the signed installer manifest, and one electron-updater feed per platform. Installer URLs must be absolute. |
+| `uploadStages(releases, channelFiles)` | Groups files in upload order: objects, then manifests and feeds, then channel files. |
+| `createReleaseId(minimum?)` | The next release ID: the current time in milliseconds, or one more than `minimum`. |
 | `feedFileName(platform)` | The feed file that electron-updater reads on a platform, for example `latest-mac.yml`. |
-| Types: `TreeFile`, `CoreRelease`, `ShellRelease`, `ShellArtifactInput`, `PointerRelease`, `ComponentSpec`, `BuiltinCore` | Data. |
+| Types: `TreeFile`, `BundleRelease`, `BundleDescriptor`, `BundleFile`, `InstallerRelease`, `InstallerFileInput`, `ChannelFileRelease`, `ComponentSpec` | Data. |
 
 `TreeFile` is `{ key, bytes, headers: { 'Content-Type', 'Cache-Control' }, immutable }`. An immutable file never changes, so a backend can skip it when the key exists.
-
-Removed: the `ergosphere-it` CLI, and every function that read or wrote a directory.
 
 ## `@ergosphere-it/client`
 
@@ -91,30 +90,37 @@ The update state machine of one install. The host injects the network, file syst
 
 | Export | Purpose |
 | --- | --- |
-| `UpdateClient` | `check()`, `checkShell()`, `stage(available, { onProgress })`, `boot()`, `markHealthy(selection)`, `activateInPlace(seq)`, `rollback(seq)`, `storedCore(seq)`, `collectGarbage()`, `state()`. |
-| `activationFor(running, next)` | `none`, `reload`, or `restart`. |
-| Types: `UpdateClientOptions`, `CheckResult`, `StageResult`, `StageProgress`, `BootSelection`, `UpdateFileSystem`, `Fetch`, `ClientState` | Data. |
+| `UpdateClient` | `check({ force })`, `checkInstaller()`, `stage(available, { onProgress })`, `boot({ readOnly })`, `markHealthy(selection)`, `activateInPlace(releaseId)`, `rollback(releaseId, reason)`, `dismissRollback()`, `storedBundle(releaseId)`, `bundleDir(releaseId)`, `collectGarbage()`, `state()`. |
+| `requirementOf(running, next)` | What a change needs: `none`, `reload`, or `restart`. |
+| Types: `UpdateClientOptions`, `CheckResult`, `CheckOptions`, `UpToDateDetail`, `InstallerCheckResult`, `StageResult`, `StageProgress`, `BootSelection`, `InstallerBundle`, `UpdateFileSystem`, `Fetch`, `ClientState`, `BundleRef`, `RollbackReason` | Data. |
 | `@ergosphere-it/client/node` → `createNodeFileSystem()` | File system for Node.js hosts. |
 
-`UpdateClientOptions` needs `product` and `host`. Download options: `concurrency` (4), `idleTimeoutMs` (30 s), `retries` (3), and `retryDelayMs` (1 s). `UpdateFileSystem` streams large files: `appendFile` writes a `.part` file, and `hashFile` hashes a file without reading it into memory. A check can return `retry-later` after a failed download. A rejected check returns `{ status: 'rejected', error }` with the `ErgosphereError`. `boot()` records a boot attempt, so it is not a query.
+- `check()` returns `available`, `up-to-date` with an optional `detail`, `retry-scheduled` after a failed download, or `verification-failed` with the `ErgosphereError`. Network and file system errors throw. `force` skips the wait for a retry.
+- `UpdateClientOptions` needs `product`, `host`, `channel`, `feedUrl`, `nativeVersion`, and `installerBundle`. Download options: `concurrency` (4), `idleTimeoutMs` (30 s), `retries` (3), and `retryDelayMs` (1 s).
+- `UpdateFileSystem` streams large files: `appendFile` writes a `.part` file, and `hashFile` hashes a file without reading it into memory.
+- `boot()` records a boot attempt, so it is not a query. `boot({ readOnly: true })` selects without a change, for a second instance.
 
 Internal: the object store and the state file.
 
-## `@ergosphere-it/driver-electron`
+## `@ergosphere-it/electron`
 
-| Export | Purpose |
+[The Electron guide](../packages/electron/README.md) shows each entry in use.
+
+| Entry | Exports |
 | --- | --- |
-| `@ergosphere-it/driver-electron/shell` → `Shell` | The shell entry: `new Shell(options).start()` selects a core, prepares it, and loads its main. |
-| `@ergosphere-it/driver-electron/electron-updater` → `createElectronUpdaterInstaller(autoUpdater)` | Wraps the electron-updater instance of the app as the `installer` of `Shell`. |
-| `@ergosphere-it/driver-electron/core` → `getCore()` | The running core: `info`, `resolve(...parts)`, `markHealthy()`, `onReload(listener)`, and `updater` with `check()`, `apply()`, `status`, and `onStatus(listener)`. |
-| Types: `ShellOptions`, `ShellEvent`, `ShellInstaller`, `Core`, `CoreInfo`, `Updater`, `UpdateStatus`, `UpdateResult`, `Activation` | Data. |
+| `/vite` | `withUpdates(config, { launcher, main, preload, outDir, root })`. Types: `UpdatesConfig`. |
+| `/main` | `activeBundle`, `loadActiveBundle(window, options)`, `updater`, `markBundleHealthy()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
+| `/preload` | `exposeUpdater()` |
+| `/renderer` | `markBundleHealthy()`, `watchUpdaterStatus(listener)`, `getPageUpdater()` |
+| `/vue` | `useUpdater()` with `status`, `activeBundle`, `applyUpdate()`, `checkForUpdates()`, `dismissRollback()`, and `markBundleHealthy()` |
+| `/release` | `bundleReleaseFromBuild(options)`, `installerReleaseFromBuild(options)`, `readBuildInfo(outDir)` |
+| `/launcher` | `startLauncher(options)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Installer`. |
+| `/electron-updater` | `createElectronUpdaterInstaller(updater?)`. Without an argument, it creates its own electron-updater instance. |
+| `/virtual` | Types of `virtual:ergosphere-it/config` for a custom launcher |
 
-- `UpdateStatus` is for an update notice in the UI.
-- `UpdateResult` is what `updater.check()` and `updater.apply()` return.
-- `ShellEvent` is for logs and tests.
-- With `installer` and `shellSeq`, a check looks for a newer shell first. A ready shell has `activation: 'install'`, and `apply()` installs it.
+Status types: `UpdaterStatus`, `UpdateInfo`, `BundleInfo`, `UpdateRequirement`, `UpdateError`, `UpdateErrorCode`, `RollbackReason`, `DisabledReason`, `PageUpdater`.
 
-Internal: module resolution hooks, the global that holds the core.
+Internal: the launcher class, module resolution hooks, the IPC channel names, and the global that holds the runtime.
 
 ## `@ergosphere-it/server`
 
@@ -125,7 +131,7 @@ Test servers on Hono. The tree lives in memory.
 | `MemoryTree` | A map of `TreeFile`s: `put(files)`, `get(key)`, `snapshot()`, `restore(snapshot)`, `entries()`. |
 | `createTreeApp({ tree, faults, onRequest })` | A Hono app that serves a tree and injects faults. Mount it in another app, or run `app.fetch` on any runtime. |
 | `createTreeServer(options)`, `listen(app, { host, port })` | Serve a tree app, or any Hono app, on Node.js. |
-| `createDevServer({ tree, signingKey, product, release, ... })` | Adds the release console: publish, history, revoke, and the app report. `release.build` returns a `CoreRelease`, and the server uploads it and moves the pointer. |
+| `createDevServer({ tree, signingKey, product, release, ... })` | Adds the release console: publish, history, withdraw, and the app report. `release.build` returns a `BundleRelease`, and the server uploads it and moves the channel to it. Channel names have only letters, digits, `.`, `_`, and `-`. |
 | `ReleaseRequestError` | A console request that cannot run. The console answers 400 with its message. |
 | `NO_FAULTS` | Faults that are all off. |
 | Types: `Faults`, `RequestRecord`, `TreeAppOptions`, `ListenOptions`, `TreeServer`, `TreeServerOptions`, `DevServer`, `DevServerOptions`, `ReleaseChange`, `ReleaseEntry`, `ClientReport` | Data. |

@@ -3,7 +3,7 @@ import type { AppUpdater, ProgressInfo } from 'electron-updater'
 import { EventEmitter } from 'node:events'
 
 import { createKeyPair } from '@ergosphere-it/protocol'
-import { buildShellRelease, feedFileName } from '@ergosphere-it/publish'
+import { buildInstallerRelease, feedFileName } from '@ergosphere-it/publish'
 // NOTICE:
 // electron-updater does not export its feed parser. The test needs the parser that installs use.
 // Source: node_modules/electron-updater/out/providers/Provider.d.ts, parseUpdateInfo.
@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { createElectronUpdaterInstaller } from './electron-updater'
 
-const update = { feedUrl: 'https://updates.test/shells/8/feeds/darwin-arm64', sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-arm64-mac.zip', version: '0.14.0' }
+const update = { feedUrl: 'https://updates.test/installers/8/feeds/darwin-arm64', sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-arm64-mac.zip', version: '0.14.0' }
 
 /** An electron-updater instance without Electron. It answers a check with `version`, and downloads `file`. */
 function fakeUpdater(version: string | undefined, file = '/tmp/AIRI-arm64-mac.zip') {
@@ -35,11 +35,11 @@ function fakeUpdater(version: string | undefined, file = '/tmp/AIRI-arm64-mac.zi
 }
 
 describe('createElectronUpdaterInstaller', () => {
-  it('downloads from the generic feed of the shell release, without installing it on its own', async () => {
+  it('downloads from the generic feed of the installer release, without installing it on its own', async () => {
     const updater = fakeUpdater('0.14.0')
     const progress: number[][] = []
 
-    const file = await createElectronUpdaterInstaller(updater).download(update, (downloaded, total) => progress.push([downloaded, total]))
+    const file = await (await createElectronUpdaterInstaller(updater)).download(update, (downloaded, total) => progress.push([downloaded, total]))
 
     expect(file).toBe('/tmp/AIRI-arm64-mac.zip')
     expect(updater.setFeedURL).toHaveBeenCalledWith({ provider: 'generic', url: update.feedUrl })
@@ -48,30 +48,30 @@ describe('createElectronUpdaterInstaller', () => {
     expect(updater.listenerCount('download-progress')).toBe(0)
   })
 
-  it('refuses a feed that offers another version than the signed shell manifest', async () => {
-    await expect(createElectronUpdaterInstaller(fakeUpdater('0.15.0')).download(update, () => {})).rejects.toThrow('offers 0.15.0')
-    await expect(createElectronUpdaterInstaller(fakeUpdater(undefined)).download(update, () => {})).rejects.toThrow('no newer version')
+  it('refuses a feed that offers another version than the signed installer manifest', async () => {
+    await expect((await createElectronUpdaterInstaller(fakeUpdater('0.15.0'))).download(update, () => {})).rejects.toThrow('offers 0.15.0')
+    await expect((await createElectronUpdaterInstaller(fakeUpdater(undefined))).download(update, () => {})).rejects.toThrow('no newer version')
   })
 
-  it('installs through quitAndInstall', () => {
+  it('installs through quitAndInstall', async () => {
     const updater = fakeUpdater('0.14.0')
-    createElectronUpdaterInstaller(updater).install()
+    ;(await createElectronUpdaterInstaller(updater)).install()
 
     expect(updater.quitAndInstall).toHaveBeenCalledOnce()
   })
 })
 
-describe('shell release feeds', () => {
+describe('installer release feeds', () => {
   it('are feeds that electron-updater reads', async () => {
     const { signingKey } = await createKeyPair()
-    const release = await buildShellRelease({
+    const release = await buildInstallerRelease({
       artifacts: [{ platform: 'darwin-arm64', sha512: 'bWFj', size: 100, url: update.url }],
-      builtinCoreSeq: 20,
+      bundleReleaseId: 20,
       createdAt: '2026-10-24T00:00:00.000Z',
       host: 'electron',
-      hostApi: 2,
+      nativeVersion: 2,
       product: 'airi',
-      seq: 8,
+      releaseId: 8,
       signingKey,
       version: '0.14.0',
     })

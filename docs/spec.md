@@ -2,7 +2,7 @@
 
 Status: accepted for version 1. Open items are at the end.
 
-This document defines how ergosphere-it delivers desktop updates as a signed shell and an over-the-air core. The first host is the AIRI Electron app. The protocol does not depend on Electron.
+This document defines how ergosphere-it delivers desktop updates as signed installers and over-the-air (OTA) bundles. The first host is the AIRI Electron app. The protocol does not depend on Electron.
 
 ## Context
 
@@ -12,22 +12,22 @@ The 2026-10 investigation (LobeHub goal `goal_vuHfN6pYqMnG`) found these facts:
 - Existing users can update, but no platform finishes in one click. F1 and F2 were the main causes. #3082 and #3083 fixed them.
 - Nightly builds have no update feed. They report the version of the last beta.
 - A full installer has no rollback and no staged rollout.
-- A prototype on real AIRI showed that a core over-the-air (OTA) update works on macOS, Windows, and Linux:
+- A prototype on real AIRI showed that an OTA update of the app code works on macOS, Windows, and Linux:
   - A renderer change downloads 11.6 MB and reloads in place.
   - A main process change downloads 16.7 MB and restarts the app.
-  - A broken core falls back after 3 failed starts.
+  - A broken update falls back after 3 failed starts.
 - Three prototypes exist, and their formats are not compatible: `ota-update-server`, `ota-lab`, and the PoC branch `neko/poc/one-click-migration`.
-- LobeHub Desktop ships a core OTA in production. Its specification is `docs/development/desktop-core-asar-pack-ota-spec.md` in the LobeHub repository. This document takes ideas from it but no code, because the LobeHub Community License is not compatible with MIT.
+- LobeHub Desktop ships an OTA update of its app code in production. Its specification is `docs/development/desktop-core-asar-pack-ota-spec.md` in the LobeHub repository. This document takes ideas from it but no code, because the LobeHub Community License is not compatible with MIT.
 
 The user made these decisions:
 
-1. The app is a shell with full updates plus a core with OTA updates (option A).
-2. Stable gets no core OTA by default.
+1. The app is a fixed part with full updates plus a bundle with OTA updates (option A).
+2. Stable gets no OTA bundle by default.
 3. Steam and Flathub builds disable both update layers. The store updates the app.
 4. The updater is one system for both layers. It does not depend on the AIRI release process or build output.
-   - Channel, cadence, and cohort are client subscriptions plus server pointers. Installers do not contain them.
-   - Promotion rules and release cadence belong to CI. CI calls the publish API and uploads its files. CI keeps no state between runs.
-5. AIRI does not ship special migration packages for old versions. Old versions get the first new shell through their existing updater.
+   - Channel and cohort are client subscriptions plus server channel files. Installers do not contain them.
+   - Promotion rules and release timing belong to CI. CI calls the publish API and uploads its files. CI keeps no state between runs.
+5. AIRI does not ship special migration packages for old versions. Old versions get the first new installer through their existing updater.
 6. Kirie (Godot plus CEF) is a future host. The protocol must not depend on Electron.
 
 Merged prerequisites: #3078, #3079, #3080, #3081, #3082, #3083.
@@ -38,39 +38,40 @@ Merged prerequisites: #3078, #3079, #3080, #3081, #3082, #3083.
 
 | Term | Meaning |
 | --- | --- |
-| Host | The runtime that runs a core. Electron now, Kirie later. |
-| Shell | The part of an install that only a full installer can change: the host runtime, native modules, the bootloader, the trusted public key, and host resources such as the Godot stage. |
-| Core | The part that OTA can change: JavaScript bundles, renderer pages, and core resources. |
-| Component | One typed part of a core. For example, `web` (renderer pages), `electron-main`, `electron-preload`, `godot-pck`. |
-| Host API | The integer version of the contract between a shell and a core. |
-| Release | One published core or one published shell, identified by `seq`. |
-| Pointer | A small signed document that names the release a channel serves now. |
-| Distribution | How the app was installed: `direct`, `steam`, `flatpak`, `nix`, `mas`, `snap`. |
+| Host | The runtime that runs a bundle. Electron now, Kirie later. |
+| Bundle | The part of the app that OTA can change: main code, preload scripts, renderer pages, and app resources. |
+| Installer bundle | The bundle that ships inside an installer. It needs no download and no signature check, because the installer is signed. |
+| Launcher | The fixed entry of the app. It selects a bundle, verifies it, and starts it. Only an installer changes it. |
+| Native part | What only an installer can change: the host runtime, native modules, the launcher, the trusted public keys, and host resources such as the Godot stage. |
+| Native version | An integer that names what the native part offers to bundles. |
+| Component | One typed part of a bundle. For example, `web` (renderer pages), `electron-main`, `electron-preload`, `godot-pck`. |
+| Release | One published bundle or one published installer, identified by its release ID. |
+| Channel file | A small signed document that names what a channel serves now: a bundle, an installer, and withdrawn bundles. |
 
 ### Layers
 
-1. **Shell layer.** The platform installer performs the install: electron-updater with Squirrel.Mac, NSIS, or AppImage for Electron. Kirie selects its installer later. The protocol only describes shell artifacts and their pointers. The publish API can generate each installer's native feed, for example `latest-arm64-mac.yml`, from the protocol data.
-2. **Core layer.** The client SDK does all of the work: discover, download, verify, stage, activate, check health, and roll back.
+1. **Installer layer.** The platform installer performs the install: electron-updater with Squirrel.Mac, NSIS, or AppImage for Electron. Kirie selects its installer later. The protocol only describes installer files and the channel files that name them. The publish API generates the native feed of each installer, for example `latest-mac.yml`, from the protocol data.
+2. **Bundle layer.** The client SDK does all of the work: discover, download, verify, stage, activate, check health, and roll back.
 
-One trusted Ed25519 key signs both layers. The shell contains the public key. The client never fetches a key at runtime.
+One trusted Ed25519 key signs both layers. The native part contains the public key. The client never fetches a key at runtime.
 
 ### Keys
 
-- The shell contains a list of trusted public keys. Each signed document names its key with `signature.keyId`.
-- A planned rotation takes two shell releases. The first shell trusts the old key and the new key. After most installs run it, CI signs with the new key. A later shell removes the old key.
-- A leaked key stays trusted by every install that runs a shell with it, until that install takes a newer shell. Cores have no platform code signing, so this is the risk of the layer. Keep the signing key in CI secrets only, and remove a leaked key with a shell release at once.
+- The native part contains a list of trusted public keys. Each signed document names its key with `signature.keyId`.
+- A planned rotation takes two installer releases. The first installer trusts the old key and the new key. After most installs run it, CI signs with the new key. A later installer removes the old key.
+- A leaked key stays trusted by every install that has it, until that install takes a newer installer. Bundles have no platform code signing, so this is the risk of the layer. Keep the signing key in CI secrets only, and remove a leaked key with an installer release at once.
 - Version 1 has no runtime key list. A root key that signs a key list (TUF style) or a signed revocation list can come later. Most desktop updaters, for example Tauri, CodePush, and LobeHub Desktop, also rotate keys with an app update.
 
 ### Release identity
 
-- Each release has a `seq`, an integer that never decreases. The publish API assigns it. One counter serves all channels, so a release keeps its `seq` when it is promoted from canary to stable.
-- A `seq` must not depend on the state of the server. `createSeq(minimum)` gives the current time in milliseconds, or `minimum + 1` if that is larger. CI does not read the server to get it. When the server loses releases or goes back to a backup, the next release still gets a `seq` above every `seq` that a client already has.
-- A `seq` is never used for two releases. `createSeq` never returns the same value twice in one process, also within one millisecond. Build all cores of one release in one process, or pass each `seq` by hand. Do not pass a `seq` by hand unless you are sure no client has seen it.
+- Each release has a release ID, an integer that never decreases. The build or the publish API assigns it. One counter serves all channels, so a release keeps its ID when it is promoted from one channel to another.
+- A release ID must not depend on the state of the server. `createReleaseId(minimum)` gives the current time in milliseconds, or `minimum + 1` if that is larger. CI does not read the server to get it. When the server loses releases or goes back to a backup, the next release still gets an ID above every ID that a client already has.
+- A release ID is never used for two releases. `createReleaseId` never returns the same value twice in one process, also within one millisecond. Do not pass an ID by hand unless you are sure no client has seen it.
 - All integers in documents stay at or below 2^53 - 1, so every language reads the same value.
 - All times in documents are UTC in RFC 3339 form with `Z`, for example `2026-10-24T00:00:00.000Z`, on a real calendar day. Offsets are not allowed, because some parsers read an offset such as `+08` as no date, which turns off the expiry and replay checks.
 - The publish API checks each document with the same rules as clients before it signs. It never signs a document that clients reject.
-- Each release also has a display version, for example `0.13.0-core.42`. Clients never compare display versions. This avoids the semver problem that T-196 found: `0.12.0.core.1` is not semver, and `0.12.0-core.1` sorts before `0.12.0`.
-- The builtin core of each installer records its `seq`. The client rejects an external core with a `seq` that is not greater than the builtin `seq`. So after a full update, old OTA cores do not come back.
+- Each release also has a display version, for example `0.13.0`. Clients never compare display versions. This avoids the semver problem that T-196 found: `0.12.0.core.1` is not semver, and `0.12.0-core.1` sorts before `0.12.0`.
+- The installer bundle records its release ID. The client rejects a downloaded bundle with an ID that is not greater than the ID of the installer bundle. So after a full update, old OTA bundles do not come back.
 
 ### Signatures
 
@@ -82,56 +83,57 @@ One trusted Ed25519 key signs both layers. The shell contains the public key. Th
 
 ### Compatibility
 
-- A core declares `hostApi: { min, max }`. A shell declares one integer `hostApi`. A core is compatible when the shell value is in the range.
-- A developer increases the shell `hostApi` when the shell changes the contract that cores use. For example, a new native module, a changed preload bridge, a changed Eventa contract between host and core, or a new host version.
-- CI computes a hash of the shell inputs and stores it with each shell release. If the hash changes and `hostApi` does not, CI fails and asks the developer to confirm. The hash is a CI guard only. Clients never read it.
+- A bundle declares `nativeVersion: { min, max }`. An install has one integer native version. A bundle is compatible when the install value is in the range.
+- A developer increases the native version when the native part changes what bundles use. For example, a new native module, a new Electron version, a changed Eventa contract between host and bundle, or a new launcher. A change of main code or a preload script is part of the bundle and needs no increase.
+- CI computes a hash of the native build inputs and stores it with each installer release. If the hash changes and the native version does not, CI fails and asks the developer to confirm. The hash is a CI guard only. Clients never read it.
 
   The PoC and LobeHub require an exact hash match at runtime. That design forces a full update on every native dependency bump. It also needs `.git` at build time, which breaks the Nix build.
 
-- When no compatible core exists for the shell, the client keeps the staged core as `deferred` and waits for a full update.
+- A client reports a bundle for another native version as up to date, with the detail `needs-newer-native-version`. When the channel also names a newer installer, the client offers the installer.
+- When a staged bundle no longer fits the native version, for example after the app went back to an older installer, the client keeps it as `deferred` and tries it again on each boot.
 
 ### Server layout
 
 The server is static files on R2 or S3. Any static server works, including the test simulator.
 
 ```text
-<base>/
-  objects/sha256/<aa>/<sha256>                 # immutable, cache forever
-  cores/<seq>/manifest.json                    # immutable, cache forever
-  cores/<seq>/manifest.json.sig
-  shells/<seq>/shell.json                      # immutable, cache forever
-  shells/<seq>/shell.json.sig
-  pointers/<channel>/<cadence>.json            # mutable, no-store
-  pointers/<channel>/<cadence>.json.sig
-  full/<channel>/<native feed files>           # generated, for example latest-arm64-mac.yml
+<feedUrl>/
+  objects/sha256/<aa>/<sha256>                          # immutable, cache forever
+  bundles/<releaseId>/bundle.json                       # immutable, cache forever
+  bundles/<releaseId>/bundle.json.sig
+  installers/<releaseId>/installer.json                 # immutable, cache forever
+  installers/<releaseId>/installer.json.sig
+  installers/<releaseId>/feeds/<platform>/<feed file>   # immutable, for example latest-mac.yml
+  channels/<channel>.json                               # mutable, no-store
+  channels/<channel>.json.sig
 ```
 
-- `channel` is `stable` or `canary`. `alpha` and `beta` are cohorts inside canary.
-- `cadence` is `realtime` or `nightly`. Nightly is a pointer that CI moves once a day to the newest canary release that passed the smoke test. Nightly is not a separate build.
-- A release gets published in this order: objects, then manifests, then pointers. `uploadStages` returns the files in these three stages. Upload each stage completely before the next one.
+- A channel name has only letters, digits, `.`, `_`, and `-`, for example `stable`, `beta`, or `beta-daily`.
+- A channel that moves at most once a day is a channel of its own. CI promotes the release of one channel to another on a schedule, for example from `beta` to `beta-daily`. It is not a separate build.
+- A release gets published in this order: objects, then manifests and feeds, then channel files. `uploadStages` returns the files in these three stages. Upload each stage completely before the next one.
 
-### Core manifest
+### Bundle manifest
 
 The manifest is canonical JSON (JCS, RFC 8785). The signature covers the exact bytes of the file.
 
 ```json
 {
   "schema": 1,
-  "kind": "core",
+  "kind": "bundle",
   "product": "airi",
-  "seq": 42,
-  "version": "0.13.0-core.42",
+  "releaseId": 1761320000000,
+  "version": "0.13.0",
   "createdAt": "2026-10-23T00:00:00Z",
   "host": "electron",
-  "platform": "darwin-arm64",
-  "hostApi": { "min": 3, "max": 3 },
+  "platform": "any",
+  "nativeVersion": { "min": 3, "max": 3 },
   "components": [
     {
       "type": "electron-main",
-      "entry": "main/index.js",
-      "files": [{ "path": "main/index.js", "sha256": "…", "size": 123 }]
+      "entry": "main/index.mjs",
+      "files": [{ "path": "main/index.mjs", "sha256": "…", "size": 123 }]
     },
-    { "type": "electron-preload", "files": [] },
+    { "type": "electron-preload", "entry": "preload/index.cjs", "files": [] },
     { "type": "web", "entry": "renderer/index.html", "files": [] }
   ],
   "totalSize": 0,
@@ -141,85 +143,88 @@ The manifest is canonical JSON (JCS, RFC 8785). The signature covers the exact b
 
 - `platform` is `any` when no file differs between platforms. Reproducible builds make this the normal case (prerequisite PR B).
 - The manifest has no `channel`, `cohort`, or `rollout`. A release does not know where it is served.
-- Each component `type` tells the client how to activate a change. See [Activation](#activation).
+- Each component `type` tells the client how a change takes effect. See [Activation](#activation).
 
-### Shell manifest
+### Installer manifest
 
-`shell.json` has the same envelope. It lists the installers for each platform with `sha512` and size. It also records `hostApi`, the builtin core `seq`, and the CI input hash. Clients use it to decide that a core needs a newer shell. Host installers keep their own checks: electron-updater checks `sha512` from the generated yml.
+`installer.json` has the same envelope. It lists the installer file for each platform with `sha512` and size. It also records the native version, the release ID of its installer bundle (`bundleReleaseId`), and the CI input hash. Host installers keep their own checks: electron-updater checks `sha512` from the generated feed.
 
-- Installer URLs are absolute. Installers can live anywhere, for example on GitHub Releases.
-- Each shell release has one electron-updater feed per platform at `shells/<seq>/feeds/<platform>/`, with one file. One feed per platform keeps an install from reading the installer of another architecture.
-- A feed is not signed. After the platform installer downloads a file, the shell checks it against the `sha512` of the signed manifest before it installs. A mismatch fails the update, and the next attempt waits longer, as a failed core download does.
-- A pointer names the newest shell with `shell.seq`. An install whose shell is older downloads the new shell before any core, because the new shell ships a newer builtin core.
+- Installer URLs are absolute. Installer files can live anywhere, for example on GitHub Releases.
+- Each installer release has one electron-updater feed per platform at `installers/<releaseId>/feeds/<platform>/`, with one file. One feed per platform keeps an install from reading the installer of another architecture.
+- A feed is not signed. After the platform installer downloads a file, the launcher checks it against the `sha512` of the signed manifest before it installs. A mismatch fails the update with `installer-mismatch`, and the next attempt waits longer, as a failed bundle download does.
+- A channel file names the newest installer with `installer.releaseId`. An install with an older installer release downloads the new installer before any bundle, because the new installer ships a newer installer bundle.
 
-### Pointer
+### Channel file
 
 ```json
 {
   "schema": 1,
-  "kind": "pointer",
+  "kind": "channel",
   "channel": "canary",
-  "cadence": "realtime",
   "issuedAt": "2026-10-23T00:00:00Z",
   "expiresAt": "2026-11-06T00:00:00Z",
-  "core": {
-    "seq": 42,
-    "rollout": { "percentage": 25, "salt": "42" },
+  "bundle": {
+    "releaseId": 1761320000000,
+    "rollout": { "percentage": 25, "salt": "1761320000000" },
     "cohorts": ["alpha", "beta", "all"]
   },
-  "shell": { "seq": 7 },
-  "revoked": [40, 41]
+  "installer": { "releaseId": 1761310000000 },
+  "withdrawn": [1761300000000]
 }
 ```
 
-- Signed pointers stop a third party from serving an old pointer. The client stores the newest `issuedAt` it has seen for each channel and cadence, and rejects older pointers of that channel and cadence. The client also rejects expired pointers. So a frozen mirror cannot hold clients on an old release for longer than `expiresAt` allows.
-- The client stores at most its own current time as the newest `issuedAt`. A pointer issued in the future, for example by a CI runner with a fast clock, then cannot make every later pointer look replayed.
-- A pointer and its `.sig` are two files. A client that gets `invalid-signature` for a pointer fetches both again once, because it can fetch between the two uploads.
-- `cohorts` limits a core to the listed cohorts. An empty list serves no cohort. A pointer without `cohorts` serves every cohort.
-- Signing a pointer again keeps its rollout salt, so installs stay in their buckets.
-- `stable` pointers have no `core` field by default. So stable gets no OTA because of an explicit rule. In the PoC, stable got no OTA only because of version comparison, by accident.
-- `revoked` lists bad core `seq` values. A client that runs a revoked core falls back to `previous` or `builtin` on the next check, and adds the `seq` to its local block list. A staged core that becomes revoked is dropped, and is never activated. A revoked core does not count as newer than what the channel serves, so the channel can serve an older core again.
+- Signed channel files stop a third party from serving an old channel file. The client stores the newest `issuedAt` it has seen for each channel, and rejects older files of that channel. The client also rejects expired files. So a frozen mirror cannot hold clients on an old release for longer than `expiresAt` allows.
+- The client stores at most its own current time as the newest `issuedAt`. A file issued in the future, for example by a CI runner with a fast clock, then cannot make every later file look replayed.
+- A channel file and its `.sig` are two files. A client that gets `invalid-signature` for a channel file fetches both again once, because it can fetch between the two uploads.
+- `cohorts` limits a bundle to the listed cohorts. An install is always in the cohort `all`, plus the cohorts that the app sets. An empty list serves no cohort. A file without `cohorts` serves every install. Cohorts filter releases. They are not access control, because the app sets them.
+- Signing a channel file again keeps its rollout salt, so installs stay in their buckets. Raising the percentage keeps earlier installs in the rollout.
+- Stable channel files have no `bundle` field by default. So stable gets no OTA because of an explicit rule. In the PoC, stable got no OTA only because of version comparison, by accident.
+- `withdrawn` lists bad bundles. A client that runs a withdrawn bundle restarts into `previous` or the installer bundle, records the rollback with the reason `withdrawn`, and adds the bundle to its local block list. A staged bundle that becomes withdrawn is dropped, and is never activated. A withdrawn bundle does not count as newer than what the channel serves, so the channel can serve an older bundle again. A withdrawn bundle is never downloaded again.
 - Rollout bucket: the first 4 bytes of `sha256(salt + ":" + installId)` as a big-endian integer, mod 100. The client is in the rollout when the bucket is less than `percentage`. `installId` is a random ID in the data directory. The bucket does not use the user account, so the client sends no identity to the server.
 
 ### Client state
 
-The SDK owns one directory, `<userData>/updates/`:
+The SDK owns one directory, `<userData>/ergosphere-it/`:
 
 ```text
 objects/sha256/<aa>/<sha256>      # local content store
-cores/<seq>/                      # materialized cores, read only after activation
-state.json                        # staged, current, previous, deferred, blocked, pointerIssuedAt
-boot.json                         # boot attempts and last healthy seq
+bundles/<releaseId>/              # materialized bundles, read only after activation
+manifests/<releaseId>.json(.sig)  # signed manifests of the kept bundles
+state.json                        # staged, current, previous, deferred, blocked, withdrawn, boot attempts,
+                                  # channel issue times, and the last rollback
+preferences.json                  # the channel and cohorts that the app set at run time
 ```
 
-- The SDK writes `state.json` and `boot.json` atomically: it writes a temporary file, flushes it to disk, and renames it. On Windows, it retries a rename for a short time when another process holds the file.
+- The SDK writes `state.json` atomically: it writes a temporary file, flushes it to disk, and renames it. On Windows, it retries a rename for a short time when another process holds the file.
 - The SDK runs state changes one at a time in a process, so two changes never lose a write.
-- When the SDK cannot read or write its state at boot, it boots the builtin core. The builtin core needs no state.
-- Boot order: staged, then deferred when it is newer than current, then current, then previous, then builtin. A deferred core waits for a newer shell, so each boot tries it again. Each candidate must pass these checks:
+- A second instance of the app reads the state and never writes it. By default the launcher quits a second instance at start.
+- When the SDK cannot read or write its state at boot, it boots the installer bundle. The installer bundle needs no state.
+- Boot order: staged, then deferred when it is newer than current, then current, then previous, then the installer bundle. A deferred bundle waits for a newer native version, so each boot tries it again. Each candidate must pass these checks:
   1. The signature is valid and the key is trusted.
-  2. The `seq` is greater than the builtin `seq` and is not blocked.
-  3. The host API is in range.
+  2. The release ID is greater than the ID of the installer bundle, and the bundle is not withdrawn or blocked.
+  3. The native version is in range.
   4. Every file exists, and its size matches the manifest.
   5. It has fewer than 3 boot attempts without a healthy report.
 - At boot, the SDK checks code files (`electron-main`, `electron-preload`) by hash. It checks large `web` assets by size. The SDK hashed them when it downloaded them, and they are read only. LobeHub measured about 600 ms of extra cold start time to hash all files.
+- When the bundle that ran last does not boot, because it was withdrawn or never reported healthy, the state records the rollback with both bundles and the reason. The app shows it after the restart, until the app dismisses it or a newer bundle is staged.
 
 ### Download and staging
 
-1. Fetch the pointer and check its signature. If the core `seq` is not greater than `current`, or the client is outside the rollout, stop.
-2. Fetch the manifest and check its signature, `seq`, host API, and platform.
+1. Fetch the channel file and check its signature. If the bundle is not newer than `current`, or the install is outside the cohorts or the rollout, stop.
+2. Fetch the manifest and check its signature, release ID, native version, and platform.
 3. Check every file path. Reject absolute paths, `..` segments, backslashes, drive letters, and duplicate paths. The PoC and `ota-lab` did not do this check during staging.
-4. For each file, look for its object in this order: the local content store, the running core, the builtin core, and then the network. The SDK hashes every object before it uses it, also objects that are already on disk. The PoC skipped this check for existing objects.
+4. For each file, look for its object in this order: the local content store, the running bundle, the installer bundle, and then the network. The SDK hashes every object before it uses it, also objects that are already on disk. The PoC skipped this check for existing objects.
 5. Write objects as `.part` files, hash them, then rename them. Downloads stream to disk, run a few at a time, and stop when no bytes arrive for a while.
    - A failed download keeps its `.part` file. The next attempt resumes it with `Range: bytes=<size>-`. A server that answers 200 instead of 206 sends the whole file again.
    - Network errors, stalls, and server errors get a few retries with exponential backoff in one stage. Other 4xx answers fail the stage at once.
    - A complete file whose hash does not match is downloaded once more from the start, because a resumed file can hold bad bytes of an earlier attempt. A second mismatch fails the stage.
-   - A failed stage never blocks the core. A download failure says nothing about the release. The next check waits longer after each failure, from 30 seconds up to one hour, and reports `retry-later` until then.
-6. Build `cores/<seq>/` in a temporary directory, with copy-on-write clones when the file system supports them. Rename the directory into place.
-7. Set `staged` to the new `seq`.
-8. Delete cores and objects that `current`, `previous`, `staged`, `deferred`, and builtin no longer use. The PoC never deleted them.
+   - A failed stage never blocks the bundle. A download failure says nothing about the release. The next automatic check waits longer after each failure, from 30 seconds up to one hour, and reports `download-failed` with `retryAt` until then. A manual check does not wait.
+6. Build `bundles/<releaseId>/` in a temporary directory. Rename the directory into place.
+7. Set `staged` to the new release ID.
+8. Delete bundles and objects that `current`, `previous`, `staged`, `deferred`, and the installer bundle no longer use. The PoC never deleted them.
    - Delete partial `.part` files of failed downloads. A later download of the same object starts again.
-   - Drop a deferred core that is not newer than `current`, because it can never boot.
-   - Never delete the core that the running process booted. A reload moves `current` and `previous`, but the main code of the booted core still runs, and the host can still load files from its directory. Examples are the preload script and lazy chunks. The next boot releases it.
+   - Drop a deferred bundle that is not newer than `current`, because it can never boot.
+   - Never delete the bundle that the running process booted. A reload moves `current` and `previous`, but the main code of the booted bundle still runs, and the host can still load files from its directory. Examples are the preload script and lazy chunks. The next boot releases it.
 
 LobeHub also uses packs with zstd frames, HTTP Range reads, and binary patches. Version 1 of this protocol does not. The design leaves room for a `packs` field in a later schema.
 
@@ -229,59 +234,65 @@ A client can run a release that the server no longer has, for example after the 
 
 | What the client sees | What the client does |
 | --- | --- |
-| A pointer that is older than one it accepted | It rejects the pointer with `pointer-replayed` and keeps its core. |
-| A pointer to a `seq` lower than its current or staged `seq` | It reports `server-behind` and keeps its core. |
-| A pointer without a core | It keeps its core. |
-| A pointer that revokes its current `seq` | It leaves the core: previous, then builtin. The server can revoke a `seq` that its history does not hold. |
-| A pointer to a `seq` higher than its current `seq` | It takes the release as usual. |
+| A channel file that is older than one it accepted | It rejects the file with `channel-replayed` and keeps its bundle. |
+| A channel file that serves a release lower than its current or staged release | It reports up to date with the detail `app-newer-than-feed`, and keeps its bundle. |
+| A channel file without a bundle | It reports up to date with the detail `nothing-published`, and keeps its bundle. |
+| A channel file that withdraws its current bundle | It leaves the bundle: previous, then the installer bundle. The server can withdraw a release that its history does not hold. |
+| A channel file that serves a newer release | It takes the release as usual. |
 
 After the server goes back to a backup, do these steps:
 
-1. Sign the pointers again with `reissuePointer`, so that clients accept them.
-2. Publish a new release. Its `seq` is higher than every `seq` that clients have, so all clients take it.
-3. To remove a bad release that the server lost, revoke its `seq`.
+1. Sign the channel files again with `reissueChannelFile`, so that clients accept them.
+2. Publish a new release. Its release ID is higher than every ID that clients have, so all clients take it.
+3. To remove a bad release that the server lost, withdraw it.
 
 ### Activation
 
-The SDK compares the file hashes of the staged core and the running core, component by component:
+The SDK compares the file hashes of the staged bundle and the running bundle, component by component. The result is what the update requires:
 
-| Change | Action |
+| Change | Requires |
 | --- | --- |
-| Only `web` files | Reload in place. Reload the window that owns the synced stores (the leader window) first, then the other windows. For transparent stage windows, swap the window instead of reloading it, to avoid about 300 ms of blank frames. |
-| `electron-main`, `electron-preload`, or core resources | Restart the app at the next safe moment, or when the user confirms. |
-| A host API outside the shell range | Keep the core as `deferred` and wait for a full update. |
+| Only `web` files | `reload`: the windows reload in place, and the process keeps running. Reload the window that owns the synced stores (the leader window) first, then the other windows. For transparent stage windows, swap the window instead of reloading it, to avoid about 300 ms of blank frames. |
+| `electron-main`, `electron-preload`, or app resources | `restart`: the app restarts at the next safe moment, or when the user confirms. A staged bundle also takes effect on the next start. |
+| A newer installer | `install`: the app quits, and the platform installer runs. |
 
-A reload waits until all windows have been in the background for a time, or until the user confirms. A page can delay the reload with a host hook, for example while a voice session runs.
+The apply mode of the app decides when an update takes effect:
+
+- `prompt` waits for the app to apply it, for example after the user confirms.
+- `auto` reloads at once for a `reload` update. A `restart` or `install` update still waits for the app, so the app never closes under the user without a prompt.
+- `next-launch` waits for the next start. A downloaded installer installs when the app quits.
 
 ### Health and rollback
 
-- After a reload or a start, each window sends `loaded`, and then `mounted` after the app mounts and reads its stores. Main reports `healthy` when the leader window sends `mounted`.
+- After a reload or a start, the page calls `markBundleHealthy()` when the app is usable, for example after its stores load and the first screen renders.
   - The PoC reported healthy when the main window finished loading. A renderer that crashed right after that still counted as healthy.
-- If `mounted` does not arrive in 15 seconds (60 seconds on a cold start), or a renderer crashes twice, the SDK rolls back:
+- If the report does not arrive in 15 seconds after a reload, the SDK rolls back in place:
   1. It points `current` back to `previous`.
-  2. It blocks the bad `seq`.
-  3. It reloads or restarts.
-- This applies to reload activations too. In the PoC, a reload set `current` immediately, with no rollback.
-- The shell counts boot attempts. After 3 boots without `healthy`, it blocks the core and selects the next candidate.
-- If the builtin core also fails, the shell opens a minimal rescue page. The page offers a full reinstall link and a log export.
+  2. It blocks the bad release, and records the rollback with the reason `not-marked-healthy`.
+  3. It reloads the windows from the previous bundle.
+- After a start, the launcher waits 60 seconds. Without a report, it restarts the app. The client counts boot attempts. After 3 boots without a report, it blocks the bundle, records the rollback, and selects the next candidate.
+- When the main code of a downloaded bundle throws at start, the launcher blocks the bundle at once, records the rollback with the reason `crashed-at-launch`, and restarts. A crash at import is not a slow start, so another attempt does not help.
+- When the installer bundle fails, nothing is left to fall back to. The launcher does not restart in a loop. It opens a minimal rescue window that tells the user to install the app again, with the error text for the developers.
+- A bundle that reports healthy and is broken later is not rolled back by the client. The publisher withdraws it, and every client leaves it at the next check.
 
 ### Distribution gate
 
-The host gives `distribution` to the SDK through dependency injection:
+The launcher decides at start whether updates run. The app does not configure it:
 
-| Distribution | Shell layer | Core layer |
+| Build | Installer layer | Bundle layer |
 | --- | --- | --- |
-| `direct` | on | on, but stable has no core pointer |
-| `steam`, `flatpak`, `nix`, `snap` | off | off |
-| `mas` | off | off (store rules forbid downloaded code) |
+| Direct download | on | on, but stable has no bundle in its channel file |
+| Mac App Store, Microsoft Store (`process.mas`, `process.windowsStore`) | off | off (store rules forbid downloaded code) |
+| Steam, Flatpak, Nix, Snap | off with `"disabled": true` in the build config | off |
+| Development server (`electron-vite dev`) | off | off |
 
 ### Quit for install
 
-The SDK calls one host hook, `prepareQuitForInstall()`. The host lets windows close and releases the single instance lock. Then the SDK calls the installer. This puts the F1 fix (#3082) in the SDK contract.
+Before it calls the installer, the launcher releases the single instance lock, removes the `close` handlers of every window, and closes the windows. This puts the F1 fix (#3082) in the SDK contract.
 
 ### Storage origin
 
-A core switch must not change the origin of the renderer pages. Otherwise localStorage and IndexedDB data are lost.
+A bundle switch must not change the origin of the renderer pages. Otherwise localStorage and IndexedDB data are lost.
 
 - Electron AIRI loads pages from `file://`, and Chromium gives all `file://` pages one storage origin. The PoC kept `file://`, and data survived OTA.
 - Version 1 keeps `file://`.
@@ -299,75 +310,83 @@ A verifier returns the verified document, or fails with one reason code. The Typ
 | `invalid-schema` | The document does not match its schema. |
 | `unsafe-path` | A file path is absolute, is empty, or has a `.` or `..` segment, a backslash, a drive letter, a control character, one of `<>:"\|?*`, a Windows device name such as `aux.js`, or a segment that ends with a dot or a space. |
 | `duplicate-path` | Two files land on the same file on some file system: the same path, paths that differ only in case or in Unicode normalization, or a file that another path needs as a directory. |
-| `host-api-incompatible` | The shell host API is outside the core range. |
-| `platform-mismatch` | The core is for another platform. |
-| `not-newer` | The `seq` is not greater than the builtin or current `seq`. |
-| `revoked` | The pointer revokes this `seq`. |
-| `blocked` | The client blocked this `seq` after failures. |
-| `pointer-replayed` | The pointer `issuedAt` is older than the newest pointer that the client has seen. |
-| `pointer-expired` | The current time is after the pointer `expiresAt`. |
-| `pointer-mismatch` | The pointer is for another product, channel, or cadence than the client asked for. A valid signature proves who signed a document, not which document it is. |
-| `core-mismatch` | The core is for another product or host. |
-| `shell-mismatch` | The shell is for another product or host. |
+| `native-version-mismatch` | The native version of the install is outside the bundle range. |
+| `platform-mismatch` | The bundle is for another platform, or the installer release has no file for this platform. |
+| `not-newer` | The release ID is not greater than the installer bundle or the current bundle. |
+| `withdrawn` | A channel file withdrew this bundle. |
+| `blocked` | The client blocked this bundle after failures. |
+| `channel-replayed` | The channel file `issuedAt` is older than the newest channel file that the client has seen. |
+| `channel-expired` | The current time is after the channel file `expiresAt`. |
+| `channel-mismatch` | The channel file is for another product or channel than the client asked for. A valid signature proves who signed a document, not which document it is. |
+| `bundle-mismatch` | The bundle is for another product or host. |
+| `installer-mismatch` | The installer release is for another product or host. |
 
 ### Project shape
 
-The updater is one project with four parts. AIRI connects to it only through dependency injection at external boundaries: network, file system, clock, trusted key, distribution, window reload, and quit.
+The updater is one project with four parts. An app connects to it only through dependency injection at external boundaries: network, file system, clock, trusted keys, installer, window reload, and quit.
 
 | Part | Content | Built from |
 | --- | --- | --- |
 | Specification | This document, the JSON schemas (Valibot), and conformance cases | New |
-| Publish API | Build a core release and pointers as files in memory, and order the uploads. The caller uploads them to any backend. | `ota-update-server` store and core modules |
-| Client SDK (TypeScript) | Pointer check, download, content store, staging, boot selection, activation diff, health, rollback | `ota-lab` shell modules, plus the PoC tests |
+| Publish API | Build bundle releases, installer releases, and channel files as files in memory, and order the uploads. The caller uploads them to any backend. | `ota-update-server` store and core modules |
+| Client SDK (TypeScript) | Channel check, download, content store, staging, boot selection, activation diff, health, rollback | `ota-lab` shell modules, plus the PoC tests |
 | Test server | Tree server in memory with fault injection and a release console | `ota-update-server` |
 
 The PoC files `feed.ts` and `pack-core.ts`, the PoC CI workflows, and the `ota-lab` test bench shell are not used.
 
-The project lives in its own repository, `moeru-ai/ergosphere-it`. Packages that do not depend on a host are shared. Each host gets one driver package.
+The project lives in its own repository, `moeru-ai/ergosphere-it`. Packages that do not depend on a host are shared. Each host gets one package.
 
 | Package | Part |
 | --- | --- |
 | `@ergosphere-it/protocol` | Schemas, canonical JSON, signatures, verification rules, and conformance cases |
 | `@ergosphere-it/client` | The update state machine for TypeScript hosts. The host injects the network, file system, and clock. `@ergosphere-it/client/node` gives a Node.js file system. |
-| `@ergosphere-it/web` | The page side: health signals and update status. The host injects the transport. |
-| `@ergosphere-it/publish` | Builds signed core releases and pointers as files in memory. It does no I/O. |
-| `@ergosphere-it/driver-electron` | The Electron driver: `Shell` boots the core in the shell entry, and `getCore()` gives the core its updater. `/electron-updater` installs new shells with the electron-updater instance of the app. |
+| `@ergosphere-it/publish` | Builds signed bundle releases, installer releases, and channel files as files in memory. It does no I/O. |
+| `@ergosphere-it/electron` | The Electron host: the electron-vite plugin, the launcher, the updater of main, preload, and page, and the release functions for CI |
 | `@ergosphere-it/server` | Tree server in memory with fault injection and a release console, for tests and demos |
 
-Version 1 has only the Electron driver. A Kirie driver (`driver-kirie`, with a C# client) and a Tauri driver (`driver-tauri`) can follow. They use the same protocol and pass the same conformance cases.
+Version 1 has only the Electron host. A Kirie host (with a C# client) and a Tauri host can follow. They use the same protocol and pass the same conformance cases.
 
-Conformance cases: valid and tampered manifests, bad signatures, unknown keys, path traversal, `seq` downgrade, expired pointers, revoked releases, host API ranges, and rollout buckets. Every client implementation must pass them.
+Conformance cases: valid and tampered manifests, bad signatures, unknown keys, path traversal, release ID downgrade, expired channel files, withdrawn releases, native version ranges, and rollout buckets. Every client implementation must pass them.
 
 ### Kirie
 
-Kirie runs AIRI pages in CEF inside Godot. AIRI host services in Kirie are C#. This section records the plan for a later `driver-kirie`.
+Kirie runs AIRI pages in CEF inside Godot. AIRI host services in Kirie are C#. This section records the plan for a later Kirie host.
 
 - The protocol, server, and publish API work without change.
-- The core of Kirie is the `web` component and, as an option, a `godot-pck` component that Godot loads with `ProjectSettings.load_resource_pack`. C# assemblies are part of the shell, because Godot .NET cannot unload assemblies safely.
+- The bundle of Kirie is the `web` component and, as an option, a `godot-pck` component that Godot loads with `ProjectSettings.load_resource_pack`. C# assemblies are part of the native part, because Godot .NET cannot unload assemblies safely.
 - This is the main design rule for Kirie: **keep host services thin, and keep business logic in the web layer.** Every C# change needs a full update.
 - Kirie needs these changes, as a Kirie plugin:
-  1. A web root that can change, instead of the fixed `res://src-web/dist/index.html`, with the same storage origin for all cores.
+  1. A web root that can change, instead of the fixed `res://src-web/dist/index.html`, with the same storage origin for all bundles.
   2. A C# client that implements boot selection, verification, and rollback, and passes the conformance cases.
-  3. A host API integer that covers the Eventa contracts between C# and the web layer, Kirie, and CEF.
-  4. A shell installer and updater. Candidates are Velopack and Sparkle with WinSparkle. The user selects one later.
+  3. A native version that covers the Eventa contracts between C# and the web layer, Kirie, and CEF.
+  4. An installer and updater. Candidates are Velopack and Sparkle with WinSparkle. The user selects one later.
   5. A secure context for the page, if the page verifies signatures. Chromium gives `crypto.subtle` only to secure contexts, so a custom scheme such as `res://` must be registered as secure. Otherwise verification stays in C#.
 
 ## Consequences
 
 - Most updates download megabytes instead of a full installer of 0.7 GB.
-- A bad core rolls back without user action, and a revoked release leaves all clients at the next check.
-- Developers must manage the host API integer. The CI hash guard catches a forgotten increase.
+- A bad bundle rolls back without user action, and a withdrawn release leaves all clients at the next check.
+- Developers must manage the native version. The CI hash guard catches a forgotten increase.
 - Each host needs its own client. The conformance cases keep the clients the same.
 - Version 1 has no packs or binary patches. Large changed assets download whole.
 
 ## Decided on 2026-10-23
 
-1. Compatibility uses an integer host API. The hash of shell inputs is a CI guard only.
+1. Compatibility uses an integer native version. The hash of native build inputs is a CI guard only.
 2. The project is a separate repository, `moeru-ai/ergosphere-it`.
-3. One global `seq` counter serves all channels.
+3. One global release ID counter serves all channels.
 4. Version 1 keeps `file://` as the page origin in Electron.
+
+## Decided on 2026-10-24
+
+Blind reviews by frontend developers decided the names. Readers who had never seen the project read each name, and the name that most of them understood without help stayed.
+
+1. The terms are bundle, installer, launcher, native version, release ID, channel file, and withdraw. They replace core, shell, host API, `seq`, pointer, and revoke.
+2. The cadence of a channel is gone. A channel that moves once a day is a channel of its own, and CI promotes releases into it.
+3. The launcher detects store builds and the development server. The app does not pass a distribution.
+4. The page reports health with `markBundleHealthy()`.
 
 ## Open questions
 
-1. Do core resources such as models and fonts need their own component type, with a reload instead of a restart?
+1. Do app resources such as models and fonts need their own component type, with a reload instead of a restart?
 2. Where the production signing key lives, and who can read it.

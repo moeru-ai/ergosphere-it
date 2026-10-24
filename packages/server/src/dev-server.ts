@@ -1,5 +1,5 @@
-import type { Pointer, SigningKey } from '@ergosphere-it/protocol'
-import type { CoreRelease } from '@ergosphere-it/publish'
+import type { ChannelFile, SigningKey } from '@ergosphere-it/protocol'
+import type { BundleRelease } from '@ergosphere-it/publish'
 import type { Context } from 'hono'
 import type { SSEStreamingApi } from 'hono/streaming'
 import type { GenericSchema, InferOutput } from 'valibot'
@@ -7,32 +7,32 @@ import type { GenericSchema, InferOutput } from 'valibot'
 import type { MemoryTree } from './tree'
 import type { Faults, TreeServer } from './tree-server'
 
-import { buildPointer, createSeq, uploadStages } from '@ergosphere-it/publish'
+import { buildChannelFile, createReleaseId, uploadStages } from '@ergosphere-it/publish'
 import { errorMessageFrom } from '@moeru/std/error'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { boolean, integer, maxValue, minValue, number, object, optional, partial, pipe, safeParse, string, summarize } from 'valibot'
+import { boolean, integer, maxValue, minValue, number, object, optional, partial, pipe, regex, safeParse, string, summarize } from 'valibot'
 
 import { consolePage } from './console-page'
 import { createTreeApp, listen, NO_FAULTS } from './tree-server'
 
 /** What the host reports about the app. The console uses it to show desyncs between the app and the server. */
 export interface ClientReport {
-  /** Cores that the app blocked after failures. */
+  /** Bundles that the app blocked after failures. */
   blocked?: number[]
-  /** The result of the last update check of the app, for example `{ status: 'server-behind', current, seq }`. */
-  lastCheck?: { [key: string]: unknown, status: string }
+  /** The result of the last update check of the app, for example `{ status: 'up-to-date', detail: 'app-newer-than-feed' }`. */
+  lastCheck?: { [key: string]: unknown, code?: string, detail?: string, status: string }
   pid?: number
-  /** The seq of the core that the app runs. */
+  /** The release ID of the bundle that the app runs. */
   running?: number
-  /** The version of the core that the app runs, from its manifest. */
+  /** The version of the bundle that the app runs, from its manifest. */
   runningVersion?: string
 }
 
 export interface DevServer extends TreeServer {
   /** The URL of the console page. */
   consoleUrl: string
-  /** Shows the state of a client in the console, for example the core it runs and the cores it blocked. */
+  /** Shows the state of a client in the console, for example the bundle it runs and the bundles it blocked. */
   setClientState: (state: ClientReport) => void
 }
 
@@ -44,12 +44,12 @@ export interface DevServerOptions {
   host?: string
   port?: number
   product: string
-  /** How the console publishes. Without it, the console can still revoke what the tree holds. */
+  /** How the console publishes. Without it, the console can still withdraw what the tree holds. */
   release?: {
-    /** Builds a release. The server uploads its files and moves the channel pointer. */
-    build: (release: { change: string, seq: number, version: string }) => Promise<CoreRelease>
+    /** Builds a release. The server uploads its files and moves the channel to it. */
+    build: (release: { change: string, releaseId: number, version: string }) => Promise<BundleRelease>
     changes: ReleaseChange[]
-    /** Releases that exist before the console starts, for example the builtin core. */
+    /** Releases that exist before the console starts, for example the bundle of the installer. */
     history?: ReleaseEntry[]
     /** Called after the history changes, so the host can keep it. */
     onHistoryChange?: (history: ReleaseEntry[]) => void
@@ -69,39 +69,39 @@ export interface ReleaseEntry {
   change: string
   channel: string
   publishedAt: string
+  releaseId: number
   rollout: number
-  seq: number
   version: string
 }
-
-const CADENCE = 'realtime'
 
 /** A console request that cannot run, for example a version that is already published. The console shows its message. */
 export class ReleaseRequestError extends Error {
   override name = 'ReleaseRequestError'
 }
 
+// Channel names become file paths and page text, so they stay plain.
+const channelSchema = pipe(string(), regex(/^[\w.-]+$/, 'A channel name has only letters, digits, `.`, `_`, and `-`.'))
 const percentSchema = pipe(number(), minValue(0), maxValue(100))
 const faultsSchema = partial(object({
   bytesPerSecond: pipe(number(), minValue(0)),
   dropRate: percentSchema,
   errorRate: percentSchema,
-  hidePointers: boolean(),
+  hideChannelFiles: boolean(),
   latencyMs: pipe(number(), minValue(0)),
   tamperObjects: boolean(),
 }))
 const publishSchema = object({
   change: string(),
-  channel: optional(string()),
+  channel: optional(channelSchema),
   rollout: optional(pipe(percentSchema, integer())),
   version: string(),
 })
-const revokeSchema = object({ seq: pipe(number(), integer(), minValue(1)) })
+const withdrawSchema = object({ releaseId: pipe(number(), integer(), minValue(1)) })
 
 /**
  * Serves a tree in memory with a small release console for local tests and demos.
  *
- * The console publishes a release to a channel and revokes a release. It lists the history and shows what the app
+ * The console publishes a release to a channel and withdraws a release. It lists the history and shows what the app
  * runs, including releases that the server does not know.
  */
 export async function createDevServer(options: DevServerOptions): Promise<DevServer> {
@@ -117,36 +117,43 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
       void stream.writeSSE({ data: JSON.stringify(data), event })
   }
 
-  const pointerOf = (channel: string): Pointer | undefined => {
-    const file = tree.get(`pointers/${channel}/${CADENCE}.json`)
-
-    return file && JSON.parse(new TextDecoder().decode(file.bytes)) as Pointer
+  for (const channel of channels) {
+    if (!/^[\w.-]+$/.test(channel))
+      throw new Error(`The channel name ${JSON.stringify(channel)} has characters other than letters, digits, ".", "_", and "-".`)
   }
-  const pointers = () => channels.map(pointerOf).filter((pointer): pointer is Pointer => pointer !== undefined)
+
+  const channelFileOf = (channel: string): ChannelFile | undefined => {
+    const file = tree.get(`channels/${channel}.json`)
+
+    return file && JSON.parse(new TextDecoder().decode(file.bytes)) as ChannelFile
+  }
+  const channelFiles = () => channels.map(channelFileOf).filter((file): file is ChannelFile => file !== undefined)
 
   const snapshot = () => ({
     changes: options.release?.changes ?? [],
+    channelFiles: channelFiles(),
     channels,
     clientState,
     history,
     nextVersion: suggestVersion(history, clientState),
-    pointers: pointers(),
   })
 
-  /** Builds a channel pointer again from its current content after `change` edits it. */
-  const writePointer = async (channel: string, change: (pointer: { core?: number, revoked: number[], rollout?: number }) => void) => {
-    const current = pointerOf(channel)
-    const next = { core: current?.core?.seq, revoked: [...current?.revoked ?? []], rollout: current?.core?.rollout?.percentage }
+  /** Builds a channel file again from its current content after `change` edits it. It keeps every other field. */
+  const writeChannelFile = async (channel: string, change: (file: { bundle?: number, rollout?: number, withdrawn: number[] }) => void) => {
+    const current = channelFileOf(channel)
+    const next = { bundle: current?.bundle?.releaseId, rollout: current?.bundle?.rollout?.percentage, withdrawn: [...current?.withdrawn ?? []] }
     change(next)
-    const built = await buildPointer({
-      cadence: CADENCE,
+    // A new bundle gets new rollout buckets. The same bundle keeps its salt, so installs stay in their buckets.
+    const salt = next.bundle === current?.bundle?.releaseId ? current?.bundle?.rollout?.salt : undefined
+    const built = await buildChannelFile({
+      bundle: next.bundle === undefined ? undefined : { cohorts: current?.bundle?.cohorts, releaseId: next.bundle, rollout: next.rollout, salt },
       channel,
-      core: next.core === undefined ? undefined : { cohorts: current?.core?.cohorts, rollout: next.rollout, seq: next.core },
-      // A client rejects a pointer older than one it accepted, so keep issue times increasing.
+      installer: current?.installer,
+      // A client rejects a channel file older than one it accepted, so keep issue times increasing.
       issuedAt: new Date(Math.max(Date.now(), current ? Date.parse(current.issuedAt) + 1 : 0)).toISOString(),
       product,
-      revoked: next.revoked,
       signingKey,
+      withdrawn: next.withdrawn,
     })
     tree.put(built.files)
   }
@@ -192,34 +199,36 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
       const channel = body.channel ?? channels[0]!
       const rollout = body.rollout ?? 100
       // The history can hold releases that the tree lost, for example after a restore.
-      const seq = createSeq(Math.max(0, ...history.map(entry => entry.seq)))
-      const release = await options.release.build({ change: body.change, seq, version })
+      if (!channels.includes(channel))
+        throw new ReleaseRequestError(`Unknown channel ${channel}.`)
+      const releaseId = createReleaseId(Math.max(0, ...history.map(entry => entry.releaseId)))
+      const release = await options.release.build({ change: body.change, releaseId, version })
       tree.put(uploadStages([release]).flat())
-      await writePointer(channel, (pointer) => {
-        pointer.core = release.seq
-        pointer.rollout = rollout
+      await writeChannelFile(channel, (file) => {
+        file.bundle = release.releaseId
+        file.rollout = rollout
       })
-      history.push({ change: body.change, channel, publishedAt: new Date().toISOString(), rollout, seq: release.seq, version })
+      history.push({ change: body.change, channel, publishedAt: new Date().toISOString(), releaseId: release.releaseId, rollout, version })
       options.release.onHistoryChange?.(history)
 
-      return { seq: release.seq, version }
+      return { releaseId: release.releaseId, version }
     }))
-    // Signs every pointer again, for example after the tree went back to a backup and clients ignore its pointers.
+    // Signs every channel file again, for example after the tree went back to a backup and clients ignore its files.
     .post('/_api/reissue', async (c) => {
-      for (const pointer of pointers())
-        await writePointer(pointer.channel, () => {})
+      for (const file of channelFiles())
+        await writeChannelFile(file.channel, () => {})
       broadcast('state', snapshot())
 
       return c.json({ ok: true })
     })
-    .post('/_api/revoke', action(revokeSchema, async ({ seq }) => {
-      for (const pointer of pointers()) {
-        await writePointer(pointer.channel, (next) => {
-          if (!next.revoked.includes(seq))
-            next.revoked.push(seq)
-          if (next.core === seq) {
-            // Serve the newest earlier release that is not revoked, or no core.
-            next.core = history.filter(entry => entry.seq < seq && !next.revoked.includes(entry.seq)).at(-1)?.seq
+    .post('/_api/withdraw', action(withdrawSchema, async ({ releaseId }) => {
+      for (const file of channelFiles()) {
+        await writeChannelFile(file.channel, (next) => {
+          if (!next.withdrawn.includes(releaseId))
+            next.withdrawn.push(releaseId)
+          if (next.bundle === releaseId) {
+            // Serve the newest earlier release of this channel that is not withdrawn, or no bundle.
+            next.bundle = history.filter(entry => entry.channel === file.channel && entry.releaseId < releaseId && !next.withdrawn.includes(entry.releaseId)).at(-1)?.releaseId
             next.rollout = 100
           }
         })
@@ -232,8 +241,8 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
       error instanceof ReleaseRequestError ? 400 : 500,
     ))
 
-  if (!pointerOf(channels[0]!))
-    await writePointer(channels[0]!, () => {})
+  if (!channelFileOf(channels[0]!))
+    await writeChannelFile(channels[0]!, () => {})
 
   const server = await listen(app, { host: options.host, port: options.port })
 
@@ -264,7 +273,7 @@ export async function createDevServer(options: DevServerOptions): Promise<DevSer
  */
 function suggestVersion(history: readonly ReleaseEntry[], client?: ClientReport): string {
   const newest = history.at(-1)
-  const appIsAhead = client?.runningVersion !== undefined && client.running !== undefined && client.running > (newest?.seq ?? 0)
+  const appIsAhead = client?.runningVersion !== undefined && client.running !== undefined && client.running > (newest?.releaseId ?? 0)
   const last = appIsAhead ? client.runningVersion! : (newest?.version ?? '1.0.0')
   const match = /(\d+)(\D*)$/.exec(last)
 

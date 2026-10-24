@@ -8,7 +8,7 @@ describe('canonicalJson', () => {
   })
 
   it('gives one form for objects that differ only in key order', () => {
-    expect(canonicalJson({ kind: 'core', seq: 1 })).toBe(canonicalJson({ kind: 'core', seq: 1 }))
+    expect(canonicalJson({ kind: 'bundle', releaseId: 1 })).toBe(canonicalJson({ kind: 'bundle', releaseId: 1 }))
   })
 
   it('leaves out properties with undefined values', () => {

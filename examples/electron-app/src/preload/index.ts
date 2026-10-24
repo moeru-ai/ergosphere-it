@@ -1,20 +1,4 @@
-import type { UpdateResult, UpdateStatus } from '@ergosphere-it/driver-electron/core'
+import { exposeUpdater } from '@ergosphere-it/electron/preload'
 
-import { contextBridge, ipcRenderer } from 'electron'
-
-/** What the page reports after it mounted. */
-export interface MountedPage {
-  version: string
-}
-
-const api = {
-  apply: (): Promise<UpdateResult> => ipcRenderer.invoke('example:apply'),
-  mounted: (page: MountedPage): void => ipcRenderer.send('example:mounted', page),
-  onStatus: (listener: (status: UpdateStatus) => void): void => {
-    ipcRenderer.on('example:status', (_event, status: UpdateStatus) => listener(status))
-  },
-}
-
-export type ExampleApi = typeof api
-
-contextBridge.exposeInMainWorld('example', api)
+// Gives the page `window.ergosphereIt`: the update status, checks, apply, and the health report.
+exposeUpdater()

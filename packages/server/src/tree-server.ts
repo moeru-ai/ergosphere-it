@@ -14,15 +14,15 @@ export interface Faults {
   dropRate: number
   /** Percentage of requests that get HTTP 500. */
   errorRate: number
-  /** Answer pointer requests with 404. */
-  hidePointers: boolean
+  /** Answer channel file requests with 404. */
+  hideChannelFiles: boolean
   /** Delay before each response. */
   latencyMs: number
   /** Change one byte of every object, so clients see a hash mismatch. */
   tamperObjects: boolean
 }
 
-export const NO_FAULTS: Faults = { bytesPerSecond: 0, dropRate: 0, errorRate: 0, hidePointers: false, latencyMs: 0, tamperObjects: false }
+export const NO_FAULTS: Faults = { bytesPerSecond: 0, dropRate: 0, errorRate: 0, hideChannelFiles: false, latencyMs: 0, tamperObjects: false }
 
 export interface ListenOptions {
   /** Defaults to `127.0.0.1`. */
@@ -130,8 +130,8 @@ async function serveTree(method: string, path: string, range: string | undefined
 
     return new Response(null, { status: 500 })
   }
-  if (faults.hidePointers && path.startsWith('/pointers/')) {
-    report(404, 0, 'hidden pointer')
+  if (faults.hideChannelFiles && path.startsWith('/channels/')) {
+    report(404, 0, 'hidden channel file')
 
     return new Response(null, { status: 404 })
   }

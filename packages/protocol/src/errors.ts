@@ -1,9 +1,9 @@
-export type CandidateErrorCode = 'blocked' | 'core-mismatch' | 'host-api-incompatible' | 'not-newer' | 'platform-mismatch' | 'revoked' | 'shell-mismatch'
+export type CandidateErrorCode = 'blocked' | 'bundle-mismatch' | 'installer-mismatch' | 'native-version-mismatch' | 'not-newer' | 'platform-mismatch' | 'withdrawn'
 
+export type ChannelErrorCode = 'channel-expired' | 'channel-mismatch' | 'channel-replayed'
 export type DocumentErrorCode = 'duplicate-path' | 'invalid-json' | 'invalid-schema' | 'unsafe-path'
 /** Codes of the specification. Every client implementation reports the same code for the same input. */
-export type ErrorCode = CandidateErrorCode | DocumentErrorCode | PointerErrorCode | SignatureErrorCode
-export type PointerErrorCode = 'pointer-expired' | 'pointer-mismatch' | 'pointer-replayed'
+export type ErrorCode = CandidateErrorCode | ChannelErrorCode | DocumentErrorCode | SignatureErrorCode
 export type SignatureErrorCode = 'invalid-signature' | 'untrusted-key'
 
 /** A document or a release that the protocol rejects. `code` comes from the specification. */
@@ -17,15 +17,20 @@ export class ErgosphereError<Code extends ErrorCode = ErrorCode> extends Error {
   }
 }
 
-/** A verified core or shell that this install cannot take. */
+/** A verified bundle or installer that this install cannot take. */
 export class CandidateError extends ErgosphereError<CandidateErrorCode> {
   override name = 'CandidateError'
-  readonly seq: number
+  readonly releaseId: number
 
-  constructor(code: CandidateErrorCode, message: string, seq: number, options?: ErrorOptions) {
+  constructor(code: CandidateErrorCode, message: string, releaseId: number, options?: ErrorOptions) {
     super(code, message, options)
-    this.seq = seq
+    this.releaseId = releaseId
   }
+}
+
+/** The channel file is for another channel, has expired, or is older than one the client accepted. */
+export class ChannelError extends ErgosphereError<ChannelErrorCode> {
+  override name = 'ChannelError'
 }
 
 /** The document is not valid JSON, does not match its schema, or lists unsafe or duplicate paths. */
@@ -37,11 +42,6 @@ export class DocumentError extends ErgosphereError<DocumentErrorCode> {
     super(code, message, options)
     this.path = path
   }
-}
-
-/** The pointer is for another target, has expired, or is older than one the client accepted. */
-export class PointerError extends ErgosphereError<PointerErrorCode> {
-  override name = 'PointerError'
 }
 
 /** The signature is not valid, or no trusted key made it. */

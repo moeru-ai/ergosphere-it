@@ -4,11 +4,6 @@
     "Xvfb"
   ],
   "workspaces": {
-    "examples/electron-app": {
-      "entry": [
-        "src/shell/index.ts"
-      ]
-    },
     "packages/protocol": {
       "entry": [
         "scripts/*.ts"
@@ -16,8 +11,9 @@
     },
     "tests/electron": {
       "entry": [
+        "src/launcher.ts",
         "src/main.ts",
-        "src/shell.ts"
+        "src/vue-shim.ts"
       ]
     }
   }

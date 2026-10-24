@@ -27,7 +27,7 @@ export class ObjectStore {
     return true
   }
 
-  /** Copies a file from another directory into the store, for example from the builtin core. */
+  /** Copies a file from another directory into the store, for example from the bundle of the installer. */
   async copyIn(hash: string, size: number, from: string): Promise<boolean> {
     if (await this.fs.fileSize(from) !== size)
       return false

@@ -33,7 +33,7 @@ export const consolePage = /* html */ `<!doctype html>
   td.actions button { margin-left: 6px; }
   .desync { border: 1px solid var(--bad); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
   .desync button { margin-top: 8px; }
-  .serving { color: var(--ok); } .failed, .revoked { color: var(--bad); } .running { color: var(--accent); }
+  .serving { color: var(--ok); } .failed, .withdrawn { color: var(--bad); } .running { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -67,18 +67,18 @@ async function post(name, body) {
 
 function statusOf(entry) {
   const client = state.clientState ?? {}
-  const pointer = state.pointers.find(p => p.channel === entry.channel && p.cadence === 'realtime')
+  const file = state.channelFiles.find(f => f.channel === entry.channel)
   const labels = []
-  if (client.running === entry.seq) labels.push('<span class="running">● On the app</span>')
-  if (pointer?.revoked?.includes(entry.seq)) labels.push('<span class="revoked">Revoked</span>')
-  else if (client.blocked?.includes(entry.seq)) labels.push('<span class="failed">✕ Failed on the app</span>')
-  if (pointer?.core?.seq === entry.seq) labels.push('<span class="serving">Serving' + (pointer.core.rollout ? ' to ' + pointer.core.rollout.percentage + '%' : '') + '</span>')
+  if (client.running === entry.releaseId) labels.push('<span class="running">● On the app</span>')
+  if (file?.withdrawn?.includes(entry.releaseId)) labels.push('<span class="withdrawn">Withdrawn</span>')
+  else if (client.blocked?.includes(entry.releaseId)) labels.push('<span class="failed">✕ Failed on the app</span>')
+  if (file?.bundle?.releaseId === entry.releaseId) labels.push('<span class="serving">Serving' + (file.bundle.rollout ? ' to ' + file.bundle.rollout.percentage + '%' : '') + '</span>')
 
   return labels.join(' · ')
 }
 
-function isRevoked(entry) {
-  return state.pointers.some(p => p.channel === entry.channel && p.revoked?.includes(entry.seq))
+function isWithdrawn(entry) {
+  return state.channelFiles.some(f => f.channel === entry.channel && f.withdrawn?.includes(entry.releaseId))
 }
 
 // The form keeps what the user chose. A render rebuilds the options only when the list changes, because replacing an
@@ -104,37 +104,38 @@ function render() {
 
   const labelOf = id => state.changes.find(c => c.id === id)?.label ?? id
   const client = state.clientState
-  const unknown = client?.running !== undefined && !state.history.some(entry => entry.seq === client.running)
-    ? '<tr><td class="version">' + escape(client.runningVersion ?? 'seq ' + client.running) + '</td><td class="muted" colspan="3">Not in the history of this server</td><td><span class="running">● On the app</span></td>'
-      + '<td class="actions"><button data-revoke="' + client.running + '">Revoke</button></td></tr>'
+  const unknown = client?.running !== undefined && !state.history.some(entry => entry.releaseId === client.running)
+    ? '<tr><td class="version">' + escape(client.runningVersion ?? 'release ' + client.running) + '</td><td class="muted" colspan="3">Not in the history of this server</td><td><span class="running">● On the app</span></td>'
+      + '<td class="actions"><button data-withdraw="' + Number(client.running) + '">Withdraw</button></td></tr>'
     : ''
   renderDesync(client)
   const rows = [unknown].concat(state.history.slice().reverse().map(entry => '<tr>'
     + '<td class="version">' + escape(entry.version) + '</td>'
     + '<td>' + escape(labelOf(entry.change)) + '</td>'
-    + '<td class="muted">' + entry.channel + (entry.rollout < 100 ? ' ' + entry.rollout + '%' : '') + '</td>'
+    + '<td class="muted">' + escape(entry.channel) + (entry.rollout < 100 ? ' ' + Number(entry.rollout) + '%' : '') + '</td>'
     + '<td class="muted">' + new Date(entry.publishedAt).toLocaleTimeString([], { hour12: false }) + '</td>'
     + '<td>' + statusOf(entry) + '</td>'
-    + '<td class="actions">' + (isRevoked(entry) ? '' : '<button data-revoke="' + entry.seq + '" title="The channel goes back to the newest earlier release, and the app leaves this one.">Revoke</button>') + '</td>'
+    + '<td class="actions">' + (isWithdrawn(entry) ? '' : '<button data-withdraw="' + Number(entry.releaseId) + '" title="The channel goes back to its newest earlier release, and the app leaves this one.">Withdraw</button>') + '</td>'
     + '</tr>'))
   $('history').innerHTML = rows.join('') || '<tr><td class="muted">No releases yet.</td></tr>'
 
-  const running = state.history.find(entry => entry.seq === client?.running)
-  $('app').textContent = client ? 'App runs ' + (running?.version ?? client.runningVersion ?? 'core ' + client.running) + (client.pid ? ' · pid ' + client.pid : '') : 'Waiting for the app…'
+  const running = state.history.find(entry => entry.releaseId === client?.running)
+  $('app').textContent = client ? 'App runs ' + (running?.version ?? client.runningVersion ?? 'release ' + client.running) + (client.pid ? ' · pid ' + client.pid : '') : 'Waiting for the app…'
 }
 
 function renderDesync(client) {
   const check = client?.lastCheck
-  const unknown = client?.running !== undefined && !state.history.some(entry => entry.seq === client.running)
+  const unknown = client?.running !== undefined && !state.history.some(entry => entry.releaseId === client.running)
+  const replayed = check?.status === 'verification-failed' && check.code === 'channel-replayed'
   let message = ''
-  if (check?.status === 'rejected' && check.code === 'pointer-replayed')
-    message = 'The app ignores the pointers of this server, because they are older than pointers the app accepted. Publish a new version, or sign the pointers again.'
+  if (replayed)
+    message = 'The app ignores the channel files of this server, because they are older than channel files the app accepted. Publish a new version, or sign the channel files again.'
   else if (unknown)
-    message = 'The app runs ' + (client.runningVersion ?? 'seq ' + client.running) + ', which this server does not know. The app never goes back. Publish a newer version, and the app takes it.'
-  else if (check?.status === 'server-behind')
-    message = 'The app runs a newer release than this server serves (app seq ' + check.current + ', server seq ' + check.seq + '). The app never goes back. Publish a new version, and the app takes it.'
+    message = 'The app runs ' + (client.runningVersion ?? 'release ' + client.running) + ', which this server does not know. The app never goes back. Publish a newer version, and the app takes it.'
+  else if (check?.status === 'up-to-date' && check.detail === 'app-newer-than-feed')
+    message = 'The app runs a newer release than this server serves. The app never goes back. Publish a new version, and the app takes it.'
   $('desync').hidden = !message
-  $('desync').innerHTML = message ? escape(message) + (check?.status === 'rejected' ? '<br><button id="reissue">Sign pointers again</button>' : '') : ''
+  $('desync').innerHTML = message ? escape(message) + (replayed ? '<br><button id="reissue">Sign channel files again</button>' : '') : ''
 }
 
 $('desync').addEventListener('click', (event) => {
@@ -152,7 +153,7 @@ $('publish').addEventListener('click', async () => {
 })
 $('history').addEventListener('click', (event) => {
   const button = event.target.closest('button')
-  if (button?.dataset.revoke) post('revoke', { seq: Number(button.dataset.revoke) })
+  if (button?.dataset.withdraw) post('withdraw', { releaseId: Number(button.dataset.withdraw) })
 })
 
 fetch('/_api/state').then(r => r.json()).then((next) => { state = next; render() })

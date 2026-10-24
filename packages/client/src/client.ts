@@ -1,9 +1,9 @@
-import type { Cadence, Component, CoreManifest, Distribution, Pointer, ShellArtifact, ShellManifest, TrustedKey } from '@ergosphere-it/protocol'
+import type { BundleManifest, ChannelFile, Component, InstallerArtifact, InstallerManifest, TrustedKey } from '@ergosphere-it/protocol'
 
 import type { Fetch, UpdateFileSystem } from './io'
-import type { ClientState } from './state'
+import type { BundleRef, ClientState, RollbackReason } from './state'
 
-import { CandidateError, checkCoreCandidate, checkShellCandidate, DocumentError, ErgosphereError, isInRollout, SignatureError, verifyCoreManifest, verifyPointer, verifyShellManifest } from '@ergosphere-it/protocol'
+import { CandidateError, checkBundleCandidate, checkInstallerCandidate, DocumentError, ErgosphereError, isInRollout, SignatureError, verifyBundleManifest, verifyChannelFile, verifyInstallerManifest } from '@ergosphere-it/protocol'
 import { errorMessageFrom } from '@moeru/std/error'
 import { withRetry } from '@moeru/std/with-retry'
 import { delay, sumBy } from 'es-toolkit'
@@ -12,41 +12,48 @@ import { DownloadError, downloadFile } from './download'
 import { loadState, saveState } from './state'
 import { ObjectStore } from './store'
 
-export type BootSelection
-  = | { components: Component[], dir: string, kind: 'builtin' | 'external', seq: number, version: string }
-
-/** The core that ships inside the installer. The installer is signed, so the client trusts it without a signature. */
-export interface BuiltinCore {
+/** The bundle that the client selected to boot. */
+export interface BootSelection {
   components: Component[]
   dir: string
-  seq: number
+  /** True for the bundle that came with the installer. */
+  fromInstaller: boolean
+  releaseId: number
   version: string
 }
 
+export interface CheckOptions {
+  /** Checks now, also when an earlier download failure scheduled a retry for later. Use it for a manual check. */
+  force?: boolean
+}
+
 /**
- * The result of an update check.
+ * The result of a bundle check.
  *
- * `server-behind` means the channel serves an older core than this install runs, for example after the server went
- * back to a backup. `rejected` means the protocol rejected the pointer or the core, and `error.code` comes from the
- * specification. `retry-later` means the core failed to download in this process, and the next attempt waits until
- * `retryAt`.
+ * - `available`: a verified bundle that this install can take.
+ * - `up-to-date`: nothing to take. `detail` says why, for logs and support. Users see "up to date" in every case.
+ * - `retry-scheduled`: the bundle failed to download in this process. The next check waits until `retryAt`, unless it
+ *   is forced.
+ * - `verification-failed`: the channel file or the bundle manifest failed a protocol check, for example its signature.
  */
 export type CheckResult
-  = | { current: number, seq: number, status: 'server-behind' }
-    | { distribution: Distribution, status: 'disabled' }
-    | { error: ErgosphereError, status: 'rejected' }
-    | { manifest: CoreManifest, manifestBytes: Uint8Array<ArrayBuffer>, signature: string, status: 'available' }
-    | { retryAt: string, seq: number, status: 'retry-later' }
-    | { seq: number, status: 'not-in-cohort' }
-    | { seq: number, status: 'not-in-rollout' }
-    | { seq: number, status: 'up-to-date' }
-    | { status: 'no-core' }
+  = | { detail?: UpToDateDetail, status: 'up-to-date' }
+    | { error: ErgosphereError, releaseId?: number, status: 'verification-failed' }
+    | { error: string, manifest: BundleManifest, retryAt: Date, status: 'retry-scheduled' }
+    | { manifest: BundleManifest, manifestBytes: Uint8Array<ArrayBuffer>, signature: string, status: 'available' }
 
-/** The result of a shell check. `feedUrl` is the electron-updater feed of this platform. */
-export type ShellCheckResult
-  = | { artifact: ShellArtifact, feedUrl: string, manifest: ShellManifest, status: 'available' }
-    | { distribution: Distribution, status: 'disabled' }
-    | { error: ErgosphereError, status: 'rejected' }
+/** The bundle that ships inside the installer. The installer is signed, so the client trusts it without a signature. */
+export interface InstallerBundle {
+  components: Component[]
+  dir: string
+  releaseId: number
+  version: string
+}
+
+/** The result of an installer check. `feedUrl` is the electron-updater feed of this platform. */
+export type InstallerCheckResult
+  = | { artifact: InstallerArtifact, feedUrl: string, manifest: InstallerManifest, status: 'available' }
+    | { error: ErgosphereError, status: 'verification-failed' }
     | { status: 'up-to-date' }
 
 export interface StageOptions {
@@ -61,72 +68,74 @@ export interface StageProgress {
 }
 
 export type StageResult
-  = | { detail: string, path: string, status: 'failed' }
-    | { downloadedBytes: number, reusedBytes: number, seq: number, status: 'staged' }
+  = | { detail: string, path: string, retryAt: Date, status: 'failed' }
+    | { downloadedBytes: number, releaseId: number, reusedBytes: number, status: 'staged' }
 
 export interface UpdateClientOptions {
-  /** The base URL of the static server, without a trailing slash. */
-  baseUrl: string
-  builtin: BuiltinCore
-  cadence: Cadence
   channel: string
-  /** Cohort of this install. A pointer with cohorts serves only those cohorts. */
-  cohort?: string
+  /** Cohorts of this install. A channel file with cohorts serves only those cohorts, and the cohort `all`. */
+  cohorts?: readonly string[]
   /** Objects to download at the same time. Defaults to 4. */
   concurrency?: number
   /** The directory that the client owns, for example `<userData>/updates`. */
   dataDir: string
-  distribution: Distribution
+  /** The URL of the static update server, without a trailing slash. */
+  feedUrl: string
   fetch?: Fetch
   fs: UpdateFileSystem
-  /** The host that runs cores, for example `electron`. A core for another host is rejected. */
+  /** The host that runs bundles, for example `electron`. A bundle for another host is rejected. */
   host: string
   /** A request stops when no bytes arrive for this long. Defaults to 30 seconds. */
   idleTimeoutMs?: number
-  /** Boots without a healthy report before a core is blocked. */
+  installerBundle: InstallerBundle
+  /** The release ID of the installed app. Without it, the client does not check for installer updates. */
+  installerReleaseId?: number
+  /** Boots without a healthy report before a bundle is blocked. */
   maxBootAttempts?: number
+  /** The native version of this install. A bundle runs only when its range includes it. */
+  nativeVersion: number
   now?: () => Date
   /** The platform of this install, for example `darwin-arm64`. */
   platform: string
-  /** The product of this install. Pointers and cores of another product are rejected, even with a valid signature. */
+  /** The product of this install. Channel files and bundles of another product are rejected, even with a valid signature. */
   product: string
   /** Retries of a failed object download in one stage. Each retry resumes the file. Defaults to 3. */
   retries?: number
   /** First wait before a retry. It doubles with each retry, up to 8 times this value. Defaults to 1 second. */
   retryDelayMs?: number
-  shellHostApi: number
-  /** The `seq` of the installed shell. Without it, the client does not check for shell updates. */
-  shellSeq?: number
   trustedKeys: TrustedKey[]
 }
 
+/** Why a check found nothing to take. */
+export type UpToDateDetail = 'app-newer-than-feed' | 'needs-newer-native-version' | 'not-in-cohort' | 'not-in-rollout' | 'nothing-published'
+
 const CODE_COMPONENTS = new Set<Component['type']>(['electron-main', 'electron-preload'])
-const BUILTIN_KEY = 'builtin'
-/** First wait before a core that failed to download is tried again. It doubles up to `MAX_FAILURE_DELAY_MS`. */
+const INSTALLER_KEY = 'installer'
+/** First wait before a bundle that failed to download is tried again. It doubles up to `MAX_FAILURE_DELAY_MS`. */
 const FAILURE_DELAY_MS = 30_000
 const MAX_FAILURE_DELAY_MS = 3_600_000
-const POINTER_REUSE_MS = 10_000
+const CHANNEL_FILE_REUSE_MS = 10_000
 
 /**
  * The update state machine of one install.
  *
- * It checks a channel pointer, stages a core into its data directory, selects the core to boot, and records health.
- * It never runs code. The host driver loads the selected core.
+ * It checks a channel file, stages a bundle into its data directory, selects the bundle to boot, and records health.
+ * It never runs code. The host driver loads the selected bundle.
  */
 export class UpdateClient {
   /**
-   * The external core that this process booted. Its main code runs until the process exits, and the host can still
+   * The downloaded bundle that this process booted. Its main code runs until the process exits, and the host can still
    * load files from its directory, for example a preload script or a lazy chunk. Reloads do not change it.
    */
   private booted: number | undefined
   private readonly concurrency: number
-  /** Download failures of a core in this process, so a core that keeps failing waits longer between attempts. */
-  private readonly failures = new Map<number, { count: number, retryAt: number }>()
+  /** Download failures of a bundle in this process, so a bundle that keeps failing waits longer between attempts. */
+  private readonly failures = new Map<number, { count: number, error: string, manifest: BundleManifest, retryAt: number }>()
   private readonly fetch: Fetch
   private readonly fs: UpdateFileSystem
   private readonly idleTimeoutMs: number
-  /** The pointer of the last check, so a core check and a shell check in a row fetch it once. */
-  private lastPointer: undefined | { at: number, pointer: Pointer }
+  /** The channel file of the last check, so a bundle check and an installer check in a row fetch it once. */
+  private lastChannelFile: undefined | { at: number, file: ChannelFile }
   private readonly maxBootAttempts: number
   private readonly now: () => Date
   private readonly objects: ObjectStore
@@ -134,7 +143,6 @@ export class UpdateClient {
   /** The tail of the state changes, so each change waits for the one before. */
   private queue: Promise<unknown> = Promise.resolve()
   private readonly retries: number
-
   private readonly retryDelayMs: number
 
   private get statePath(): string {
@@ -155,119 +163,121 @@ export class UpdateClient {
   }
 
   /**
-   * Makes the staged core current without a restart, for a change that only reloads pages.
+   * Makes the staged bundle current without a restart, for a change that only reloads pages.
    *
-   * The core that ran before becomes `previous`, so `rollback` can return to it.
+   * The bundle that ran before becomes `previous`, so `rollback` can return to it.
    */
-  async activateInPlace(seq: number): Promise<void> {
+  async activateInPlace(releaseId: number): Promise<void> {
     await this.update((state) => {
-      if (state.staged !== seq)
-        throw new Error(`activateInPlace: core ${seq} is not staged`)
-      if (state.blocked.includes(seq))
-        throw new CandidateError('blocked', `Core ${seq} is blocked on this install.`, seq)
+      if (state.staged !== releaseId)
+        throw new Error(`activateInPlace: bundle ${releaseId} is not staged`)
+      if (state.blocked.includes(releaseId))
+        throw new CandidateError('blocked', `Bundle ${releaseId} is blocked on this install.`, releaseId)
 
       state.previous = state.current
-      state.current = seq
+      state.current = releaseId
       state.staged = undefined
     })
   }
 
   /**
-   * Selects the core to boot: staged, then current, then previous, then builtin.
+   * Selects the bundle to boot: staged, then current, then previous, then the bundle of the installer.
    *
-   * It counts the boot attempt of the selected core. The host must call `markHealthy` when the app works.
+   * It counts the boot attempt of the selected bundle. The host must call `markHealthy` when the app works.
+   *
+   * With `readOnly`, it selects the same bundle without a change to the state, for example in a second instance of the
+   * app, which must not count a boot attempt of the first one.
    */
-  async boot(): Promise<BootSelection & { rejected: { problem: string, seq: number }[] }> {
+  async boot({ readOnly = false }: { readOnly?: boolean } = {}): Promise<BootSelection & { rejected: { problem: string, releaseId: number }[] }> {
     try {
-      return await this.exclusive(() => this.selectBoot())
+      return await this.exclusive(() => this.selectBoot(readOnly))
     }
     catch (error) {
       // NOTICE:
-      // A file system error must not stop the app. The builtin core needs no state, so it boots without one.
+      // A file system error must not stop the app. The installer bundle needs no state, so it boots without one.
       // For example, antivirus software on Windows can hold state.json during a rename and fail it with EPERM.
       // Removal condition: none. This is the last fallback of the boot order.
       this.booted = undefined
-      const { builtin } = this.options
       const problem = `the update state is unavailable: ${errorMessageFrom(error) ?? 'unknown error'}`
 
-      return { components: builtin.components, dir: builtin.dir, kind: 'builtin', rejected: [{ problem, seq: builtin.seq }], seq: builtin.seq, version: builtin.version }
+      return { ...this.installerSelection(), rejected: [{ problem, releaseId: this.options.installerBundle.releaseId }] }
     }
   }
 
+  bundleDir(releaseId: number): string {
+    return this.path('bundles', String(releaseId))
+  }
+
   /**
-   * Checks the channel pointer and returns a verified core that this install can take.
+   * Checks the channel file and returns a verified bundle that this install can take.
    *
-   * A rejection by the protocol is a result, not an error. Network and file system errors throw.
+   * A protocol rejection is a result, not an error. Network and file system errors throw.
    */
-  async check(): Promise<CheckResult> {
+  async check(options: CheckOptions = {}): Promise<CheckResult> {
     try {
-      return await this.checkPointer()
+      return await this.checkChannel(options)
     }
     catch (error) {
-      if (error instanceof ErgosphereError)
-        return { error, status: 'rejected' }
+      if (!(error instanceof ErgosphereError))
+        throw error
 
-      throw error
+      return { error, releaseId: error instanceof CandidateError ? error.releaseId : undefined, status: 'verification-failed' }
     }
   }
 
   /**
-   * Checks the channel pointer for a newer shell, and returns its verified manifest and the installer for this platform.
+   * Checks the channel file for a newer installer, and returns its verified manifest and the installer for this platform.
    *
-   * The host installs the shell with its platform installer, for example electron-updater with `feedUrl`. A rejection by
-   * the protocol is a result. Network errors throw.
+   * The host installs it with its platform installer, for example electron-updater with `feedUrl`. A protocol rejection
+   * is a result. Network errors throw.
    */
-  async checkShell(): Promise<ShellCheckResult> {
-    const { baseUrl, distribution, platform, product, shellSeq, trustedKeys } = this.options
-    if (distribution !== 'direct')
-      return { distribution, status: 'disabled' }
-    if (shellSeq === undefined)
+  async checkInstaller(): Promise<InstallerCheckResult> {
+    const { feedUrl, installerReleaseId, platform, product, trustedKeys } = this.options
+    if (installerReleaseId === undefined)
       return { status: 'up-to-date' }
 
     try {
-      const target = (await this.fetchPointer({ reuse: true })).shell?.seq
-      if (target === undefined || target <= shellSeq)
+      const target = (await this.fetchChannelFile({ reuse: true })).installer?.releaseId
+      if (target === undefined || target <= installerReleaseId)
         return { status: 'up-to-date' }
 
-      const manifestUrl = `${baseUrl}/shells/${target}/shell.json`
-      const manifest = await verifyShellManifest(await this.fetchBytes(manifestUrl), await this.fetchText(`${manifestUrl}.sig`), trustedKeys)
-      if (manifest.seq !== target)
-        throw new DocumentError('invalid-schema', `The shell manifest seq ${manifest.seq} is not the pointer seq ${target}.`)
+      const manifestUrl = `${feedUrl}/installers/${target}/installer.json`
+      const manifest = await verifyInstallerManifest(await this.fetchBytes(manifestUrl), await this.fetchText(`${manifestUrl}.sig`), trustedKeys)
+      if (manifest.releaseId !== target)
+        throw new DocumentError('invalid-schema', `The installer manifest releaseId ${manifest.releaseId} is not the channel releaseId ${target}.`)
 
-      const artifact = checkShellCandidate(manifest, { host: this.options.host, platform, product, shellSeq })
+      const artifact = checkInstallerCandidate(manifest, { host: this.options.host, installerReleaseId, platform, product })
 
-      return { artifact, feedUrl: `${baseUrl}/shells/${target}/feeds/${platform}`, manifest, status: 'available' }
+      return { artifact, feedUrl: `${feedUrl}/installers/${target}/feeds/${platform}`, manifest, status: 'available' }
     }
     catch (error) {
       if (error instanceof ErgosphereError)
-        return { error, status: 'rejected' }
+        return { error, status: 'verification-failed' }
 
       throw error
     }
   }
 
-  /** Removes cores and objects that no kept core uses. It keeps the core that this process booted. */
+  /** Removes bundles and objects that no kept bundle uses. It keeps the bundle that this process booted. */
   async collectGarbage(): Promise<void> {
-    // A deferred core older than the current core can never boot.
+    // A deferred bundle older than the current bundle can never boot.
     const state = await this.update((next) => {
       if (next.deferred !== undefined && next.deferred <= (next.current ?? 0))
         next.deferred = undefined
     })
-    const keep = new Set([state.staged, state.current, state.previous, state.deferred, this.booted].filter((seq): seq is number => seq !== undefined))
+    const keep = new Set([state.staged, state.current, state.previous, state.deferred, this.booted].filter((id): id is number => id !== undefined))
     const used = new Set<string>()
 
-    for (const name of await this.fs.list(this.path('cores'))) {
-      const seq = Number(name)
-      if (!keep.has(seq))
-        await this.fs.remove(this.path('cores', name))
+    for (const name of await this.fs.list(this.path('bundles'))) {
+      if (!keep.has(Number(name)))
+        await this.fs.remove(this.path('bundles', name))
     }
     for (const name of await this.fs.list(this.path('manifests'))) {
-      const seq = Number(name.split('.')[0])
-      if (!keep.has(seq))
+      if (!keep.has(Number(name.split('.')[0])))
         await this.fs.remove(this.path('manifests', name))
     }
-    for (const seq of keep) {
-      const manifest = await this.readStoredManifest(seq)
+    for (const releaseId of keep) {
+      const manifest = await this.readStoredManifest(releaseId)
       for (const component of manifest?.components ?? []) {
         for (const file of component.files)
           used.add(file.sha256)
@@ -282,51 +292,61 @@ export class UpdateClient {
       await this.fs.remove(path)
   }
 
-  coreDir(seq: number): string {
-    return this.path('cores', String(seq))
+  /** Forgets the last rollback, after the app told the user. */
+  async dismissRollback(): Promise<void> {
+    await this.update((state) => {
+      state.rolledBack = undefined
+    })
   }
 
-  /** Records that the core works. It clears the boot attempts of that core. */
+  /** Records that the bundle works. It clears the boot attempts of that bundle. */
   async markHealthy(selection: BootSelection): Promise<void> {
     await this.update((state) => {
-      state.bootAttempts[selection.kind === 'builtin' ? BUILTIN_KEY : String(selection.seq)] = 0
+      state.bootAttempts[selection.fromInstaller ? INSTALLER_KEY : String(selection.releaseId)] = 0
     })
   }
 
   /**
-   * Blocks a core that failed its health check and points the install back to the previous core.
+   * Blocks a bundle that failed and points the install back to the previous bundle.
    *
-   * Returns the seq to run next, or `undefined` for the builtin core.
+   * Returns the release ID to run next, or `undefined` for the bundle of the installer.
    */
-  async rollback(seq: number): Promise<number | undefined> {
+  async rollback(releaseId: number, reason: RollbackReason): Promise<number | undefined> {
+    // Name both bundles first, so the state changes in one write. Each write flushes to disk, which is slow on Windows.
+    const before = await this.state()
+    const target = before.current === releaseId ? before.previous : before.current
+    const [from, to] = await Promise.all([this.bundleRef(releaseId), this.bundleRef(target)])
     const state = await this.update((next) => {
-      if (!next.blocked.includes(seq))
-        next.blocked.push(seq)
-      if (next.staged === seq)
+      if (!next.blocked.includes(releaseId))
+        next.blocked.push(releaseId)
+      if (next.staged === releaseId)
         next.staged = undefined
-      if (next.current === seq) {
+      if (next.current === releaseId) {
         next.current = next.previous
         next.previous = undefined
       }
+      next.rolledBack = { from, reason, to }
     })
 
     return state.current
   }
 
-  /** Downloads the missing objects of a checked core, builds its directory, and marks it as staged. */
+  /** Downloads the missing objects of a checked bundle, builds its directory, and marks it as staged. */
   async stage(available: Extract<CheckResult, { status: 'available' }>, options: StageOptions = {}): Promise<StageResult> {
     const { manifest, manifestBytes, signature } = available
+    const { releaseId } = manifest
     const result = await this.stageObjects(manifest, options)
     if (result.status === 'failed') {
-      const count = (this.failures.get(manifest.seq)?.count ?? 0) + 1
-      this.failures.set(manifest.seq, { count, retryAt: this.now().getTime() + Math.min(FAILURE_DELAY_MS * 2 ** (count - 1), MAX_FAILURE_DELAY_MS) })
+      const count = (this.failures.get(releaseId)?.count ?? 0) + 1
+      const retryAt = this.now().getTime() + Math.min(FAILURE_DELAY_MS * 2 ** (count - 1), MAX_FAILURE_DELAY_MS)
+      this.failures.set(releaseId, { count, error: `${result.path}: ${result.detail}`, manifest, retryAt })
 
-      return result
+      return { ...result, retryAt: new Date(retryAt) }
     }
-    this.failures.delete(manifest.seq)
+    this.failures.delete(releaseId)
 
-    const target = this.coreDir(manifest.seq)
-    const building = this.path('cores', `.building-${manifest.seq}`)
+    const target = this.bundleDir(releaseId)
+    const building = this.path('bundles', `.building-${releaseId}`)
     await this.fs.remove(building)
     for (const component of manifest.components) {
       for (const file of component.files)
@@ -334,83 +354,99 @@ export class UpdateClient {
     }
     await this.fs.remove(target)
     await this.fs.rename(building, target)
-    await this.fs.writeFileAtomic(this.manifestPath(manifest.seq), manifestBytes)
-    await this.fs.writeFileAtomic(`${this.manifestPath(manifest.seq)}.sig`, new TextEncoder().encode(signature))
+    await this.fs.writeFileAtomic(this.manifestPath(releaseId), manifestBytes)
+    await this.fs.writeFileAtomic(`${this.manifestPath(releaseId)}.sig`, new TextEncoder().encode(signature))
 
     await this.update((next) => {
-      next.staged = manifest.seq
-      if (next.deferred === manifest.seq)
+      next.staged = releaseId
+      if (next.deferred === releaseId)
         next.deferred = undefined
+      // A newer bundle replaces the story of the last rollback.
+      if (next.rolledBack && releaseId > next.rolledBack.from.releaseId)
+        next.rolledBack = undefined
     })
     await this.collectGarbage()
 
-    return { downloadedBytes: result.downloadedBytes, reusedBytes: result.reusedBytes, seq: manifest.seq, status: 'staged' }
+    return { downloadedBytes: result.downloadedBytes, releaseId, reusedBytes: result.reusedBytes, status: 'staged' }
   }
 
   async state(): Promise<ClientState> {
     return loadState(this.fs, this.statePath)
   }
 
-  /** Returns a stored core after it verifies its manifest, without a boot attempt. */
-  async storedCore(seq: number): Promise<BootSelection | undefined> {
-    const manifest = await this.readStoredManifest(seq)
+  /** Returns a stored bundle after it verifies its manifest, without a boot attempt. `undefined` gives the installer bundle. */
+  async storedBundle(releaseId: number | undefined): Promise<BootSelection | undefined> {
+    if (releaseId === undefined)
+      return this.installerSelection()
 
-    return manifest ? { components: manifest.components, dir: this.coreDir(seq), kind: 'external', seq, version: manifest.version } : undefined
+    const manifest = await this.readStoredManifest(releaseId)
+
+    return manifest ? { components: manifest.components, dir: this.bundleDir(releaseId), fromInstaller: false, releaseId, version: manifest.version } : undefined
   }
 
-  private async checkPointer(): Promise<CheckResult> {
-    const { baseUrl, distribution, trustedKeys } = this.options
-    if (distribution !== 'direct')
-      return { distribution, status: 'disabled' }
+  /** Names a stored bundle by release and version. `undefined` names the bundle of the installer. */
+  private async bundleRef(releaseId: number | undefined): Promise<BundleRef> {
+    if (releaseId === undefined || releaseId === this.options.installerBundle.releaseId)
+      return { fromInstaller: true, releaseId: this.options.installerBundle.releaseId, version: this.options.installerBundle.version }
 
-    const pointer = await this.fetchPointer()
+    return { fromInstaller: false, releaseId, version: (await this.readStoredManifest(releaseId))?.version ?? String(releaseId) }
+  }
+
+  private async checkChannel({ force = false }: CheckOptions): Promise<CheckResult> {
+    const { feedUrl, trustedKeys } = this.options
+    const channelFile = await this.fetchChannelFile()
     const state = await this.state()
-    if (!pointer.core)
-      return { status: 'no-core' }
+    const served = channelFile.bundle
+    if (!served)
+      return { detail: 'nothing-published', status: 'up-to-date' }
 
-    const target = pointer.core.seq
+    const target = served.releaseId
     // A client never moves back. When the channel serves less than this install has, it reports that and waits for a
     // newer release.
-    // A blocked core is not ahead. The install leaves it, so the channel can serve an older core again.
-    const ahead = Math.max(...[state.current, state.staged].filter(seq => seq !== undefined && !state.blocked.includes(seq)) as number[], 0)
+    // A blocked bundle is not ahead. The install leaves it, so the channel can serve an older bundle again.
+    const ahead = Math.max(...[state.current, state.staged].filter(id => id !== undefined && !state.blocked.includes(id)) as number[], 0)
     if (target < ahead)
-      return { current: ahead, seq: target, status: 'server-behind' }
+      return { detail: 'app-newer-than-feed', status: 'up-to-date' }
 
-    const floor = Math.max(this.options.builtin.seq, ahead)
-    if (target <= floor)
-      return { seq: Math.max(target, floor), status: 'up-to-date' }
-    if (pointer.core.cohorts && !pointer.core.cohorts.includes(this.options.cohort ?? 'all'))
-      return { seq: target, status: 'not-in-cohort' }
-    if (!await isInRollout(pointer.core.rollout, state.installId))
-      return { seq: target, status: 'not-in-rollout' }
-    // A blocked core stays blocked, so skip its manifest. Otherwise every check downloads it again to reject it.
-    if (pointer.revoked?.includes(target))
-      throw new CandidateError('revoked', `Core ${target} is revoked.`, target)
-    if (state.blocked.includes(target))
-      throw new CandidateError('blocked', `Core ${target} is blocked on this install.`, target)
+    const floor = Math.max(this.options.installerBundle.releaseId, ahead)
+    // A blocked or withdrawn bundle stays blocked, so skip its manifest. Otherwise every check downloads it again.
+    if (target <= floor || state.blocked.includes(target))
+      return { status: 'up-to-date' }
+    if (served.cohorts && !['all', ...this.options.cohorts ?? []].some(cohort => served.cohorts!.includes(cohort)))
+      return { detail: 'not-in-cohort', status: 'up-to-date' }
+    if (!await isInRollout(served.rollout, state.installId))
+      return { detail: 'not-in-rollout', status: 'up-to-date' }
 
-    // A download failure is not a bad release. Wait longer after each failure, but never block the core for it.
+    // A download failure is not a bad release. Wait longer after each failure, but never block the bundle for it.
     const failure = this.failures.get(target)
-    if (failure && this.now().getTime() < failure.retryAt)
-      return { retryAt: new Date(failure.retryAt).toISOString(), seq: target, status: 'retry-later' }
+    if (failure && !force && this.now().getTime() < failure.retryAt)
+      return { error: failure.error, manifest: failure.manifest, retryAt: new Date(failure.retryAt), status: 'retry-scheduled' }
 
-    const manifestUrl = `${baseUrl}/cores/${target}/manifest.json`
+    const manifestUrl = `${feedUrl}/bundles/${target}/bundle.json`
     const manifestBytes = await this.fetchBytes(manifestUrl)
     const signature = await this.fetchText(`${manifestUrl}.sig`)
-    const manifest = await verifyCoreManifest(manifestBytes, signature, trustedKeys)
-    if (manifest.seq !== target)
-      throw new DocumentError('invalid-schema', `The manifest seq ${manifest.seq} is not the pointer seq ${target}.`)
+    const manifest = await verifyBundleManifest(manifestBytes, signature, trustedKeys)
+    if (manifest.releaseId !== target)
+      throw new DocumentError('invalid-schema', `The manifest releaseId ${manifest.releaseId} is not the channel releaseId ${target}.`)
 
-    checkCoreCandidate(manifest, {
-      blocked: state.blocked,
-      builtinSeq: this.options.builtin.seq,
-      currentSeq: ahead || undefined,
-      host: this.options.host,
-      platform: this.options.platform,
-      product: this.options.product,
-      revoked: pointer.revoked,
-      shellHostApi: this.options.shellHostApi,
-    })
+    try {
+      checkBundleCandidate(manifest, {
+        blocked: state.blocked,
+        currentReleaseId: ahead || undefined,
+        host: this.options.host,
+        installerBundleReleaseId: this.options.installerBundle.releaseId,
+        nativeVersion: this.options.nativeVersion,
+        platform: this.options.platform,
+        product: this.options.product,
+        withdrawn: channelFile.withdrawn,
+      })
+    }
+    catch (error) {
+      if (error instanceof CandidateError && error.code === 'native-version-mismatch')
+        return { detail: 'needs-newer-native-version', status: 'up-to-date' }
+
+      throw error
+    }
 
     return { manifest, manifestBytes, signature, status: 'available' }
   }
@@ -425,7 +461,7 @@ export class UpdateClient {
       onBytes,
       path: part,
       size,
-      url: `${this.options.baseUrl}/objects/sha256/${hash.slice(0, 2)}/${hash}`,
+      url: `${this.options.feedUrl}/objects/sha256/${hash.slice(0, 2)}/${hash}`,
     }), {
       onError: (error) => {
         // withRetry retries every error. Stop early for errors that another attempt cannot fix.
@@ -460,7 +496,7 @@ export class UpdateClient {
     return result
   }
 
-  /** Fetches a small document, for example a pointer or a manifest. A stalled request fails after the idle timeout. */
+  /** Fetches a small document, for example a channel file or a manifest. A stalled request fails after the idle timeout. */
   private async fetchBytes(url: string): Promise<Uint8Array<ArrayBuffer>> {
     const response = await this.fetch(url, { signal: AbortSignal.timeout(this.idleTimeoutMs) })
     if (!response.ok)
@@ -470,28 +506,27 @@ export class UpdateClient {
   }
 
   /**
-   * Fetches and verifies the channel pointer, and records its issue time and its revoked cores.
+   * Fetches and verifies the channel file, and records its issue time and its withdrawn bundles.
    *
-   * With `reuse`, a pointer verified in the last few seconds is returned, so a shell check after a core check fetches it
-   * once. A core check always fetches.
+   * With `reuse`, a channel file verified in the last few seconds is returned, so an installer check after a bundle
+   * check fetches it once. A bundle check always fetches.
    */
-  private async fetchPointer({ reuse = false } = {}): Promise<Pointer> {
+  private async fetchChannelFile({ reuse = false } = {}): Promise<ChannelFile> {
     const now = this.now()
-    if (reuse && this.lastPointer && now.getTime() - this.lastPointer.at < POINTER_REUSE_MS)
-      return this.lastPointer.pointer
+    if (reuse && this.lastChannelFile && now.getTime() - this.lastChannelFile.at < CHANNEL_FILE_REUSE_MS)
+      return this.lastChannelFile.file
 
-    const { baseUrl, cadence, channel, trustedKeys } = this.options
-    const target = `${channel}/${cadence}`
+    const { channel, feedUrl, trustedKeys } = this.options
     const state = await this.state()
-    const pointerUrl = `${baseUrl}/pointers/${channel}/${cadence}.json`
-    const fetchVerified = async () => verifyPointer(
-      await this.fetchBytes(pointerUrl),
-      await this.fetchText(`${pointerUrl}.sig`),
+    const url = `${feedUrl}/channels/${channel}.json`
+    const fetchVerified = async () => verifyChannelFile(
+      await this.fetchBytes(url),
+      await this.fetchText(`${url}.sig`),
       trustedKeys,
-      { cadence, channel, lastIssuedAt: state.pointerIssuedAt?.[target], now, product: this.options.product },
+      { channel, lastIssuedAt: state.channelIssuedAt?.[channel], now, product: this.options.product },
     )
-    const pointer = await fetchVerified().catch(async (error: unknown) => {
-      // A pointer and its signature are two files, so a fetch between their uploads can get a new pointer with the
+    const file = await fetchVerified().catch(async (error: unknown) => {
+      // A channel file and its signature are two files, so a fetch between their uploads can get a new file with the
       // old signature. Fetch both again once.
       if (!(error instanceof SignatureError) || error.code !== 'invalid-signature')
         throw error
@@ -500,51 +535,54 @@ export class UpdateClient {
       return fetchVerified()
     })
     await this.update((next) => {
-      // A pointer issued in the future, for example by a CI runner with a fast clock, would make every later pointer
-      // look replayed. Remember at most the time of this check.
-      const issuedAt = Math.min(Date.parse(pointer.issuedAt), now.getTime())
-      next.pointerIssuedAt = { ...next.pointerIssuedAt, [target]: new Date(issuedAt).toISOString() }
-      for (const seq of pointer.revoked ?? []) {
-        if (!next.blocked.includes(seq))
-          next.blocked.push(seq)
+      // A file issued in the future, for example by a CI runner with a fast clock, would make every later file look
+      // replayed. Remember at most the time of this check.
+      const issuedAt = Math.min(Date.parse(file.issuedAt), now.getTime())
+      next.channelIssuedAt = { ...next.channelIssuedAt, [channel]: new Date(issuedAt).toISOString() }
+      for (const releaseId of file.withdrawn ?? []) {
+        if (!next.blocked.includes(releaseId))
+          next.blocked.push(releaseId)
+        if (!next.withdrawn.includes(releaseId))
+          next.withdrawn.push(releaseId)
       }
-      // A staged core that is now revoked must not boot or activate.
+      // A staged bundle that is now withdrawn must not boot or activate.
       if (next.staged !== undefined && next.blocked.includes(next.staged))
         next.staged = undefined
     })
-    this.lastPointer = { at: now.getTime(), pointer }
+    this.lastChannelFile = { at: now.getTime(), file }
 
-    return pointer
+    return file
   }
 
   private async fetchText(url: string): Promise<string> {
     return new TextDecoder().decode(await this.fetchBytes(url))
   }
 
-  /** Checks one stored core before boot. Returns the reason it cannot boot, or `undefined`. */
-  private async inspect(seq: number, state: ClientState): Promise<{ manifest?: CoreManifest, permanent?: boolean, problem?: string }> {
-    const manifest = await this.readStoredManifest(seq)
+  /** Checks one stored bundle before boot. Returns the reason it cannot boot, or `undefined`. */
+  private async inspect(releaseId: number, state: ClientState): Promise<{ manifest?: BundleManifest, permanent?: boolean, problem?: string }> {
+    const manifest = await this.readStoredManifest(releaseId)
     if (!manifest)
       return { permanent: true, problem: 'manifest is missing or does not verify' }
 
     try {
-      checkCoreCandidate(manifest, {
+      checkBundleCandidate(manifest, {
         blocked: state.blocked,
-        builtinSeq: this.options.builtin.seq,
         host: this.options.host,
+        installerBundleReleaseId: this.options.installerBundle.releaseId,
+        nativeVersion: this.options.nativeVersion,
         platform: this.options.platform,
         product: this.options.product,
-        shellHostApi: this.options.shellHostApi,
+        withdrawn: state.withdrawn,
       })
     }
     catch (error) {
       if (!(error instanceof CandidateError))
         throw error
 
-      return { manifest, permanent: error.code !== 'host-api-incompatible', problem: error.code }
+      return { manifest, permanent: error.code !== 'native-version-mismatch', problem: error.code }
     }
 
-    const dir = this.coreDir(seq)
+    const dir = this.bundleDir(releaseId)
     for (const component of manifest.components) {
       for (const file of component.files) {
         const path = this.fs.join(dir, ...file.path.split('/'))
@@ -554,7 +592,7 @@ export class UpdateClient {
         // NOTICE:
         // Code files are hashed on every boot. Large web assets are checked by size only.
         // Hashing every file adds about 600 ms to a cold start (measured by LobeHub Desktop).
-        // The client hashed every object when it stored it, and nothing else writes to the core directory.
+        // The client hashed every object when it stored it, and nothing else writes to the bundle directory.
         // Remove this split when hashing all files at boot costs less than 100 ms.
         if (CODE_COMPONENTS.has(component.type)) {
           if (await this.fs.hashFile(path) !== file.sha256)
@@ -563,13 +601,19 @@ export class UpdateClient {
       }
     }
 
-    if ((state.bootAttempts[String(seq)] ?? 0) >= this.maxBootAttempts)
-      return { manifest, permanent: true, problem: `boot attempts reached ${this.maxBootAttempts} without a healthy report` }
+    if ((state.bootAttempts[String(releaseId)] ?? 0) >= this.maxBootAttempts)
+      return { manifest, permanent: true, problem: 'not-marked-healthy' }
 
     return { manifest }
   }
 
-  /** Paths of files on disk that can give an object without a download: the running core and the builtin core. */
+  private installerSelection(): BootSelection {
+    const { components, dir, releaseId, version } = this.options.installerBundle
+
+    return { components, dir, fromInstaller: true, releaseId, version }
+  }
+
+  /** Paths of files on disk that can give an object without a download: the running bundle and the installer bundle. */
   private async localSources(): Promise<Map<string, string>> {
     const sources = new Map<string, string>()
     const add = (dir: string, components: readonly Component[]) => {
@@ -582,35 +626,35 @@ export class UpdateClient {
     }
 
     const state = await this.state()
-    for (const seq of [state.current, state.previous]) {
-      if (seq === undefined)
+    for (const releaseId of [state.current, state.previous]) {
+      if (releaseId === undefined)
         continue
 
-      const manifest = await this.readStoredManifest(seq)
+      const manifest = await this.readStoredManifest(releaseId)
       if (manifest)
-        add(this.coreDir(seq), manifest.components)
+        add(this.bundleDir(releaseId), manifest.components)
     }
-    add(this.options.builtin.dir, this.options.builtin.components)
+    add(this.options.installerBundle.dir, this.options.installerBundle.components)
 
     return sources
   }
 
-  private manifestPath(seq: number): string {
-    return this.path('manifests', `${seq}.json`)
+  private manifestPath(releaseId: number): string {
+    return this.path('manifests', `${releaseId}.json`)
   }
 
   private path(...parts: string[]): string {
     return this.fs.join(this.options.dataDir, ...parts)
   }
 
-  private async readStoredManifest(seq: number): Promise<CoreManifest | undefined> {
-    const bytes = await this.fs.readFile(this.manifestPath(seq))
-    const signature = await this.fs.readFile(`${this.manifestPath(seq)}.sig`)
+  private async readStoredManifest(releaseId: number): Promise<BundleManifest | undefined> {
+    const bytes = await this.fs.readFile(this.manifestPath(releaseId))
+    const signature = await this.fs.readFile(`${this.manifestPath(releaseId)}.sig`)
     if (!bytes || !signature)
       return undefined
 
     try {
-      return await verifyCoreManifest(bytes, new TextDecoder().decode(signature), this.options.trustedKeys)
+      return await verifyBundleManifest(bytes, new TextDecoder().decode(signature), this.options.trustedKeys)
     }
     catch (error) {
       if (error instanceof ErgosphereError)
@@ -620,60 +664,72 @@ export class UpdateClient {
     }
   }
 
-  private async selectBoot(): Promise<BootSelection & { rejected: { problem: string, seq: number }[] }> {
+  private async selectBoot(readOnly: boolean): Promise<BootSelection & { rejected: { problem: string, releaseId: number }[] }> {
     const state = await this.state()
-    const rejected: { problem: string, seq: number }[] = []
-    const accepted: { manifest: CoreManifest, seq: number }[] = []
+    const rejected: { problem: string, releaseId: number }[] = []
+    const accepted: { manifest: BundleManifest, releaseId: number }[] = []
     const seen = new Set<number>()
-    // A deferred core waits for a newer shell. Try it again, because this shell can be the newer one.
+    const versions = new Map<number, string>()
+    // A deferred bundle waits for a newer native version. Try it again, because this install can be the newer one.
     const deferred = state.deferred !== undefined && state.deferred > (state.current ?? 0) ? state.deferred : undefined
 
-    for (const seq of [state.staged, deferred, state.current, state.previous]) {
-      if (seq === undefined || seen.has(seq))
+    for (const releaseId of [state.staged, deferred, state.current, state.previous]) {
+      if (releaseId === undefined || seen.has(releaseId))
         continue
 
-      seen.add(seq)
-      const result = await this.inspect(seq, state)
+      seen.add(releaseId)
+      const result = await this.inspect(releaseId, state)
+      if (result.manifest)
+        versions.set(releaseId, result.manifest.version)
       if (result.problem === undefined && result.manifest) {
-        accepted.push({ manifest: result.manifest, seq })
+        accepted.push({ manifest: result.manifest, releaseId })
         continue
       }
 
-      rejected.push({ problem: result.problem ?? 'unknown', seq })
-      if (result.permanent && !state.blocked.includes(seq))
-        state.blocked.push(seq)
-      if (!result.permanent && (seq === state.staged || seq === deferred))
-        state.deferred = seq
-      else if (seq === state.deferred)
+      rejected.push({ problem: result.problem ?? 'unknown', releaseId })
+      if (result.permanent && !state.blocked.includes(releaseId))
+        state.blocked.push(releaseId)
+      if (!result.permanent && (releaseId === state.staged || releaseId === deferred))
+        state.deferred = releaseId
+      else if (releaseId === state.deferred)
         state.deferred = undefined
     }
 
     const chosen = accepted[0]
-    if (chosen && chosen.seq === state.deferred)
+    // The bundle that ran last does not boot now. Record why, so the app can tell the user after the restart.
+    const left = rejected.find(item => item.releaseId === state.current && (item.problem === 'not-marked-healthy' || item.problem === 'withdrawn'))
+    if (left) {
+      state.rolledBack = {
+        from: { fromInstaller: false, releaseId: left.releaseId, version: versions.get(left.releaseId) ?? String(left.releaseId) },
+        reason: left.problem as RollbackReason,
+        to: chosen ? { fromInstaller: false, releaseId: chosen.releaseId, version: chosen.manifest.version } : await this.bundleRef(undefined),
+      }
+    }
+
+    if (chosen && chosen.releaseId === state.deferred)
       state.deferred = undefined
     state.staged = undefined
-    state.current = chosen?.seq
-    state.previous = accepted[1]?.seq
-    const key = chosen ? String(chosen.seq) : BUILTIN_KEY
+    state.current = chosen?.releaseId
+    state.previous = accepted[1]?.releaseId
+    const key = chosen ? String(chosen.releaseId) : INSTALLER_KEY
     state.bootAttempts[key] = (state.bootAttempts[key] ?? 0) + 1
-    await saveState(this.fs, this.statePath, state)
-    this.booted = chosen?.seq
+    if (!readOnly)
+      await saveState(this.fs, this.statePath, state)
+    this.booted = chosen?.releaseId
 
     if (chosen)
-      return { components: chosen.manifest.components, dir: this.coreDir(chosen.seq), kind: 'external', rejected, seq: chosen.seq, version: chosen.manifest.version }
+      return { components: chosen.manifest.components, dir: this.bundleDir(chosen.releaseId), fromInstaller: false, rejected, releaseId: chosen.releaseId, version: chosen.manifest.version }
 
-    const { builtin } = this.options
-
-    return { components: builtin.components, dir: builtin.dir, kind: 'builtin', rejected, seq: builtin.seq, version: builtin.version }
+    return { ...this.installerSelection(), rejected }
   }
 
   /**
-   * Puts every object of a manifest into the store: from the store, from a core on disk, or from the network.
+   * Puts every object of a manifest into the store: from the store, from a bundle on disk, or from the network.
    *
    * Downloads run in parallel, resume after a failure, and retry network errors with backoff. A file whose hash does
    * not match is downloaded once more from the start before the stage fails.
    */
-  private async stageObjects(manifest: CoreManifest, options: StageOptions): Promise<Extract<StageResult, { status: 'failed' }> | { downloadedBytes: number, reusedBytes: number, status: 'stored' }> {
+  private async stageObjects(manifest: BundleManifest, options: StageOptions): Promise<{ detail: string, path: string, status: 'failed' } | { downloadedBytes: number, reusedBytes: number, status: 'stored' }> {
     const sources = await this.localSources()
     const missing = new Map<string, { path: string, size: number }>()
     let reusedBytes = 0
@@ -704,7 +760,7 @@ export class UpdateClient {
     const report = () => options.onProgress?.({ downloadedBytes: sumBy([...received.values()], bytes => bytes), totalBytes })
     report()
 
-    let failure: Extract<StageResult, { status: 'failed' }> | undefined
+    let failure: undefined | { detail: string, path: string, status: 'failed' }
     const queue = [...missing]
     const worker = async () => {
       for (let next = queue.shift(); next && !failure; next = queue.shift()) {

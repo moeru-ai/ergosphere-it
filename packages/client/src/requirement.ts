@@ -1,13 +1,14 @@
 import type { Component } from '@ergosphere-it/protocol'
 
-export type Activation = 'none' | 'reload' | 'restart'
+/** What a bundle change needs to take effect: nothing, a page reload, or an app restart. */
+export type ChangeRequirement = 'none' | 'reload' | 'restart'
 
 /**
- * Decides how a core change takes effect.
+ * Decides what a bundle change needs to take effect.
  *
  * A change that touches only `web` files reloads the pages. Any other change restarts the app.
  */
-export function activationFor(running: readonly Component[], next: readonly Component[]): Activation {
+export function requirementOf(running: readonly Component[], next: readonly Component[]): ChangeRequirement {
   const before = fileMap(running)
   const after = fileMap(next)
   let changed = false

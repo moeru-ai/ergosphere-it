@@ -1,0 +1,63 @@
+import type { BrowserWindow } from 'electron'
+
+import type { BundleInfo, RollbackReason, UpdaterStatus } from './status'
+
+/** The bundle that runs now. A page-only update changes it without a restart. */
+export interface ActiveBundle extends BundleInfo {
+  /** The directory of the bundle. */
+  readonly dir: string
+  /** The path of the preload script of the bundle, for `webPreferences.preload`. */
+  readonly preload: string
+  /** Resolves a path inside the bundle, for example a file in `renderer/`. */
+  resolve: (...parts: string[]) => string
+}
+
+/** Events of the launcher, for logs and tests. Set `ERGOSPHERE_IT_LOG` to a file path to write them as JSON lines. */
+export type LauncherEvent
+  = | { error: string, releaseId: number, type: 'boot-failed' }
+    | { from: number, reason: RollbackReason, to: number, type: 'rollback' }
+    | { fromInstaller: boolean, rejected: { problem: string, releaseId: number }[], releaseId: number, type: 'boot', version: string }
+    | { reason: string, releaseId: number, type: 'restart' }
+    | { releaseId: number, type: 'health-timeout' }
+    | { releaseId: number, type: 'healthy' }
+    | { releaseId: number, type: 'install' }
+    | { releaseId: number, type: 'reload' }
+    | { status: UpdaterStatus, type: 'status' }
+    | { type: 'second-instance' }
+
+/** Options of `loadActiveBundle`. They pass to `BrowserWindow.loadFile`. */
+export interface LoadOptions {
+  hash?: string
+  query?: Record<string, string>
+}
+
+/** What the launcher gives the bundle. */
+export interface Runtime {
+  readonly activeBundle: ActiveBundle
+  loadActiveBundle: (window: BrowserWindow, options?: LoadOptions) => Promise<void>
+  /** Tells the launcher that the bundle works. Pages call it through `markBundleHealthy()`. */
+  markBundleHealthy: () => void
+  readonly updater: Updater
+}
+
+/** The updater in the main process. */
+export interface Updater {
+  /** Applies the ready update: a reload, a restart, or a full install. Rejects when no update is ready. */
+  applyUpdate: () => Promise<void>
+  /** The channel that the app follows. Setting it saves it for the next launches. */
+  channel: string
+  /** Checks now, also when a failed download waits for its retry time. Automatic checks run without it. */
+  checkForUpdates: () => Promise<UpdaterStatus>
+  /**
+   * Cohorts of this install, for example `['qa']`. A channel file with cohorts serves only those cohorts. Setting it
+   * saves it for the next launches. Cohorts filter releases. They do not control access.
+   */
+  cohorts: readonly string[]
+  /** Forgets the last rollback, after the app told the user. */
+  dismissRollback: () => Promise<void>
+  /** Calls the listener on every launcher event, for logs. Returns a function that stops listening. */
+  onEvent: (listener: (event: LauncherEvent) => void) => () => void
+  /** Calls the listener now and on every status change. Returns a function that stops listening. */
+  onStatus: (listener: (status: UpdaterStatus) => void) => () => void
+  readonly status: UpdaterStatus
+}

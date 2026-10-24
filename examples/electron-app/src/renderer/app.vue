@@ -1,44 +1,57 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { markBundleHealthy, useUpdater } from '@ergosphere-it/electron/vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import UpdateDialog from './components/update-dialog.vue'
 import UpdateToast from './components/update-toast.vue'
 
-import { useUpdate } from './composables/use-update'
+const { activeBundle, applyUpdate, dismissRollback, status } = useUpdater()
 
-const query = new URLSearchParams(location.search)
-const version = __APP_VERSION__
-const info = `core ${query.get('seq')} (${query.get('kind')}) · pid ${query.get('pid')}`
+const version = computed(() => activeBundle.value?.version ?? '…')
+const origin = computed(() => (activeBundle.value?.fromInstaller ? 'from the installer' : 'downloaded'))
 // Each version gets its own color, so a page update is easy to see.
-const hue = [...version].reduce((sum, char) => sum + char.charCodeAt(0) * 37, 0) % 360
+const hue = computed(() => [...version.value].reduce((sum, char) => sum + char.charCodeAt(0) * 37, 0) % 360)
 
-const { apply, closeDialog, dialogOpen, dismissToast, status, toastOpen } = useUpdate()
+// The dialog asks once for each ready update. "Later" keeps the toast.
+const dialogFor = ref<number>()
+const dialogOpen = ref(false)
+watch(status, (next) => {
+  if (next.status === 'ready' && next.update.releaseId !== dialogFor.value) {
+    dialogFor.value = next.update.releaseId
+    dialogOpen.value = true
+  }
+})
 
-document.title = `ergosphere-it example ${version}`
+function apply(): void {
+  dialogOpen.value = false
+  void applyUpdate()
+}
 
-// Report health after the page mounted. A core whose page never mounts is rolled back.
-onMounted(() => window.example.mounted({ version }))
+// The app is usable once the first screen rendered. A real app waits for its stores and data here too.
+onMounted(async () => {
+  await nextTick()
+  markBundleHealthy()
+})
 </script>
 
 <template>
   <div class="page" :style="{ background: `hsl(${hue} 55% 42%)` }">
     <main>
       <div class="caption">
-        page
+        bundle
       </div>
       <h1>{{ version }}</h1>
       <p class="info">
-        {{ info }}
+        {{ origin }} · release {{ activeBundle?.releaseId }}
       </p>
     </main>
 
-    <UpdateToast v-if="toastOpen" :status="status" @apply="apply" @close="dismissToast" />
+    <UpdateToast :status="status" @apply="apply" @dismiss-rollback="dismissRollback" />
     <UpdateDialog
-      v-if="dialogOpen && status.state === 'ready'"
-      :activation="status.activation"
-      :version="status.version"
+      v-if="dialogOpen && status.status === 'ready'"
+      :update="status.update"
       @apply="apply"
-      @later="closeDialog"
+      @later="dialogOpen = false"
     />
   </div>
 </template>

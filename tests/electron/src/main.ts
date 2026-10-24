@@ -1,52 +1,56 @@
-// The core main of the test build. It adds test hooks around the core main of the example, then loads it.
+// The bundle main of the test build. It adds test hooks around the main of the example, then loads it.
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { env } from 'node:process'
+import { env, pid } from 'node:process'
 
-import { getCore } from '@ergosphere-it/driver-electron/core'
-import { useLogg } from '@guiiai/logg'
-import { app, ipcMain } from 'electron'
+import { activeBundle, updater } from '@ergosphere-it/electron/main'
+import { app } from 'electron'
 
-const log = useLogg('test').useGlobalConfig()
-
-// A crash variant throws at start, so the shell falls back to an earlier core.
+// A crash variant throws at start, so the launcher falls back to an earlier bundle.
 if (__TEST_CRASH__)
-  throw new Error(`test core main crash (tag ${__TEST_MAIN_TAG__})`)
+  throw new Error(`test bundle main crash (tag ${__TEST_MAIN_TAG__})`)
 
-// The main tag is part of the main code. A new tag changes main, so the update needs a restart.
-log.withFields({ mainTag: __TEST_MAIN_TAG__ }).log('test core main')
-
-const core = getCore()
-// An unhealthy variant never reports health, so the shell rolls it back. The variant marks its page with a file, not
-// with main code, so it stays a page-only update that reloads in place.
-const markHealthy = core.markHealthy
-core.markHealthy = () => {
-  if (!existsSync(core.resolve('renderer', 'test-no-health')))
-    markHealthy()
+/** Writes a test event to the event log of the launcher, in the same form. */
+function logEvent(event: Record<string, unknown>): void {
+  if (env.ERGOSPHERE_IT_LOG)
+    appendFileSync(env.ERGOSPHERE_IT_LOG, `${JSON.stringify({ ...event, pid, time: Date.now() })}\n`)
 }
 
-// Windows stay hidden unless a person watches the run.
-if (env.ERGOSPHERE_SHOW_WINDOW !== '1')
-  app.on('browser-window-created', (_event, window) => window.show = () => {})
+// The main tag is part of the main code. A new tag changes main, so the update needs a restart.
+logEvent({ mainTag: __TEST_MAIN_TAG__, releaseId: activeBundle.releaseId, type: 'bundle-main' })
 
-const captureDir = env.ERGOSPHERE_CAPTURE_DIR
-if (captureDir) {
-  ipcMain.on('example:mounted', (event, page: { version: string }) => {
-    setTimeout(async () => {
-      const image = await event.sender.capturePage()
-      mkdirSync(captureDir, { recursive: true })
-      writeFileSync(join(captureDir, `${Date.now()}-core${core.info.seq}-${page.version}.png`), image.toPNG())
-    }, 300)
+// The test plays the user: it applies every update that is ready, as a click on the button does, and closes a
+// rollback notice after it was shown.
+if (env.ERGOSPHERE_E2E_APPLY === '1') {
+  updater.onStatus((status) => {
+    if (status.status === 'ready')
+      void updater.applyUpdate()
+    if (status.status === 'rolled-back')
+      setTimeout(() => void updater.dismissRollback(), 500)
   })
 }
 
-// The example checks every 10 minutes. Tests check more often.
-const interval = Number(env.ERGOSPHERE_CHECK_MS ?? 0)
-if (interval > 0) {
-  void app.whenReady().then(() => setInterval(() => {
-    core.updater.check().catch(error => log.withError(error).error('The update check failed.'))
-  }, interval))
-}
+app.on('browser-window-created', (_event, window) => {
+  // Windows stay hidden unless a person watches the run.
+  if (env.ERGOSPHERE_SHOW_WINDOW !== '1')
+    window.show = () => {}
+
+  // The test shim of the page logs this line when the page calls markBundleHealthy().
+  window.webContents.on('console-message', ({ message }) => {
+    if (message !== '[ergosphere-test] mounted')
+      return
+
+    logEvent({ releaseId: activeBundle.releaseId, type: 'page-mounted', version: activeBundle.version })
+    const captureDir = env.ERGOSPHERE_CAPTURE_DIR
+    if (captureDir) {
+      setTimeout(async () => {
+        const image = await window.webContents.capturePage()
+        mkdirSync(captureDir, { recursive: true })
+        writeFileSync(join(captureDir, `${Date.now()}-${activeBundle.releaseId}-${activeBundle.version}.png`), image.toPNG())
+      }, 300)
+    }
+  })
+})
 
 void import('../../../examples/electron-app/src/main/index')

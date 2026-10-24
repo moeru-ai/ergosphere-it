@@ -43,7 +43,7 @@ async function signed(document: Record<string, unknown>, key: TestKey = trusted,
 
 const sha = (char: string) => char.repeat(64)
 
-function core(overrides: Record<string, unknown> = {}) {
+function bundle(overrides: Record<string, unknown> = {}) {
   const components = [
     { entry: 'main/index.js', files: [{ path: 'main/index.js', sha256: sha('a'), size: 100 }], type: 'electron-main' },
     { entry: 'renderer/index.html', files: [
@@ -56,80 +56,79 @@ function core(overrides: Record<string, unknown> = {}) {
     components,
     createdAt: '2026-10-23T00:00:00.000Z',
     host: 'electron',
-    hostApi: { max: 4, min: 3 },
-    kind: 'core',
+    kind: 'bundle',
+    nativeVersion: { max: 4, min: 3 },
     platform: 'darwin-arm64',
     product: 'airi',
+    releaseId: 42,
     schema: 1,
-    seq: 42,
     totalSize: 420,
-    version: '0.13.0-core.42',
+    version: '0.13.0-ota.42',
     ...overrides,
   }
 }
 
-const context = { builtinSeq: 10, host: 'electron', platform: 'darwin-arm64', product: 'airi', shellHostApi: 3 }
+const context = { host: 'electron', installerBundleReleaseId: 10, nativeVersion: 3, platform: 'darwin-arm64', product: 'airi' }
 
-function pointer(overrides: Record<string, unknown> = {}) {
+function channelFile(overrides: Record<string, unknown> = {}) {
   return {
-    cadence: 'realtime',
+    bundle: { cohorts: ['alpha', 'beta', 'all'], releaseId: 42, rollout: { percentage: 25, salt: '42' } },
     channel: 'canary',
-    core: { cohorts: ['alpha', 'beta', 'all'], rollout: { percentage: 25, salt: '42' }, seq: 42 },
     expiresAt: '2026-11-06T00:00:00.000Z',
+    installer: { releaseId: 7 },
     issuedAt: '2026-10-23T00:00:00.000Z',
-    kind: 'pointer',
+    kind: 'channel',
     product: 'airi',
-    revoked: [40, 41],
     schema: 1,
-    shell: { seq: 7 },
+    withdrawn: [40, 41],
     ...overrides,
   }
 }
 
-const shell = {
+const installer = {
   artifacts: [{ platform: 'darwin-arm64', sha512: 'c2hhNTEy', size: 1024, url: 'https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip' }],
-  builtinCoreSeq: 10,
+  bundleReleaseId: 10,
   createdAt: '2026-10-23T00:00:00.000Z',
   host: 'electron',
-  hostApi: 3,
-  kind: 'shell',
+  kind: 'installer',
+  nativeVersion: 3,
   product: 'airi',
+  releaseId: 7,
   schema: 1,
-  seq: 7,
   version: '0.13.0',
 }
 
 const cases: ConformanceCase[] = []
 
-const valid = await signed(core())
-cases.push({ kind: 'core-manifest', name: 'core: valid manifest', ...valid, context, expect: { ok: true } })
-cases.push({ kind: 'core-manifest', name: 'core: valid manifest for any platform', ...await signed(core({ platform: 'any' })), context, expect: { ok: true } })
-cases.push({ context, document: valid.document.replace('"seq":42', '"seq":43'), expect: { code: 'invalid-signature', ok: false }, kind: 'core-manifest', name: 'core: changed byte after signing', signature: valid.signature })
-cases.push({ context, document: valid.document, expect: { code: 'invalid-signature', ok: false }, kind: 'core-manifest', name: 'core: signature is not base64', signature: 'not base64!' })
-cases.push({ kind: 'core-manifest', name: 'core: signed by an untrusted key', ...await signed(core(), other), context, expect: { code: 'untrusted-key', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: trusted keyId but signed by another key', ...await signed(core(), other, trusted.keyId), context, expect: { code: 'invalid-signature', ok: false } })
-cases.push({ context, document: canonicalJson(core()), expect: { code: 'untrusted-key', ok: false }, kind: 'core-manifest', name: 'core: missing keyId', signature: valid.signature })
-cases.push({ context, document: '{"schema":1,', expect: { code: 'invalid-json', ok: false }, kind: 'core-manifest', name: 'core: not JSON', signature: valid.signature })
-cases.push({ kind: 'core-manifest', name: 'core: seq is zero', ...await signed(core({ seq: 0 })), context, expect: { code: 'invalid-schema', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: totalSize does not match files', ...await signed(core({ totalSize: 1 })), context, expect: { code: 'invalid-schema', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: hostApi min above max', ...await signed(core({ hostApi: { max: 4, min: 5 } })), context, expect: { code: 'invalid-schema', ok: false } })
+const valid = await signed(bundle())
+cases.push({ kind: 'bundle-manifest', name: 'bundle: valid manifest', ...valid, context, expect: { ok: true } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: valid manifest for any platform', ...await signed(bundle({ platform: 'any' })), context, expect: { ok: true } })
+cases.push({ context, document: valid.document.replace('"releaseId":42', '"releaseId":43'), expect: { code: 'invalid-signature', ok: false }, kind: 'bundle-manifest', name: 'bundle: changed byte after signing', signature: valid.signature })
+cases.push({ context, document: valid.document, expect: { code: 'invalid-signature', ok: false }, kind: 'bundle-manifest', name: 'bundle: signature is not base64', signature: 'not base64!' })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: signed by an untrusted key', ...await signed(bundle(), other), context, expect: { code: 'untrusted-key', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: trusted keyId but signed by another key', ...await signed(bundle(), other, trusted.keyId), context, expect: { code: 'invalid-signature', ok: false } })
+cases.push({ context, document: canonicalJson(bundle()), expect: { code: 'untrusted-key', ok: false }, kind: 'bundle-manifest', name: 'bundle: missing keyId', signature: valid.signature })
+cases.push({ context, document: '{"schema":1,', expect: { code: 'invalid-json', ok: false }, kind: 'bundle-manifest', name: 'bundle: not JSON', signature: valid.signature })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: releaseId is zero', ...await signed(bundle({ releaseId: 0 })), context, expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: totalSize does not match files', ...await signed(bundle({ totalSize: 1 })), context, expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: nativeVersion min above max', ...await signed(bundle({ nativeVersion: { max: 4, min: 5 } })), context, expect: { code: 'invalid-schema', ok: false } })
 
 for (const [label, path] of [['parent segment', '../escape.js'], ['absolute path', '/etc/passwd'], ['drive letter', 'C:/x.js'], ['backslash', 'main\\index.js'], ['dot segment', 'main/./index.js'], ['empty segment', 'main//index.js']]) {
-  const manifest = core({ components: [{ files: [{ path, sha256: sha('d'), size: 1 }], type: 'web' }], totalSize: 1 })
-  cases.push({ kind: 'core-manifest', name: `core: unsafe path, ${label}`, ...await signed(manifest), context, expect: { code: 'unsafe-path', ok: false } })
+  const manifest = bundle({ components: [{ files: [{ path, sha256: sha('d'), size: 1 }], type: 'web' }], totalSize: 1 })
+  cases.push({ kind: 'bundle-manifest', name: `bundle: unsafe path, ${label}`, ...await signed(manifest), context, expect: { code: 'unsafe-path', ok: false } })
 }
 
-const duplicate = core({
+const duplicate = bundle({
   components: [
     { files: [{ path: 'shared.js', sha256: sha('a'), size: 1 }], type: 'electron-main' },
     { files: [{ path: 'shared.js', sha256: sha('b'), size: 1 }], type: 'web' },
   ],
   totalSize: 2,
 })
-cases.push({ kind: 'core-manifest', name: 'core: same path in two components', ...await signed(duplicate), context, expect: { code: 'duplicate-path', ok: false } })
-/** A valid core manifest with two extra web files. */
-function coreWith(...paths: string[]) {
-  const base = core()
+cases.push({ kind: 'bundle-manifest', name: 'bundle: same path in two components', ...await signed(duplicate), context, expect: { code: 'duplicate-path', ok: false } })
+/** A valid bundle manifest with two extra web files. */
+function bundleWith(...paths: string[]) {
+  const base = bundle()
   const files = paths.map((path, index) => ({ path, sha256: sha(String.fromCharCode(100 + index)), size: 1 }))
   base.components[1] = { ...base.components[1]!, files: [...base.components[1]!.files, ...files] }
 
@@ -140,7 +139,7 @@ for (const [label, paths] of [
   ['paths that differ only in Unicode normalization', ['renderer/caf\u00E9.js', 'renderer/cafe\u0301.js']],
   ['a file that another path needs as a directory', ['renderer/lib', 'renderer/lib/a.js']],
 ] as const)
-  cases.push({ kind: 'core-manifest', name: `core: ${label}`, ...await signed(coreWith(...paths)), context, expect: { code: 'duplicate-path', ok: false } })
+  cases.push({ kind: 'bundle-manifest', name: `bundle: ${label}`, ...await signed(bundleWith(...paths)), context, expect: { code: 'duplicate-path', ok: false } })
 for (const [label, path] of [
   ['a Windows device name', 'renderer/aux.js'],
   ['a segment that ends with a dot', 'renderer/app.js.'],
@@ -148,56 +147,55 @@ for (const [label, path] of [
   ['a colon, as in an NTFS stream', 'renderer/app.js:stream'],
   ['a character that Windows does not allow', 'renderer/a?b.js'],
 ] as const)
-  cases.push({ kind: 'core-manifest', name: `core: unsafe path with ${label}`, ...await signed(coreWith(path)), context, expect: { code: 'unsafe-path', ok: false } })
+  cases.push({ kind: 'bundle-manifest', name: `bundle: unsafe path with ${label}`, ...await signed(bundleWith(path)), context, expect: { code: 'unsafe-path', ok: false } })
 
-cases.push({ kind: 'core-manifest', name: 'core: another product with the same key', ...await signed(core({ product: 'other' })), context, expect: { code: 'core-mismatch', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: another host', ...await signed(core({ host: 'kirie' })), context, expect: { code: 'core-mismatch', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: other platform', ...valid, context: { ...context, platform: 'win32-x64' }, expect: { code: 'platform-mismatch', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: shell host API below range', ...valid, context: { ...context, shellHostApi: 2 }, expect: { code: 'host-api-incompatible', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: shell host API above range', ...valid, context: { ...context, shellHostApi: 5 }, expect: { code: 'host-api-incompatible', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: revoked seq', ...valid, context: { ...context, revoked: [42] }, expect: { code: 'revoked', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: blocked seq', ...valid, context: { ...context, blocked: [42] }, expect: { code: 'blocked', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: seq equals builtin', ...valid, context: { ...context, builtinSeq: 42 }, expect: { code: 'not-newer', ok: false } })
-cases.push({ kind: 'core-manifest', name: 'core: seq below current', ...valid, context: { ...context, currentSeq: 50 }, expect: { code: 'not-newer', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: another product with the same key', ...await signed(bundle({ product: 'other' })), context, expect: { code: 'bundle-mismatch', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: another host', ...await signed(bundle({ host: 'kirie' })), context, expect: { code: 'bundle-mismatch', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: other platform', ...valid, context: { ...context, platform: 'win32-x64' }, expect: { code: 'platform-mismatch', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: native version below range', ...valid, context: { ...context, nativeVersion: 2 }, expect: { code: 'native-version-mismatch', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: native version above range', ...valid, context: { ...context, nativeVersion: 5 }, expect: { code: 'native-version-mismatch', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: withdrawn releaseId', ...valid, context: { ...context, withdrawn: [42] }, expect: { code: 'withdrawn', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: blocked releaseId', ...valid, context: { ...context, blocked: [42] }, expect: { code: 'blocked', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: releaseId equals the installer bundle', ...valid, context: { ...context, installerBundleReleaseId: 42 }, expect: { code: 'not-newer', ok: false } })
+cases.push({ kind: 'bundle-manifest', name: 'bundle: releaseId below current', ...valid, context: { ...context, currentReleaseId: 50 }, expect: { code: 'not-newer', ok: false } })
 
-const validShell = await signed(shell)
-cases.push({ kind: 'shell-manifest', name: 'shell: valid manifest', ...validShell, expect: { ok: true } })
-cases.push({ document: validShell.document.replace('"hostApi":3', '"hostApi":9'), expect: { code: 'invalid-signature', ok: false }, kind: 'shell-manifest', name: 'shell: changed byte after signing', signature: validShell.signature })
-const shellContext = { host: 'electron', platform: 'darwin-arm64', product: 'airi', shellSeq: 6 }
-cases.push({ kind: 'shell-manifest', name: 'shell: newer shell with an installer for this platform', ...validShell, context: shellContext, expect: { ok: true } })
-cases.push({ kind: 'shell-manifest', name: 'shell: another product with the same key', ...await signed({ ...shell, product: 'other' }), context: shellContext, expect: { code: 'shell-mismatch', ok: false } })
-cases.push({ kind: 'shell-manifest', name: 'shell: another host', ...await signed({ ...shell, host: 'kirie' }), context: shellContext, expect: { code: 'shell-mismatch', ok: false } })
-cases.push({ kind: 'shell-manifest', name: 'shell: no installer for this platform', ...validShell, context: { ...shellContext, platform: 'win32-x64' }, expect: { code: 'platform-mismatch', ok: false } })
-cases.push({ kind: 'shell-manifest', name: 'shell: seq equals the installed shell', ...validShell, context: { ...shellContext, shellSeq: 7 }, expect: { code: 'not-newer', ok: false } })
-cases.push({ kind: 'shell-manifest', name: 'shell: a relative installer URL', ...await signed({ ...shell, artifacts: [{ ...shell.artifacts[0]!, url: 'AIRI.zip' }] }), expect: { code: 'invalid-schema', ok: false } })
-cases.push({ kind: 'shell-manifest', name: 'shell: two installers for one platform', ...await signed({ ...shell, artifacts: [shell.artifacts[0]!, shell.artifacts[0]!] }), expect: { code: 'invalid-schema', ok: false } })
+const validInstaller = await signed(installer)
+cases.push({ kind: 'installer-manifest', name: 'installer: valid manifest', ...validInstaller, expect: { ok: true } })
+cases.push({ document: validInstaller.document.replace('"nativeVersion":3', '"nativeVersion":9'), expect: { code: 'invalid-signature', ok: false }, kind: 'installer-manifest', name: 'installer: changed byte after signing', signature: validInstaller.signature })
+const installerContext = { host: 'electron', installerReleaseId: 6, platform: 'darwin-arm64', product: 'airi' }
+cases.push({ kind: 'installer-manifest', name: 'installer: newer installer with a file for this platform', ...validInstaller, context: installerContext, expect: { ok: true } })
+cases.push({ kind: 'installer-manifest', name: 'installer: another product with the same key', ...await signed({ ...installer, product: 'other' }), context: installerContext, expect: { code: 'installer-mismatch', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: another host', ...await signed({ ...installer, host: 'kirie' }), context: installerContext, expect: { code: 'installer-mismatch', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: no file for this platform', ...validInstaller, context: { ...installerContext, platform: 'win32-x64' }, expect: { code: 'platform-mismatch', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: releaseId equals the installed app', ...validInstaller, context: { ...installerContext, installerReleaseId: 7 }, expect: { code: 'not-newer', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: a relative installer URL', ...await signed({ ...installer, artifacts: [{ ...installer.artifacts[0]!, url: 'AIRI.zip' }] }), expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: two files for one platform', ...await signed({ ...installer, artifacts: [installer.artifacts[0]!, installer.artifacts[0]!] }), expect: { code: 'invalid-schema', ok: false } })
 
 const now = '2026-10-24T00:00:00.000Z'
-const target = { cadence: 'realtime', channel: 'canary', product: 'airi' }
-cases.push({ kind: 'pointer', name: 'pointer: valid canary pointer', ...await signed(pointer()), context: { ...target, now }, expect: { ok: true } })
-const { core: _core, ...stable } = pointer({ channel: 'stable' })
-cases.push({ kind: 'pointer', name: 'pointer: valid stable pointer without a core', ...await signed(stable), context: { ...target, channel: 'stable', now }, expect: { ok: true } })
-cases.push({ kind: 'pointer', name: 'pointer: another channel at the asked path', ...await signed(stable), context: { ...target, now }, expect: { code: 'pointer-mismatch', ok: false } })
-cases.push({ kind: 'pointer', name: 'pointer: another cadence', ...await signed(pointer({ cadence: 'nightly' })), context: { ...target, now }, expect: { code: 'pointer-mismatch', ok: false } })
-cases.push({ kind: 'pointer', name: 'pointer: another product with the same key', ...await signed(pointer({ product: 'other' })), context: { ...target, now }, expect: { code: 'pointer-mismatch', ok: false } })
-cases.push({ kind: 'pointer', name: 'pointer: expired', ...await signed(pointer()), context: { ...target, now: '2026-11-07T00:00:00.000Z' }, expect: { code: 'pointer-expired', ok: false } })
-cases.push({ kind: 'pointer', name: 'pointer: older than the last accepted pointer', ...await signed(pointer()), context: { ...target, lastIssuedAt: '2026-10-23T12:00:00.000Z', now }, expect: { code: 'pointer-replayed', ok: false } })
-cases.push({ kind: 'pointer', name: 'pointer: same issuedAt as the last accepted pointer', ...await signed(pointer()), context: { ...target, lastIssuedAt: '2026-10-23T00:00:00.000Z', now }, expect: { ok: true } })
-cases.push({ kind: 'pointer', name: 'pointer: expiresAt before issuedAt', ...await signed(pointer({ expiresAt: '2026-10-22T00:00:00.000Z' })), context: { ...target, now: '2026-10-21T00:00:00.000Z' }, expect: { code: 'invalid-schema', ok: false } })
+const target = { channel: 'canary', product: 'airi' }
+cases.push({ kind: 'channel', name: 'channel: valid canary channel file', ...await signed(channelFile()), context: { ...target, now }, expect: { ok: true } })
+const { bundle: _bundle, ...stable } = channelFile({ channel: 'stable' })
+cases.push({ kind: 'channel', name: 'channel: valid stable channel file without a bundle', ...await signed(stable), context: { ...target, channel: 'stable', now }, expect: { ok: true } })
+cases.push({ kind: 'channel', name: 'channel: another channel at the asked path', ...await signed(stable), context: { ...target, now }, expect: { code: 'channel-mismatch', ok: false } })
+cases.push({ kind: 'channel', name: 'channel: another product with the same key', ...await signed(channelFile({ product: 'other' })), context: { ...target, now }, expect: { code: 'channel-mismatch', ok: false } })
+cases.push({ kind: 'channel', name: 'channel: expired', ...await signed(channelFile()), context: { ...target, now: '2026-11-07T00:00:00.000Z' }, expect: { code: 'channel-expired', ok: false } })
+cases.push({ kind: 'channel', name: 'channel: older than the last accepted channel file', ...await signed(channelFile()), context: { ...target, lastIssuedAt: '2026-10-23T12:00:00.000Z', now }, expect: { code: 'channel-replayed', ok: false } })
+cases.push({ kind: 'channel', name: 'channel: same issuedAt as the last accepted channel file', ...await signed(channelFile()), context: { ...target, lastIssuedAt: '2026-10-23T00:00:00.000Z', now }, expect: { ok: true } })
+cases.push({ kind: 'channel', name: 'channel: expiresAt before issuedAt', ...await signed(channelFile({ expiresAt: '2026-10-22T00:00:00.000Z' })), context: { ...target, now: '2026-10-21T00:00:00.000Z' }, expect: { code: 'invalid-schema', ok: false } })
 for (const [label, issuedAt] of [['an hour-only offset', '2026-10-23T08:00:00+08'], ['a full offset', '2026-10-23T08:00:00+08:00'], ['a day that does not exist', '2026-02-31T00:00:00.000Z'], ['no time zone', '2026-10-23T00:00:00']])
-  cases.push({ kind: 'pointer', name: `pointer: issuedAt with ${label}`, ...await signed(pointer({ issuedAt })), context: { ...target, now }, expect: { code: 'invalid-schema', ok: false } })
-cases.push({ kind: 'pointer', name: 'pointer: expiresAt with an hour-only offset, which some parsers read as no date', ...await signed(pointer({ expiresAt: '2026-11-06T00:00:00+08' })), context: { ...target, now: '3000-01-01T00:00:00.000Z' }, expect: { code: 'invalid-schema', ok: false } })
-cases.push({ kind: 'pointer', name: 'pointer: seq above the largest safe integer', ...await signed(pointer({ core: { seq: 2 ** 53 } })), context: { ...target, now }, expect: { code: 'invalid-schema', ok: false } })
-cases.push({ kind: 'pointer', name: 'pointer: rollout above 100', ...await signed(pointer({ core: { rollout: { percentage: 101, salt: '42' }, seq: 42 } })), context: { ...target, now }, expect: { code: 'invalid-schema', ok: false } })
+  cases.push({ kind: 'channel', name: `channel: issuedAt with ${label}`, ...await signed(channelFile({ issuedAt })), context: { ...target, now }, expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'channel', name: 'channel: expiresAt with an hour-only offset, which some parsers read as no date', ...await signed(channelFile({ expiresAt: '2026-11-06T00:00:00+08' })), context: { ...target, now: '3000-01-01T00:00:00.000Z' }, expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'channel', name: 'channel: releaseId above the largest safe integer', ...await signed(channelFile({ bundle: { releaseId: 2 ** 53 } })), context: { ...target, now }, expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'channel', name: 'channel: rollout above 100', ...await signed(channelFile({ bundle: { releaseId: 42, rollout: { percentage: 101, salt: '42' } } })), context: { ...target, now }, expect: { code: 'invalid-schema', ok: false } })
 
 for (const [path, expect] of [['main/index.js', true], ['renderer/assets/a b.js', true], ['', false], ['/abs', false], ['../x', false], ['a/../b', false], ['a/./b', false], ['a//b', false], ['a\\b', false], ['C:/x', false], ['c:x', false], ['a\0b', false]] as const)
   cases.push({ expect, kind: 'path', name: `path: ${JSON.stringify(path)}`, path })
 
-for (const [salt, installId] of [['42', 'install-a'], ['42', 'install-b'], ['43', 'install-a'], ['seq-1', '00000000-0000-4000-8000-000000000000']])
+for (const [salt, installId] of [['42', 'install-a'], ['42', 'install-b'], ['43', 'install-a'], ['release-1', '00000000-0000-4000-8000-000000000000']])
   cases.push({ bucket: createHash('sha256').update(`${salt}:${installId}`).digest().readUInt32BE(0) % 100, installId, kind: 'rollout', name: `rollout: ${salt}:${installId}`, salt })
 
-for (const [shellHostApi, min, max, expect] of [[3, 3, 3, true], [3, 1, 5, true], [2, 3, 4, false], [5, 3, 4, false]] as const)
-  cases.push({ expect, kind: 'host-api', name: `host-api: ${shellHostApi} in ${min}..${max}`, range: { max, min }, shellHostApi })
+for (const [nativeVersion, min, max, expect] of [[3, 3, 3, true], [3, 1, 5, true], [2, 3, 4, false], [5, 3, 4, false]] as const)
+  cases.push({ expect, kind: 'native-version', name: `native-version: ${nativeVersion} in ${min}..${max}`, nativeVersion, range: { max, min } })
 
 const file: ConformanceSuite = {
   cases,

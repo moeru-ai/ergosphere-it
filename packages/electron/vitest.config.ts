@@ -6,6 +6,6 @@ export default defineProject({
   ...sourceConditions,
   test: {
     include: ['src/**/*.test.ts'],
-    name: 'driver-electron',
+    name: 'electron',
   },
 })

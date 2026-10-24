@@ -3,16 +3,23 @@
   "type": "module",
   "version": "0.0.0",
   "private": true,
-  "description": "End-to-end tests and the release demo for the Electron driver, built from the example app",
-  "main": "out/shell/index.mjs",
+  "description": "End-to-end tests and the release demo of @ergosphere-it/electron, built from the example app",
+  "main": "out/launcher/index.mjs",
   "scripts": {
     "demo": "node scripts/demo.ts",
     "e2e": "node scripts/e2e.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "updates": {
+    "feedUrl": "http://127.0.0.1:4100",
+    "channel": "canary",
+    "nativeVersion": 1,
+    "publicKeys": [
+      "ed25519:MCowBQYDK2VwAyEAozeq+nTTpK7tLalY+wuh3B4cDTnP3+evtn1GQ3sQrbc="
+    ]
+  },
   "dependencies": {
-    "@ergosphere-it/driver-electron": "workspace:*",
-    "@guiiai/logg": "catalog:",
+    "@ergosphere-it/electron": "workspace:*",
     "electron-updater": "catalog:",
     "vue": "catalog:"
   },
@@ -21,6 +28,7 @@
     "@ergosphere-it/protocol": "workspace:*",
     "@ergosphere-it/publish": "workspace:*",
     "@ergosphere-it/server": "workspace:*",
+    "@guiiai/logg": "catalog:",
     "@moeru/std": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",

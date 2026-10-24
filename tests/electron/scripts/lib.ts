@@ -2,24 +2,22 @@
 
 import type { ChildProcess } from 'node:child_process'
 
-import type { UpdateResult } from '@ergosphere-it/driver-electron/core'
-import type { HostApiRange, Pointer, SigningKey, TrustedKey } from '@ergosphere-it/protocol'
-import type { ComponentSpec, CoreFile, CoreRelease, ShellRelease, TreeFile } from '@ergosphere-it/publish'
-import type { Log } from '@guiiai/logg'
-
-import type { ExampleEvent, LoggedEvent } from '../../../examples/electron-app/src/events'
+import type { LauncherEvent, UpdaterStatus } from '@ergosphere-it/electron/launcher'
+import type { ChannelFile, NativeVersionRange, SigningKey, TrustedKey } from '@ergosphere-it/protocol'
+import type { BundleRelease, InstallerRelease, TreeFile } from '@ergosphere-it/publish'
 
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative, sep } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { arch, env, kill, platform } from 'node:process'
 
 import electronPath from 'electron'
 
 import { createPackage } from '@electron/asar'
+import { bundleReleaseFromBuild } from '@ergosphere-it/electron/release'
 import { createKeyPair } from '@ergosphere-it/protocol'
-import { buildCoreRelease, buildPointer, buildShellRelease, reissuePointer, uploadStages } from '@ergosphere-it/publish'
+import { buildChannelFile, buildInstallerRelease, reissueChannelFile, uploadStages } from '@ergosphere-it/publish'
 import { MemoryTree } from '@ergosphere-it/server'
 import { build as viteBuild } from 'electron-vite'
 import { delay } from 'es-toolkit'
@@ -33,35 +31,39 @@ const appRoot = join(import.meta.dirname, '..')
 // Remove the cast when the package types the Node.js export.
 const electronBinary = electronPath as unknown as string
 
-const components: ComponentSpec[] = [
-  { dir: 'main', entry: 'main/index.mjs', type: 'electron-main' },
-  { dir: 'preload', type: 'electron-preload' },
-  { dir: 'renderer', type: 'web' },
-]
+/** An event of the test build: a launcher event, or a test event of `src/main.ts`. */
+export type AppEvent
+  = | LauncherEvent
+    | { mainTag: string, releaseId: number, type: 'bundle-main' }
+    | { releaseId: number, type: 'page-mounted', version: string }
 
 export interface BuildOptions {
-  /** Build the installed app with the trusted key, so Electron starts it. */
-  builtin?: boolean
-  hostApi?: HostApiRange
-  version?: string
+  /** Build the installed app, so Electron starts it. */
+  installed?: boolean
+  /** Native versions that can run the bundle. Defaults to the native version of the build. */
+  nativeVersion?: NativeVersionRange
 }
 
 export interface LaunchOptions {
-  applyMode?: 'auto' | 'prompt'
-  baseUrl: string
+  /** Applies every ready update, as a user who clicks the button does. Defaults to true. */
+  applyAll?: boolean
   /** Saves a screenshot after each page loads. */
   capture?: string
   checkMs?: number
   debugPort?: string
-  /** Installs shells with the installer of the e2e test, which downloads and quits instead of installing. */
+  /** Installs with the installer of the e2e test, which downloads and quits instead of installing. */
   e2eInstaller?: boolean
+  feedUrl: string
   healthMs?: number
   show?: boolean
 }
 
+/** An event with the process and the time of its log line. */
+export type LoggedEvent = AppEvent & { pid: number, time: number }
+
 /**
- * One test build of the example app. `label` changes the page, and `mainTag` changes the main code. `assetMb` adds a page
- * asset. `crash` and `noHealth` build a broken core.
+ * One test build of the example app. `label` is the version and changes the page, and `mainTag` changes the main code.
+ * `assetMb` adds a page asset. `crash` and `noHealth` build a broken bundle.
  */
 export interface Variant {
   assetMb?: number
@@ -112,33 +114,34 @@ class DiskTree extends MemoryTree {
 }
 
 /**
- * A release workspace: a signing key, an update tree in memory, the builtin core of the test build, and the app event
- * log.
+ * A release workspace: a signing key, an update tree in memory, the installed test build, and the app event log.
  *
  * `work` is a scratch directory for keys, logs, app data, and builds. The installed app lives in
- * `tests/electron/.work/<id>`: the package manifest and the builtin build. Module resolution walks up from there to
+ * `tests/electron/.work/<id>`: the package manifest and the installed build. Module resolution walks up from there to
  * the `node_modules` of the test package, so the app needs no link. A demo and an e2e run never share files. With
  * `persist`, the tree is also kept in `work`, so the next run continues from it.
  */
 export class Workspace {
   /** The directory of the installed app, as an installer would lay it out. */
   readonly appDir: string
-  /** Pack the app into `app.asar`, as installers do, so the builtin core is read from the archive. */
+  /** Pack the app into `app.asar`, as installers do, so the installer bundle is read from the archive. */
   readonly asar: boolean
-  /** The JSON log file of the app. Its entries with `fields.event` are the app events. */
+  /** The event log of the app, one JSON event per line. */
   readonly logFile: string
+  /** The product of the test build, from its package name. Channel files and installers must name it. */
+  product = ''
   readonly signingKey: SigningKey
   readonly tree: MemoryTree
+  readonly trustedKey: TrustedKey
   readonly userData: string
   readonly work: string
+
   /** What Electron starts: the archive, or the app directory. */
   get launchTarget(): string {
     return this.asar ? join(this.appDir, 'app.asar') : this.appDir
   }
 
-  private readonly trustedKey: TrustedKey
-
-  /** The directory with the package manifest and the builtin build. With `asar`, it is packed into the app directory. */
+  /** The directory with the package manifest and the installed build. With `asar`, it is packed into the app directory. */
   private get appSource(): string {
     return this.asar ? join(this.work, 'app-source') : this.appDir
   }
@@ -161,7 +164,7 @@ export class Workspace {
   }
 
   static async create(work: string, options: WorkspaceOptions = {}): Promise<Workspace> {
-    // Keep the key of an earlier run, so the cores that the app downloaded before still verify.
+    // Keep the key of an earlier run, so the bundles that the app downloaded before still verify.
     const keyFile = join(work, 'keys.json')
     const keys = existsSync(keyFile)
       ? JSON.parse(readFileSync(keyFile, 'utf8')) as Awaited<ReturnType<typeof createKeyPair>>
@@ -173,60 +176,65 @@ export class Workspace {
   }
 
   /**
-   * Builds the example app with a variant and returns the release of its core.
+   * Builds the example app with a variant and returns the release of its bundle.
    *
-   * The builtin build goes into `app/out` with the trusted key, so Electron starts it. Other builds go into `work`,
-   * and only their core is released.
+   * The installed build goes into `app/out`, so Electron starts it. Other builds go into `work`, and only their bundle
+   * is released.
    */
-  async build(seq: number, variant: Variant, { builtin = false, hostApi = { max: 1, min: 1 }, version = `1.0.0-core.${seq}` }: BuildOptions = {}): Promise<CoreRelease> {
-    const out = builtin ? join(this.appSource, 'out') : join(this.work, 'builds', String(seq))
-    await buildApp(out, variant, this.trustedKey)
+  async build(releaseId: number, variant: Variant, { installed = false, nativeVersion }: BuildOptions = {}): Promise<BundleRelease> {
+    const out = installed ? join(this.appSource, 'out') : join(this.work, 'builds', String(releaseId))
+    await buildApp(out, releaseId, variant)
 
-    const files = readCoreFiles(join(out, 'core'))
-    const release = await buildCoreRelease({ components, files, host: 'electron', hostApi, product: 'example', seq, signingKey: this.signingKey, version })
-    if (builtin) {
-      writeFileSync(join(out, 'core.json'), `${JSON.stringify(release.builtin, null, 2)}\n`)
+    const release = await bundleReleaseFromBuild({ nativeVersion, outDir: out, signingKey: this.signingKey })
+    this.product = release.manifest.product
+    if (installed)
       await this.install()
-    }
 
     return release
   }
 
-  /** Writes the canary realtime pointer. `shell` names the newest shell. */
-  async point(seq: number | undefined, revoked: number[] = [], { shell }: { shell?: number } = {}): Promise<void> {
+  /** Writes the canary channel file. `installer` names the newest installer. */
+  async point(releaseId: number | undefined, withdrawn: number[] = [], { installer }: { installer?: number } = {}): Promise<void> {
     const current = this.canary()
-    // A client ignores a pointer that is not newer than the one it accepted, so keep issue times increasing.
+    // A client ignores a channel file that is not newer than the one it accepted, so keep issue times increasing.
     const issuedAt = new Date(Math.max(Date.now(), current ? Date.parse(current.issuedAt) + 1 : 0)).toISOString()
-    const core = seq === undefined ? undefined : { seq }
-    const pointer = await buildPointer({ cadence: 'realtime', channel: 'canary', core, issuedAt, product: 'example', revoked, shell: shell === undefined ? undefined : { seq: shell }, signingKey: this.signingKey })
-    this.tree.put(pointer.files)
+    const channelFile = await buildChannelFile({
+      bundle: releaseId === undefined ? undefined : { releaseId },
+      channel: 'canary',
+      installer: installer === undefined ? undefined : { releaseId: installer },
+      issuedAt,
+      product: this.product,
+      signingKey: this.signingKey,
+      withdrawn,
+    })
+    this.tree.put(channelFile.files)
   }
 
-  /** Builds a core and uploads it. It does not move the pointer. */
-  async publish(seq: number, variant: Variant, options?: BuildOptions): Promise<CoreRelease> {
-    const release = await this.build(seq, variant, options)
+  /** Builds a bundle and uploads it. It does not move the channel. */
+  async publish(releaseId: number, variant: Variant, options?: BuildOptions): Promise<BundleRelease> {
+    const release = await this.build(releaseId, variant, options)
     this.tree.put(uploadStages([release]).flat())
 
     return release
   }
 
   /**
-   * Publishes a shell release with one installer for this platform. The installer lives in the tree, at `installers/`.
+   * Publishes an installer release with one file for this platform. The file lives in the tree, at `files/`.
    *
-   * `sha512` replaces the hash of the installer, to publish a manifest that does not match its file.
+   * `sha512` replaces the hash of the file, to publish a manifest that does not match its file.
    */
-  async publishShell(seq: number, { baseUrl, bytes, sha512 }: { baseUrl: string, bytes: Uint8Array<ArrayBuffer>, sha512?: string }): Promise<ShellRelease> {
-    const key = `installers/example-${seq}.zip`
+  async publishInstaller(releaseId: number, { bytes, feedUrl, sha512 }: { bytes: Uint8Array<ArrayBuffer>, feedUrl: string, sha512?: string }): Promise<InstallerRelease> {
+    const key = `files/example-${releaseId}.zip`
     this.tree.put([{ bytes, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'application/zip' }, immutable: true, key }])
-    const release = await buildShellRelease({
-      artifacts: [{ platform: `${platform}-${arch}`, sha512: sha512 ?? createHash('sha512').update(bytes).digest('base64'), size: bytes.byteLength, url: `${baseUrl}/${key}` }],
-      builtinCoreSeq: 1,
+    const release = await buildInstallerRelease({
+      artifacts: [{ platform: `${platform}-${arch}`, sha512: sha512 ?? createHash('sha512').update(bytes).digest('base64'), size: bytes.byteLength, url: `${feedUrl}/${key}` }],
+      bundleReleaseId: 1,
       host: 'electron',
-      hostApi: 1,
-      product: 'example',
-      seq,
+      nativeVersion: 1,
+      product: this.product,
+      releaseId,
       signingKey: this.signingKey,
-      version: `1.0.${seq}`,
+      version: `1.0.${releaseId}`,
     })
     this.tree.put(uploadStages([release]).flat())
 
@@ -241,17 +249,16 @@ export class Workspace {
     return readFileSync(this.logFile, 'utf8')
       .split('\n')
       .filter(Boolean)
-      .map(line => JSON.parse(line) as Log & { fields: { event?: ExampleEvent }, pid: number })
-      .flatMap(entry => entry.fields.event ? [{ ...entry.fields.event, pid: entry.pid, time: entry['@timestamp'] }] : [])
+      .map(line => JSON.parse(line) as LoggedEvent)
   }
 
-  /** Signs the canary pointer again with the same content. */
+  /** Signs the canary channel file again with the same content. */
   async reissue(): Promise<void> {
     const current = this.canary()
     if (!current)
-      throw new Error('The tree has no canary pointer.')
+      throw new Error('The tree has no canary channel file.')
 
-    this.tree.put((await reissuePointer(current, this.signingKey)).files)
+    this.tree.put((await reissueChannelFile(current, this.signingKey)).files)
   }
 
   /** Removes the installed app from the test package. The work directory stays with the caller. */
@@ -259,14 +266,14 @@ export class Workspace {
     rmSync(this.appDir, { force: true, maxRetries: 5, recursive: true })
   }
 
-  private canary(): Pointer | undefined {
-    const file = this.tree.get('pointers/canary/realtime.json')
+  private canary(): ChannelFile | undefined {
+    const file = this.tree.get('channels/canary.json')
 
-    return file && JSON.parse(new TextDecoder().decode(file.bytes)) as Pointer
+    return file && JSON.parse(new TextDecoder().decode(file.bytes)) as ChannelFile
   }
 
   /**
-   * Lays out the installed app: the package manifest and the builtin build.
+   * Lays out the installed app: the package manifest and the installed build.
    *
    * With `asar`, the manifest and the build go into `app.asar`. Module resolution walks up from the archive to the
    * dependencies of the test package.
@@ -280,19 +287,8 @@ export class Workspace {
   }
 }
 
-/** Returns the result of the first update check with a status that matches, with the type of that result. */
-export function findCheck<Status extends UpdateResult['status']>(
-  events: readonly LoggedEvent[],
-  status: Status,
-  match: (result: Extract<UpdateResult, { status: Status }>) => boolean = () => true,
-): Extract<UpdateResult, { status: Status }> | undefined {
-  const isMatch = (result: UpdateResult): result is Extract<UpdateResult, { status: Status }> => result.status === status && match(result as Extract<UpdateResult, { status: Status }>)
-
-  return findEvent(events, 'check', event => isMatch(event.result))?.result as Extract<UpdateResult, { status: Status }> | undefined
-}
-
 /** Returns the first event of a type that matches, with the type of that event. */
-export function findEvent<Type extends ExampleEvent['type']>(
+export function findEvent<Type extends AppEvent['type']>(
   events: readonly LoggedEvent[],
   type: Type,
   match: (event: Extract<LoggedEvent, { type: Type }>) => boolean = () => true,
@@ -300,9 +296,20 @@ export function findEvent<Type extends ExampleEvent['type']>(
   return events.find((event): event is Extract<LoggedEvent, { type: Type }> => event.type === type && match(event as Extract<LoggedEvent, { type: Type }>))
 }
 
+/** Returns the first status of a kind that matches, with the type of that status. */
+export function findStatus<Kind extends UpdaterStatus['status']>(
+  events: readonly LoggedEvent[],
+  kind: Kind,
+  match: (status: Extract<UpdaterStatus, { status: Kind }>) => boolean = () => true,
+): Extract<UpdaterStatus, { status: Kind }> | undefined {
+  const isMatch = (status: UpdaterStatus): status is Extract<UpdaterStatus, { status: Kind }> => status.status === kind && match(status as Extract<UpdaterStatus, { status: Kind }>)
+
+  return findEvent(events, 'status', event => isMatch(event.status))?.status as Extract<UpdaterStatus, { status: Kind }> | undefined
+}
+
 /** Starts the test build of the example app against an update server. Returns a function that stops every app process. */
 export async function launchApp(workspace: Workspace, options: LaunchOptions): Promise<() => void> {
-  const { applyMode = 'auto', baseUrl, capture, checkMs = 1000, debugPort, e2eInstaller = false, healthMs = 4000, show = false } = options
+  const { applyAll = true, capture, checkMs = 1000, debugPort, e2eInstaller = false, feedUrl, healthMs = 4000, show = false } = options
   const { display, xvfb } = await ensureDisplay()
   const appEnv = {
     ...env,
@@ -310,12 +317,13 @@ export async function launchApp(workspace: Workspace, options: LaunchOptions): P
     ...(capture ? { ERGOSPHERE_CAPTURE_DIR: capture } : {}),
     ...(show ? { ERGOSPHERE_SHOW_WINDOW: '1' } : {}),
     ...(e2eInstaller ? { ERGOSPHERE_E2E_INSTALLER: '1' } : {}),
-    ERGOSPHERE_APPLY_MODE: applyMode,
-    ERGOSPHERE_BASE_URL: baseUrl,
+    ...(applyAll ? { ERGOSPHERE_E2E_APPLY: '1' } : {}),
     ERGOSPHERE_BOOT_HEALTH_MS: '15000',
     ERGOSPHERE_CHECK_MS: String(checkMs),
+    ERGOSPHERE_FEED_URL: feedUrl,
     ERGOSPHERE_HEALTH_MS: String(healthMs),
-    ERGOSPHERE_LOG_FILE: workspace.logFile,
+    ERGOSPHERE_IT_LOG: workspace.logFile,
+    ERGOSPHERE_TRUSTED_KEYS: JSON.stringify([workspace.trustedKey]),
     ERGOSPHERE_USER_DATA: workspace.userData,
   }
   const args = [...(platform === 'linux' ? ['--no-sandbox'] : []), ...(debugPort ? [`--remote-debugging-port=${debugPort}`] : []), workspace.launchTarget]
@@ -338,16 +346,18 @@ export async function launchApp(workspace: Workspace, options: LaunchOptions): P
   }
 }
 
-/** Runs `electron-vite build` with the build constants of a variant. */
-async function buildApp(out: string, variant: Variant, trustedKey: TrustedKey): Promise<void> {
+/** Runs `electron-vite build` with the release ID and the build constants of a variant. */
+async function buildApp(out: string, releaseId: number, variant: Variant): Promise<void> {
   const variables: Record<string, string> = {
     TEST_ASSET_MB: String(variant.assetMb ?? 0),
     TEST_CRASH: variant.crash ? '1' : '0',
-    TEST_LABEL: variant.label,
     TEST_MAIN_TAG: variant.mainTag ?? '1',
     TEST_NO_HEALTH: variant.noHealth ? '1' : '0',
     TEST_OUT: out,
-    TEST_TRUSTED_KEYS: JSON.stringify([trustedKey]),
+    // The installed app is installer release 1, so installer releases of the test are newer.
+    UPDATES_INSTALLER_RELEASE_ID: '1',
+    UPDATES_RELEASE_ID: String(releaseId),
+    UPDATES_VERSION: variant.label,
   }
   // electron.vite.config.ts reads the variant from the environment, as `pnpm build` does.
   const previous = Object.fromEntries(Object.keys(variables).map(name => [name, env[name]]))
@@ -378,15 +388,4 @@ async function ensureDisplay(): Promise<{ display?: string, xvfb?: ChildProcess 
   await delay(1000)
 
   return { display, xvfb }
-}
-
-/** Reads every file of a core directory into memory, with `/` separators in paths. */
-function readCoreFiles(dir: string): CoreFile[] {
-  return readdirSync(dir, { recursive: true, withFileTypes: true })
-    .filter(entry => entry.isFile())
-    .map((entry) => {
-      const path = join(entry.parentPath, entry.name)
-
-      return { bytes: new Uint8Array(readFileSync(path)), path: relative(dir, path).split(sep).join('/') }
-    })
 }

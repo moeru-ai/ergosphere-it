@@ -6,7 +6,7 @@ export default defineConfig({
     projects: [
       'packages/protocol',
       'packages/client',
-      'packages/driver-electron',
+      'packages/electron',
       'packages/server',
       'packages/publish',
     ],

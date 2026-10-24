@@ -23,9 +23,9 @@ const SCHEMA_VERSION = 1
 const sha256Schema = pipe(string(), regex(/^[0-9a-f]{64}$/, 'sha256 must be 64 lowercase hex characters'))
 const sha512Schema = pipe(string(), minLength(1))
 // Integers stay at or below 2^53 - 1, so every language reads the same value.
-const seqSchema = pipe(number(), integer(), minValue(1), maxValue(Number.MAX_SAFE_INTEGER))
+const releaseIdSchema = pipe(number(), integer(), minValue(1), maxValue(Number.MAX_SAFE_INTEGER))
 const sizeSchema = pipe(number(), integer(), minValue(0), maxValue(Number.MAX_SAFE_INTEGER))
-const hostApiSchema = pipe(number(), integer(), minValue(1), maxValue(Number.MAX_SAFE_INTEGER))
+const nativeVersionSchema = pipe(number(), integer(), minValue(1), maxValue(Number.MAX_SAFE_INTEGER))
 
 /**
  * A UTC time in RFC 3339 form with `Z`, for example `2026-10-24T00:00:00.000Z`, on a real calendar day.
@@ -43,10 +43,7 @@ const timestampSchema = pipe(
   }, 'a timestamp must be a real date and time'),
 )
 
-/** `realtime` follows every release of a channel. `nightly` moves once a day to the newest release that passed smoke tests. */
-const cadenceSchema = picklist(['realtime', 'nightly'])
-
-/** Kinds of core components. The kind decides how a change activates. */
+/** Kinds of bundle components. The kind decides how a change takes effect. */
 const componentTypeSchema = picklist(['web', 'electron-main', 'electron-preload', 'godot-pck'])
 
 const signatureRefSchema = object({
@@ -66,46 +63,46 @@ const componentSchema = object({
   type: componentTypeSchema,
 })
 
-const hostApiRangeSchema = object({
-  max: hostApiSchema,
-  min: hostApiSchema,
+const nativeVersionRangeSchema = object({
+  max: nativeVersionSchema,
+  min: nativeVersionSchema,
 })
 
-export const coreManifestSchema = object({
+export const bundleManifestSchema = object({
   components: pipe(array(componentSchema), minLength(1)),
   createdAt: timestampSchema,
   host: pipe(string(), minLength(1)),
-  hostApi: hostApiRangeSchema,
-  kind: literal('core'),
+  kind: literal('bundle'),
+  nativeVersion: nativeVersionRangeSchema,
   /** `any` when no file differs between platforms, otherwise for example `darwin-arm64`. */
   platform: pipe(string(), minLength(1)),
   product: pipe(string(), minLength(1)),
+  releaseId: releaseIdSchema,
   schema: literal(SCHEMA_VERSION),
-  seq: seqSchema,
   signature: signatureRefSchema,
   totalSize: sizeSchema,
   version: pipe(string(), minLength(1)),
 })
 
-const shellArtifactSchema = object({
+const installerArtifactSchema = object({
   platform: pipe(string(), minLength(1)),
   sha512: sha512Schema,
   size: sizeSchema,
   url: pipe(string(), minLength(1)),
 })
 
-export const shellManifestSchema = object({
-  artifacts: pipe(array(shellArtifactSchema), minLength(1)),
-  builtinCoreSeq: seqSchema,
+export const installerManifestSchema = object({
+  artifacts: pipe(array(installerArtifactSchema), minLength(1)),
+  bundleReleaseId: releaseIdSchema,
   createdAt: timestampSchema,
   host: pipe(string(), minLength(1)),
-  hostApi: hostApiSchema,
-  /** Hash of the shell build inputs. CI compares it between releases. Clients do not read it. */
+  /** Hash of the native build inputs. CI compares it between releases. Clients do not read it. */
   inputsHash: optional(sha256Schema),
-  kind: literal('shell'),
+  kind: literal('installer'),
+  nativeVersion: nativeVersionSchema,
   product: pipe(string(), minLength(1)),
+  releaseId: releaseIdSchema,
   schema: literal(SCHEMA_VERSION),
-  seq: seqSchema,
   signature: signatureRefSchema,
   version: pipe(string(), minLength(1)),
 })
@@ -115,42 +112,38 @@ const rolloutSchema = object({
   salt: pipe(string(), minLength(1)),
 })
 
-export const pointerSchema = object({
-  cadence: cadenceSchema,
-  channel: pipe(string(), minLength(1)),
-  /** Stable pointers leave this out, so stable gets no core OTA by an explicit rule. */
-  core: optional(object({
+export const channelFileSchema = object({
+  /** Stable channels leave this out, so stable gets no OTA bundle by an explicit rule. */
+  bundle: optional(object({
     cohorts: optional(array(pipe(string(), minLength(1)))),
+    releaseId: releaseIdSchema,
     rollout: optional(rolloutSchema),
-    seq: seqSchema,
   })),
+  channel: pipe(string(), minLength(1)),
   expiresAt: timestampSchema,
-  issuedAt: timestampSchema,
-  kind: literal('pointer'),
-  product: pipe(string(), minLength(1)),
-  revoked: optional(array(seqSchema)),
-  schema: literal(SCHEMA_VERSION),
-  shell: optional(object({
-    seq: seqSchema,
+  /** The newest installer of the channel. */
+  installer: optional(object({
+    releaseId: releaseIdSchema,
   })),
+  issuedAt: timestampSchema,
+  kind: literal('channel'),
+  product: pipe(string(), minLength(1)),
+  schema: literal(SCHEMA_VERSION),
   signature: signatureRefSchema,
+  withdrawn: optional(array(releaseIdSchema)),
 })
 
-export type Cadence = InferOutput<typeof cadenceSchema>
+export type BundleManifest = InferOutput<typeof bundleManifestSchema>
 
+export type ChannelFile = InferOutput<typeof channelFileSchema>
 export type Component = InferOutput<typeof componentSchema>
-
 export type ComponentType = InferOutput<typeof componentTypeSchema>
-export type CoreManifest = InferOutput<typeof coreManifestSchema>
-/** Where an install came from. Only `direct` installs update themselves. */
-export type Distribution = 'direct' | 'flatpak' | 'mas' | 'nix' | 'snap' | 'steam'
 export type FileEntry = InferOutput<typeof fileEntrySchema>
-export type HostApiRange = InferOutput<typeof hostApiRangeSchema>
-export type Pointer = InferOutput<typeof pointerSchema>
+export type InstallerArtifact = InferOutput<typeof installerArtifactSchema>
+export type InstallerManifest = InferOutput<typeof installerManifestSchema>
+export type NativeVersionRange = InferOutput<typeof nativeVersionRangeSchema>
 export type Rollout = InferOutput<typeof rolloutSchema>
-export type ShellArtifact = InferOutput<typeof shellArtifactSchema>
-export type ShellManifest = InferOutput<typeof shellManifestSchema>
-/** A public key that the shell trusts. */
+/** A public key that the app trusts. */
 export interface TrustedKey {
   /** The first 16 hex characters of the SHA-256 of the public key. */
   keyId: string

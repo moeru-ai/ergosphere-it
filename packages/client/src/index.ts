@@ -1,4 +1,4 @@
-export * from './activation'
 export * from './client'
 export type * from './io'
-export type { ClientState } from './state'
+export * from './requirement'
+export type { BundleRef, ClientState, RollbackReason } from './state'

@@ -1,34 +1,33 @@
 import type { GenericSchema, InferOutput } from 'valibot'
 
-import type { CoreManifest, HostApiRange, Pointer, Rollout, ShellArtifact, ShellManifest, TrustedKey } from './schema'
+import type { BundleManifest, ChannelFile, InstallerArtifact, InstallerManifest, NativeVersionRange, Rollout, TrustedKey } from './schema'
 
 import { safeParse, ValiError } from 'valibot'
 
 import { decodeBase64, verifyBytes } from './crypto'
-import { CandidateError, DocumentError, PointerError, SignatureError } from './errors'
-import { coreManifestSchema, pointerSchema, shellManifestSchema } from './schema'
+import { CandidateError, ChannelError, DocumentError, SignatureError } from './errors'
+import { bundleManifestSchema, channelFileSchema, installerManifestSchema } from './schema'
 
-/** What an install is, to decide if it can take a verified core. */
-export interface CoreCandidateContext {
+/** What an install is, to decide if it can take a verified bundle. */
+export interface BundleCandidateContext {
   blocked?: readonly number[]
-  builtinSeq: number
-  currentSeq?: number
-  /** The host that runs the core, for example `electron`. */
+  currentReleaseId?: number
+  /** The host that runs the bundle, for example `electron`. */
   host: string
+  installerBundleReleaseId: number
+  nativeVersion: number
   /** The platform of this install, for example `darwin-arm64`. */
   platform: string
-  /** The product of this install. A core of another product is rejected even when its signature is valid. */
+  /** The product of this install. A bundle of another product is rejected even when its signature is valid. */
   product: string
-  revoked?: readonly number[]
-  shellHostApi: number
+  withdrawn?: readonly number[]
 }
 
 /**
- * What the client asked for. A valid signature proves who signed a pointer, not which pointer it is, so the client
- * also checks that the pointer is for its product, channel, and cadence.
+ * What the client asked for. A valid signature proves who signed a channel file, not which channel file it is, so the
+ * client also checks that the file is for its product and channel.
  */
-export interface PointerContext {
-  cadence: string
+export interface ChannelFileContext {
   channel: string
   /** The newest `issuedAt` that this client accepted before. */
   lastIssuedAt?: string
@@ -36,87 +35,87 @@ export interface PointerContext {
   product: string
 }
 
-/** Verifies the signature and schema of a shell manifest. Throws an `ErgosphereError` subclass. */
-export interface ShellCandidateContext {
+/** What an install is, to decide if it can take a verified installer. */
+export interface InstallerCandidateContext {
   /** The host of this install, for example `electron`. */
   host: string
-  /** The platform of this install, for example `darwin-arm64`. A shell without an installer for it is rejected. */
+  /** The `releaseId` of the installed app. */
+  installerReleaseId: number
+  /** The platform of this install, for example `darwin-arm64`. An installer release without a file for it is rejected. */
   platform: string
-  /** The product of this install. A shell of another product is rejected even when its signature is valid. */
+  /** The product of this install. An installer of another product is rejected even when its signature is valid. */
   product: string
-  /** The `seq` of the installed shell. */
-  shellSeq: number
 }
 
 /**
- * Throws a `CandidateError` when this install cannot take a verified core.
+ * Throws a `CandidateError` when this install cannot take a verified bundle.
  *
  * The checks run in a fixed order, so every implementation reports the same code for the same input:
- * product and host, platform, host API, revoked, blocked, then not newer.
+ * product and host, platform, native version, withdrawn, blocked, then not newer.
  */
-export function checkCoreCandidate(manifest: CoreManifest, context: CoreCandidateContext): void {
-  const { seq } = manifest
+export function checkBundleCandidate(manifest: BundleManifest, context: BundleCandidateContext): void {
+  const { releaseId } = manifest
   if (manifest.product !== context.product || manifest.host !== context.host)
-    throw new CandidateError('core-mismatch', `Core ${seq} is for ${manifest.product} on ${manifest.host}, and this install is ${context.product} on ${context.host}.`, seq)
+    throw new CandidateError('bundle-mismatch', `Bundle ${releaseId} is for ${manifest.product} on ${manifest.host}, and this install is ${context.product} on ${context.host}.`, releaseId)
   if (manifest.platform !== 'any' && manifest.platform !== context.platform)
-    throw new CandidateError('platform-mismatch', `Core ${seq} is for ${manifest.platform}, and this install is ${context.platform}.`, seq)
-  if (!isHostApiCompatible(context.shellHostApi, manifest.hostApi))
-    throw new CandidateError('host-api-incompatible', `Core ${seq} needs host API ${manifest.hostApi.min}..${manifest.hostApi.max}, and this shell has ${context.shellHostApi}.`, seq)
-  if (context.revoked?.includes(seq))
-    throw new CandidateError('revoked', `Core ${seq} is revoked.`, seq)
-  if (context.blocked?.includes(seq))
-    throw new CandidateError('blocked', `Core ${seq} is blocked on this install.`, seq)
+    throw new CandidateError('platform-mismatch', `Bundle ${releaseId} is for ${manifest.platform}, and this install is ${context.platform}.`, releaseId)
+  if (!isNativeVersionCompatible(context.nativeVersion, manifest.nativeVersion))
+    throw new CandidateError('native-version-mismatch', `Bundle ${releaseId} needs native version ${manifest.nativeVersion.min}..${manifest.nativeVersion.max}, and this install has ${context.nativeVersion}.`, releaseId)
+  if (context.withdrawn?.includes(releaseId))
+    throw new CandidateError('withdrawn', `Bundle ${releaseId} is withdrawn.`, releaseId)
+  if (context.blocked?.includes(releaseId))
+    throw new CandidateError('blocked', `Bundle ${releaseId} is blocked on this install.`, releaseId)
 
-  const floor = Math.max(context.builtinSeq, context.currentSeq ?? 0)
-  if (seq <= floor)
-    throw new CandidateError('not-newer', `Core ${seq} is not newer than ${floor}.`, seq)
+  const floor = Math.max(context.installerBundleReleaseId, context.currentReleaseId ?? 0)
+  if (releaseId <= floor)
+    throw new CandidateError('not-newer', `Bundle ${releaseId} is not newer than ${floor}.`, releaseId)
 }
 
-/** Returns the installer of a verified shell for this install, or throws a `CandidateError`. */
-export function checkShellCandidate(manifest: ShellManifest, context: ShellCandidateContext): ShellArtifact {
-  const { seq } = manifest
+/** Returns the installer file of a verified installer release for this install, or throws a `CandidateError`. */
+export function checkInstallerCandidate(manifest: InstallerManifest, context: InstallerCandidateContext): InstallerArtifact {
+  const { releaseId } = manifest
   if (manifest.product !== context.product || manifest.host !== context.host)
-    throw new CandidateError('shell-mismatch', `Shell ${seq} is for ${manifest.product} on ${manifest.host}, and this install is ${context.product} on ${context.host}.`, seq)
-  if (seq <= context.shellSeq)
-    throw new CandidateError('not-newer', `Shell ${seq} is not newer than ${context.shellSeq}.`, seq)
+    throw new CandidateError('installer-mismatch', `Installer ${releaseId} is for ${manifest.product} on ${manifest.host}, and this install is ${context.product} on ${context.host}.`, releaseId)
+  if (releaseId <= context.installerReleaseId)
+    throw new CandidateError('not-newer', `Installer ${releaseId} is not newer than ${context.installerReleaseId}.`, releaseId)
 
   const artifact = manifest.artifacts.find(entry => entry.platform === context.platform)
   if (!artifact)
-    throw new CandidateError('platform-mismatch', `Shell ${seq} has no installer for ${context.platform}.`, seq)
+    throw new CandidateError('platform-mismatch', `Installer ${releaseId} has no file for ${context.platform}.`, releaseId)
 
   return artifact
 }
 
-/** A shell accepts a core when its host API is inside the core range. */
-export function isHostApiCompatible(shellHostApi: number, range: HostApiRange): boolean {
-  return range.min <= shellHostApi && shellHostApi <= range.max
+/** An install accepts a bundle when its native version is inside the bundle range. */
+export function isNativeVersionCompatible(nativeVersion: number, range: NativeVersionRange): boolean {
+  return range.min <= nativeVersion && nativeVersion <= range.max
 }
 
 /**
- * Checks the schema and the rules of a core manifest, without its signature. Throws a `DocumentError`.
+ * Checks the schema and the rules of a bundle manifest, without its signature. Throws a `DocumentError`.
  *
  * Clients run it after the signature verifies. Publishers run it before they sign, so they never sign a manifest that
  * clients reject.
  */
-export function validateCoreManifest(document: unknown): CoreManifest {
-  const manifest = parseDocument(coreManifestSchema, document)
+export function validateBundleManifest(document: unknown): BundleManifest {
+  const manifest = parseDocument(bundleManifestSchema, document)
   checkFiles(manifest)
 
   return manifest
 }
 
-/** Checks the schema and the rules of a pointer, without its signature. Throws a `DocumentError`. */
-export function validatePointer(document: unknown): Pointer {
-  const pointer = parseDocument(pointerSchema, document)
-  if (Date.parse(pointer.expiresAt) <= Date.parse(pointer.issuedAt))
-    throw new DocumentError('invalid-schema', 'The pointer expiresAt is not after its issuedAt.')
+/** Checks the schema and the rules of a channel file, without its signature. Throws a `DocumentError`. */
+export function validateChannelFile(document: unknown): ChannelFile {
+  const file = parseDocument(channelFileSchema, document)
+  if (Date.parse(file.expiresAt) <= Date.parse(file.issuedAt))
+    throw new DocumentError('invalid-schema', 'The channel file expiresAt is not after its issuedAt.')
 
-  return pointer
+  return file
 }
 
-/** Checks the schema and the rules of a shell manifest, without its signature. Throws a `DocumentError`. */
-export function validateShellManifest(document: unknown): ShellManifest {
-  const manifest = parseDocument(shellManifestSchema, document)
+/** Checks the schema and the rules of an installer manifest, without its signature. Throws a `DocumentError`. */
+export function validateInstallerManifest(document: unknown): InstallerManifest {
+  const manifest = parseDocument(installerManifestSchema, document)
   const platforms = new Set<string>()
   for (const artifact of manifest.artifacts) {
     // electron-updater resolves a relative URL against its feed, which is not where installers live.
@@ -130,30 +129,30 @@ export function validateShellManifest(document: unknown): ShellManifest {
   return manifest
 }
 
-/** Verifies the signature, schema, and file list of a core manifest. Throws an `ErgosphereError` subclass. */
-export async function verifyCoreManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<CoreManifest> {
-  return validateCoreManifest(await verifySignature(bytes, signature, trustedKeys))
+/** Verifies the signature, schema, and file list of a bundle manifest. Throws an `ErgosphereError` subclass. */
+export async function verifyBundleManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<BundleManifest> {
+  return validateBundleManifest(await verifySignature(bytes, signature, trustedKeys))
 }
 
-/** Verifies a pointer, then rejects pointers of another target, expired pointers, and replayed pointers. */
-export async function verifyPointer(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[], context: PointerContext): Promise<Pointer> {
-  const pointer = validatePointer(await verifySignature(bytes, signature, trustedKeys))
-  const issuedAt = Date.parse(pointer.issuedAt)
-  const expiresAt = Date.parse(pointer.expiresAt)
+/** Verifies a channel file, then rejects files of another channel, expired files, and replayed files. */
+export async function verifyChannelFile(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[], context: ChannelFileContext): Promise<ChannelFile> {
+  const file = validateChannelFile(await verifySignature(bytes, signature, trustedKeys))
+  const issuedAt = Date.parse(file.issuedAt)
+  const expiresAt = Date.parse(file.expiresAt)
 
-  if (pointer.product !== context.product || pointer.channel !== context.channel || pointer.cadence !== context.cadence)
-    throw new PointerError('pointer-mismatch', `The pointer is for ${pointer.product} ${pointer.channel}/${pointer.cadence}, and the client asked for ${context.product} ${context.channel}/${context.cadence}.`)
+  if (file.product !== context.product || file.channel !== context.channel)
+    throw new ChannelError('channel-mismatch', `The channel file is for ${file.product} ${file.channel}, and the client asked for ${context.product} ${context.channel}.`)
   if (context.now.getTime() > expiresAt)
-    throw new PointerError('pointer-expired', `The pointer expired at ${pointer.expiresAt}.`)
+    throw new ChannelError('channel-expired', `The channel file expired at ${file.expiresAt}.`)
   if (context.lastIssuedAt !== undefined && issuedAt < Date.parse(context.lastIssuedAt))
-    throw new PointerError('pointer-replayed', `The pointer was issued at ${pointer.issuedAt}, before the pointer that the client accepted at ${context.lastIssuedAt}.`)
+    throw new ChannelError('channel-replayed', `The channel file was issued at ${file.issuedAt}, before the channel file that the client accepted at ${context.lastIssuedAt}.`)
 
-  return pointer
+  return file
 }
 
-/** Verifies the signature and the rules of a shell manifest. Throws an `ErgosphereError` subclass. */
-export async function verifyShellManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<ShellManifest> {
-  return validateShellManifest(await verifySignature(bytes, signature, trustedKeys))
+/** Verifies the signature and the rules of an installer manifest. Throws an `ErgosphereError` subclass. */
+export async function verifyInstallerManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<InstallerManifest> {
+  return validateInstallerManifest(await verifySignature(bytes, signature, trustedKeys))
 }
 
 /**
@@ -162,7 +161,7 @@ export async function verifyShellManifest(bytes: Uint8Array<ArrayBuffer>, signat
  * Two paths collide when they differ only in case or in Unicode normalization, as on default macOS and Windows
  * volumes, or when one path is a directory of the other.
  */
-function checkFiles(manifest: CoreManifest): void {
+function checkFiles(manifest: BundleManifest): void {
   const seen = new Map<string, string>()
   let totalSize = 0
 
@@ -194,8 +193,8 @@ function checkFiles(manifest: CoreManifest): void {
 
   if (totalSize !== manifest.totalSize)
     throw new DocumentError('invalid-schema', `totalSize is ${manifest.totalSize}, and the files add up to ${totalSize}.`)
-  if (manifest.hostApi.min > manifest.hostApi.max)
-    throw new DocumentError('invalid-schema', 'hostApi.min is greater than hostApi.max.')
+  if (manifest.nativeVersion.min > manifest.nativeVersion.max)
+    throw new DocumentError('invalid-schema', 'nativeVersion.min is greater than nativeVersion.max.')
 }
 
 /** Parses a document with its schema. Throws a `DocumentError` with code `invalid-schema`. */
@@ -268,7 +267,7 @@ export async function isInRollout(rollout: Rollout | undefined, installId: strin
 }
 
 /**
- * Checks that a manifest file path stays inside its core directory and names one file on every platform.
+ * Checks that a manifest file path stays inside its bundle directory and names one file on every platform.
  *
  * A safe path is relative, uses `/` as its only separator, and has no empty, `.`, or `..` segment. It has no
  * backslash, no drive letter, no control character, and none of `<>:"|?*`. No segment is a Windows device name, such

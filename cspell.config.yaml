@@ -28,15 +28,17 @@ words:
   - moeru
   - neko
   - nolisten
-  - vali
   - nsis
+  - pacman
   - picklist
   - pids
+  - rollouts
   - seqs
   - spki
   - tauri
   - taze
   - unocss
+  - vali
   - velopack
   - zstd
 ignoreWords: []

@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import type { Activation } from '@ergosphere-it/driver-electron/core'
+import type { UpdateInfo } from '@ergosphere-it/electron/vue'
 
-const props = defineProps<{ activation: Activation, version: string }>()
+const props = defineProps<{ update: UpdateInfo }>()
 const emit = defineEmits<{ apply: [], later: [] }>()
+
+const buttons = { install: 'Install now', reload: 'Reload now', restart: 'Restart now' }
 </script>
 
 <template>
   <div class="backdrop">
     <div class="dialog">
-      <h2>{{ props.version }} is ready</h2>
-      <p v-if="props.activation === 'reload'">
+      <h2>{{ props.update.version }} is ready</h2>
+      <p v-if="props.update.requires === 'reload'">
         Only the page changed. The page reloads, and the app keeps running.
       </p>
-      <p v-else-if="props.activation === 'restart'">
+      <p v-else-if="props.update.requires === 'restart'">
         The app code changed. The app restarts to finish the update.
       </p>
       <p v-else>
@@ -23,7 +25,7 @@ const emit = defineEmits<{ apply: [], later: [] }>()
           Later
         </button>
         <button class="primary" @click="emit('apply')">
-          {{ { install: 'Install now', reload: 'Reload now', restart: 'Restart now' }[props.activation] }}
+          {{ buttons[props.update.requires] }}
         </button>
       </div>
     </div>
