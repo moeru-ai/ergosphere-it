@@ -7,7 +7,7 @@ This document defines how ergosphere-it delivers desktop updates as signed insta
 ## Context
 
 AIRI desktop updates use electron-updater with full installers of 0.7 GB to 0.9 GB.
-The 2026-10 investigation (LobeHub goal `goal_vuHfN6pYqMnG`) found these facts:
+An investigation of the AIRI updates in 2026-10 found these facts:
 
 - Existing users can update, but no platform finishes in one click. F1 and F2 were the main causes. #3082 and #3083 fixed them.
 - Nightly builds have no update feed. They report the version of the last beta.
@@ -70,7 +70,7 @@ One trusted Ed25519 key signs both layers. The native part contains the public k
 - All integers in documents stay at or below 2^53 - 1, so every language reads the same value.
 - All times in documents are UTC in RFC 3339 form with `Z`, for example `2026-10-24T00:00:00.000Z`, on a real calendar day. Offsets are not allowed, because some parsers read an offset such as `+08` as no date, which turns off the expiry and replay checks.
 - The publish API checks each document with the same rules as clients before it signs. It never signs a document that clients reject.
-- Each release also has a display version, for example `0.13.0`. Clients never compare display versions. This avoids the semver problem that T-196 found: `0.12.0.core.1` is not semver, and `0.12.0-core.1` sorts before `0.12.0`.
+- Each release also has a display version, for example `0.13.0`. Clients never compare display versions. This avoids a semver problem of the prototypes: `0.12.0.core.1` is not semver, and `0.12.0-core.1` sorts before `0.12.0`.
 - The installer bundle records its release ID. The client rejects a downloaded bundle with an ID that is not greater than the ID of the installer bundle. So after a full update, old OTA bundles do not come back.
 
 ### Signatures
