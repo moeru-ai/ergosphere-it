@@ -293,6 +293,8 @@ electron-builder packs the app as before. Make sure that the package contains `o
 
 You do not need `ergo.config.ts` in the package. Keep electron-builder `publish` settings if electron-updater installs your installers. ergosphere-it gives electron-updater a feed of its own for each installer release.
 
+On macOS, Sparkle can install new installers instead of electron-updater. It downloads a delta of the changed files, not the whole zip. [The Sparkle example](https://github.com/moeru-ai/ergosphere-it/blob/main/examples/electron-sparkle-app) shows the installer and the release steps.
+
 ### Host the updates
 
 The app reads static files from `feedUrl`:
@@ -425,6 +427,8 @@ pnpm -F @ergosphere-it/tests-electron demo
 ```
 
 The demo builds the example app, starts it, and opens the console in a browser. The console publishes a new version as a page change, a code change, a crash, a page that never reports health, or a bundle for a newer native version, and it withdraws releases. The demo slows downloads, so you can watch the progress of each update.
+
+On macOS, `pnpm -F ergosphere-example-electron-sparkle demo` installs a new installer with a Sparkle delta. See [the Sparkle example](https://github.com/moeru-ai/ergosphere-it/blob/main/examples/electron-sparkle-app).
 
 ## Concepts
 

@@ -1,0 +1,32 @@
+{
+  "name": "ergosphere-example-electron-sparkle",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The example app with Sparkle as the installer on macOS: bundles update over the air, and app updates download Sparkle deltas",
+  "main": "out/launcher/index.mjs",
+  "scripts": {
+    "build": "electron-vite build",
+    "demo": "node scripts/demo.ts",
+    "package": "electron-builder --mac --publish never --config electron-builder.config.ts",
+    "rebuild:sparkle": "electron-sparkle-updater rebuild",
+    "typecheck": "vue-tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ergosphere-it/electron": "workspace:*",
+    "electron-sparkle-updater": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@ergosphere-it/protocol": "workspace:*",
+    "@ergosphere-it/publish": "workspace:*",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "electron": "catalog:",
+    "electron-builder": "catalog:",
+    "electron-vite": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}
