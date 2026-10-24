@@ -1,6 +1,6 @@
 import type { GenericSchema, InferOutput } from 'valibot'
 
-import type { BundleManifest, ChannelFile, InstallerArtifact, InstallerManifest, NativeVersionRange, Rollout, TrustedKey } from './schema'
+import type { BundleManifest, ChannelFile, InstallerArtifact, InstallerFormat, InstallerManifest, NativeVersionRange, Rollout, TrustedKey } from './schema'
 
 import { safeParse, ValiError } from 'valibot'
 
@@ -37,6 +37,8 @@ export interface ChannelFileContext {
 
 /** What an install is, to decide if it can take a verified installer. */
 export interface InstallerCandidateContext {
+  /** The installer formats that this install can take, the preferred format first. */
+  formats: readonly InstallerFormat[]
   /** The host of this install, for example `electron`. */
   host: string
   /** The `releaseId` of the installed app. */
@@ -45,6 +47,8 @@ export interface InstallerCandidateContext {
   platform: string
   /** The product of this install. An installer of another product is rejected even when its signature is valid. */
   product: string
+  /** Release IDs that the channel file withdraws. */
+  withdrawn?: readonly number[]
 }
 
 /**
@@ -71,19 +75,32 @@ export function checkBundleCandidate(manifest: BundleManifest, context: BundleCa
     throw new CandidateError('not-newer', `Bundle ${releaseId} is not newer than ${floor}.`, releaseId)
 }
 
-/** Returns the installer file of a verified installer release for this install, or throws a `CandidateError`. */
+/**
+ * Returns the installer file of a verified installer release for this install, or throws a `CandidateError`.
+ *
+ * The checks run in a fixed order: product and host, withdrawn, not newer, platform, then format. The file has the
+ * first format of `context.formats` that the release has for the platform.
+ */
 export function checkInstallerCandidate(manifest: InstallerManifest, context: InstallerCandidateContext): InstallerArtifact {
   const { releaseId } = manifest
   if (manifest.product !== context.product || manifest.host !== context.host)
     throw new CandidateError('installer-mismatch', `Installer ${releaseId} is for ${manifest.product} on ${manifest.host}, and this install is ${context.product} on ${context.host}.`, releaseId)
+  if (context.withdrawn?.includes(releaseId))
+    throw new CandidateError('withdrawn', `Installer ${releaseId} is withdrawn.`, releaseId)
   if (releaseId <= context.installerReleaseId)
     throw new CandidateError('not-newer', `Installer ${releaseId} is not newer than ${context.installerReleaseId}.`, releaseId)
 
-  const artifact = manifest.artifacts.find(entry => entry.platform === context.platform)
-  if (!artifact)
+  const files = manifest.artifacts.filter(entry => entry.platform === context.platform)
+  if (files.length === 0)
     throw new CandidateError('platform-mismatch', `Installer ${releaseId} has no file for ${context.platform}.`, releaseId)
 
-  return artifact
+  for (const format of context.formats) {
+    const artifact = files.find(entry => entry.format === format)
+    if (artifact)
+      return artifact
+  }
+
+  throw new CandidateError('format-mismatch', `Installer ${releaseId} has ${files.map(entry => entry.format).join(', ')} for ${context.platform}, and this install takes ${context.formats.join(', ') || 'no installer'}.`, releaseId)
 }
 
 /** An install accepts a bundle when its native version is inside the bundle range. */
@@ -116,14 +133,19 @@ export function validateChannelFile(document: unknown): ChannelFile {
 /** Checks the schema and the rules of an installer manifest, without its signature. Throws a `DocumentError`. */
 export function validateInstallerManifest(document: unknown): InstallerManifest {
   const manifest = parseDocument(installerManifestSchema, document)
-  const platforms = new Set<string>()
+  if (manifest.downloadPage !== undefined && !URL.canParse(manifest.downloadPage))
+    throw new DocumentError('invalid-schema', `The download page ${manifest.downloadPage} is not absolute.`)
+
+  const files = new Set<string>()
   for (const artifact of manifest.artifacts) {
-    // electron-updater resolves a relative URL against its feed, which is not where installers live.
+    // Installers resolve a relative URL against their own feed, which is not where the files live.
     if (!URL.canParse(artifact.url))
       throw new DocumentError('invalid-schema', `The installer URL ${artifact.url} is not absolute.`)
-    if (platforms.has(artifact.platform))
-      throw new DocumentError('invalid-schema', `The platform ${artifact.platform} has two installers.`)
-    platforms.add(artifact.platform)
+
+    const key = `${artifact.platform} ${artifact.format}`
+    if (files.has(key))
+      throw new DocumentError('invalid-schema', `The platform ${artifact.platform} has two ${artifact.format} files.`)
+    files.add(key)
   }
 
   return manifest

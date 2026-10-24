@@ -17,6 +17,7 @@ const classOf: Record<ErrorCode, new (...args: never[]) => ErgosphereError> = {
   'channel-mismatch': ChannelError,
   'channel-replayed': ChannelError,
   'duplicate-path': DocumentError,
+  'format-mismatch': CandidateError,
   'installer-mismatch': CandidateError,
   'invalid-json': DocumentError,
   'invalid-schema': DocumentError,
@@ -65,8 +66,11 @@ describe('conformance cases', () => {
         case 'installer-manifest':
           await expectOutcome(async () => {
             const manifest = await verifyInstallerManifest(encode(testCase.document), testCase.signature, trustedKeys)
-            if (testCase.context)
-              checkInstallerCandidate(manifest, testCase.context)
+            if (testCase.context) {
+              const artifact = checkInstallerCandidate(manifest, testCase.context)
+              if (testCase.takes)
+                expect(artifact.format).toBe(testCase.takes)
+            }
 
             return manifest
           }, testCase.expect)

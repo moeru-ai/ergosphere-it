@@ -86,7 +86,11 @@ function channelFile(overrides: Record<string, unknown> = {}) {
 }
 
 const installer = {
-  artifacts: [{ platform: 'darwin-arm64', sha512: 'c2hhNTEy', size: 1024, url: 'https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip' }],
+  artifacts: [
+    { format: 'electron-updater', platform: 'darwin-arm64', sha512: 'c2hhNTEy', size: 1024, url: 'https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip' },
+    { format: 'sparkle', platform: 'darwin-arm64', sha512: 'YXBwY2FzdA==', size: 2048, url: 'https://updates.example.com/installers/7/sparkle/darwin-arm64/appcast.xml' },
+    { format: 'electron-updater', platform: 'win32-x64', sha512: 'c2hhNTEyd2lu', size: 4096, url: 'https://downloads.example.com/AIRI-0.13.0-setup.exe' },
+  ],
   bundleReleaseId: 10,
   createdAt: '2026-10-23T00:00:00.000Z',
   host: 'electron',
@@ -162,14 +166,23 @@ cases.push({ kind: 'bundle-manifest', name: 'bundle: releaseId below current', .
 const validInstaller = await signed(installer)
 cases.push({ kind: 'installer-manifest', name: 'installer: valid manifest', ...validInstaller, expect: { ok: true } })
 cases.push({ document: validInstaller.document.replace('"nativeVersion":3', '"nativeVersion":9'), expect: { code: 'invalid-signature', ok: false }, kind: 'installer-manifest', name: 'installer: changed byte after signing', signature: validInstaller.signature })
-const installerContext = { host: 'electron', installerReleaseId: 6, platform: 'darwin-arm64', product: 'airi' }
+const installerContext = { formats: ['electron-updater'], host: 'electron', installerReleaseId: 6, platform: 'darwin-arm64', product: 'airi' } as const
 cases.push({ kind: 'installer-manifest', name: 'installer: newer installer with a file for this platform', ...validInstaller, context: installerContext, expect: { ok: true } })
 cases.push({ kind: 'installer-manifest', name: 'installer: another product with the same key', ...await signed({ ...installer, product: 'other' }), context: installerContext, expect: { code: 'installer-mismatch', ok: false } })
 cases.push({ kind: 'installer-manifest', name: 'installer: another host', ...await signed({ ...installer, host: 'kirie' }), context: installerContext, expect: { code: 'installer-mismatch', ok: false } })
-cases.push({ kind: 'installer-manifest', name: 'installer: no file for this platform', ...validInstaller, context: { ...installerContext, platform: 'win32-x64' }, expect: { code: 'platform-mismatch', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: no file for this platform', ...validInstaller, context: { ...installerContext, platform: 'linux-x64' }, expect: { code: 'platform-mismatch', ok: false } })
 cases.push({ kind: 'installer-manifest', name: 'installer: releaseId equals the installed app', ...validInstaller, context: { ...installerContext, installerReleaseId: 7 }, expect: { code: 'not-newer', ok: false } })
 cases.push({ kind: 'installer-manifest', name: 'installer: a relative installer URL', ...await signed({ ...installer, artifacts: [{ ...installer.artifacts[0]!, url: 'AIRI.zip' }] }), expect: { code: 'invalid-schema', ok: false } })
-cases.push({ kind: 'installer-manifest', name: 'installer: two files for one platform', ...await signed({ ...installer, artifacts: [installer.artifacts[0]!, installer.artifacts[0]!] }), expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: two files of one format for one platform', ...await signed({ ...installer, artifacts: [installer.artifacts[0]!, installer.artifacts[0]!] }), expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: a file of an unknown format', ...await signed({ ...installer, artifacts: [{ ...installer.artifacts[0]!, format: 'squirrel' }] }), expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: a relative download page', ...await signed({ ...installer, downloadPage: 'download' }), expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: an absolute download page', ...await signed({ ...installer, downloadPage: 'https://example.com/download' }), context: installerContext, expect: { ok: true } })
+cases.push({ kind: 'installer-manifest', name: 'installer: the install takes sparkle first', ...validInstaller, context: { ...installerContext, formats: ['sparkle', 'electron-updater'] }, expect: { ok: true }, takes: 'sparkle' })
+cases.push({ kind: 'installer-manifest', name: 'installer: the install takes electron-updater first', ...validInstaller, context: { ...installerContext, formats: ['electron-updater', 'sparkle'] }, expect: { ok: true }, takes: 'electron-updater' })
+cases.push({ kind: 'installer-manifest', name: 'installer: no file in a format that the install takes', ...validInstaller, context: { ...installerContext, formats: ['sparkle'], platform: 'win32-x64' }, expect: { code: 'format-mismatch', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: the install takes no format', ...validInstaller, context: { ...installerContext, formats: [] }, expect: { code: 'format-mismatch', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: withdrawn', ...validInstaller, context: { ...installerContext, withdrawn: [7] }, expect: { code: 'withdrawn', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: withdrawn comes before not newer', ...validInstaller, context: { ...installerContext, installerReleaseId: 7, withdrawn: [7] }, expect: { code: 'withdrawn', ok: false } })
 
 const now = '2026-10-24T00:00:00.000Z'
 const target = { channel: 'canary', product: 'airi' }

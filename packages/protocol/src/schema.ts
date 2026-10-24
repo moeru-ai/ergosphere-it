@@ -84,7 +84,17 @@ export const bundleManifestSchema = object({
   version: pipe(string(), minLength(1)),
 })
 
+/**
+ * How an install takes an installer file.
+ *
+ * - `electron-updater`: the file is the installer, for example a zip, an NSIS installer, or an AppImage.
+ * - `sparkle`: the file is a Sparkle appcast. It names the archive and the deltas, and signs each with EdDSA.
+ */
+const installerFormatSchema = picklist(['electron-updater', 'sparkle'])
+
+/** One file of an installer release. `sha512` and `size` describe the file at `url`. */
 const installerArtifactSchema = object({
+  format: installerFormatSchema,
   platform: pipe(string(), minLength(1)),
   sha512: sha512Schema,
   size: sizeSchema,
@@ -95,6 +105,8 @@ export const installerManifestSchema = object({
   artifacts: pipe(array(installerArtifactSchema), minLength(1)),
   bundleReleaseId: releaseIdSchema,
   createdAt: timestampSchema,
+  /** A page where people download the installer by hand. Apps show it when the installer keeps failing. */
+  downloadPage: optional(pipe(string(), minLength(1))),
   host: pipe(string(), minLength(1)),
   /** Hash of the native build inputs. CI compares it between releases. Clients do not read it. */
   inputsHash: optional(sha256Schema),
@@ -130,6 +142,7 @@ export const channelFileSchema = object({
   product: pipe(string(), minLength(1)),
   schema: literal(SCHEMA_VERSION),
   signature: signatureRefSchema,
+  /** Withdrawn bundles and installers. An install drops a staged installer that is withdrawn. */
   withdrawn: optional(array(releaseIdSchema)),
 })
 
@@ -140,6 +153,7 @@ export type Component = InferOutput<typeof componentSchema>
 export type ComponentType = InferOutput<typeof componentTypeSchema>
 export type FileEntry = InferOutput<typeof fileEntrySchema>
 export type InstallerArtifact = InferOutput<typeof installerArtifactSchema>
+export type InstallerFormat = InferOutput<typeof installerFormatSchema>
 export type InstallerManifest = InferOutput<typeof installerManifestSchema>
 export type NativeVersionRange = InferOutput<typeof nativeVersionRangeSchema>
 export type Rollout = InferOutput<typeof rolloutSchema>

@@ -1,4 +1,4 @@
-export type CandidateErrorCode = 'blocked' | 'bundle-mismatch' | 'installer-mismatch' | 'native-version-mismatch' | 'not-newer' | 'platform-mismatch' | 'withdrawn'
+export type CandidateErrorCode = 'blocked' | 'bundle-mismatch' | 'format-mismatch' | 'installer-mismatch' | 'native-version-mismatch' | 'not-newer' | 'platform-mismatch' | 'withdrawn'
 
 export type ChannelErrorCode = 'channel-expired' | 'channel-mismatch' | 'channel-replayed'
 export type DocumentErrorCode = 'duplicate-path' | 'invalid-json' | 'invalid-schema' | 'unsafe-path'
