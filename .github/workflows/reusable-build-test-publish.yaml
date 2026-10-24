@@ -8,8 +8,8 @@ on:
         required: false
         default: false
 
-# The callers set the permissions. A called workflow can only lower them, so the publish job gets `id-token: write`
-# only from build-test-publish.yaml.
+# The callers set the permissions. A called workflow can only lower them, so the publish job gets `id-token: write`,
+# which trusted publishing on npm needs, only from build-test-publish.yaml.
 
 jobs:
   check:
@@ -154,14 +154,9 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      # The single quotes keep `${NPM_TOKEN}` literal in .npmrc, so pnpm reads the secret from the environment.
-      - name: Set up NPM token
-        run: |
-          # shellcheck disable=SC2016
-          pnpm config set //registry.npmjs.org/:_authToken '${NPM_TOKEN}'
-
+      # npm trusts this workflow as the publisher of every package, so pnpm publishes with an OIDC token from GitHub and
+      # no npm token. The caller grants `id-token: write`.
       - name: Publish packages
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
         run: pnpm run publish:lib
