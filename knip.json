@@ -19,7 +19,7 @@
         "ergo.config.ts",
         "src/launcher.ts",
         "src/main.ts",
-        "src/vue-shim.ts"
+        "src/use-updates-shim.ts"
       ]
     }
   }

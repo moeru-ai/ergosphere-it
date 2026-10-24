@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { UpdateInfo } from '@ergosphere-it/electron/vue'
+import type { UpdateInfo } from '@ergosphere-it/electron/types'
 
 const props = defineProps<{ update: UpdateInfo }>()
 const emit = defineEmits<{ apply: [], later: [] }>()

@@ -1,9 +1,31 @@
 // The main process of the example. It is part of the bundle, so it updates over the air.
 
-import { activeBundle, loadActiveBundle, updater } from '@ergosphere-it/electron/main'
-import { app, BrowserWindow } from 'electron'
+import type { UpdaterStatus } from '@ergosphere-it/electron/main'
+
+import { activeBundle, updater } from '@ergosphere-it/electron/main'
+import { app, BrowserWindow, ipcMain } from 'electron'
+
+// The page reaches the updater through this small IPC bridge. The library does not need it: an app can use any
+// transport that it already has, for example Eventa.
+ipcMain.handle('updates:get', () => ({
+  bundle: { fromInstaller: activeBundle.fromInstaller, releaseId: activeBundle.releaseId, version: activeBundle.version },
+  status: updater.status,
+}))
+ipcMain.handle('updates:apply', () => updater.applyUpdate())
+ipcMain.handle('updates:check', () => updater.checkForUpdates())
+ipcMain.handle('updates:dismiss-rollback', () => updater.dismissRollback())
+// The page knows when the app is usable, so it reports health.
+ipcMain.on('updates:healthy', () => updater.markBundleHealthy())
+ipcMain.on('updates:delay-health-check', (_event, seconds: number) => updater.delayHealthCheck(seconds))
+
+function sendStatus(status: UpdaterStatus) {
+  for (const window of BrowserWindow.getAllWindows())
+    window.webContents.send('updates:status', status)
+}
 
 app.whenReady().then(() => {
+  updater.onStatus(sendStatus)
+
   const window = new BrowserWindow({
     height: 420,
     show: false,
@@ -12,12 +34,8 @@ app.whenReady().then(() => {
     width: 640,
   })
   window.once('ready-to-show', () => window.show())
-  // This window reloads first after a page-only update, and its health report counts. An app with many windows picks
-  // the window that owns the state that the others sync from.
-  updater.leaderWindow = window
-
-  // The page shows which bundle runs. After a page-only update, the window loads again from the new bundle.
-  void loadActiveBundle(window)
+  // After a page-only update, the launcher moves the window to the same page of the new bundle.
+  void window.loadURL(activeBundle.pageUrl())
 })
 
 app.on('window-all-closed', () => app.quit())

@@ -14,24 +14,6 @@ export interface BundleInfo {
 /** Why updates are off. */
 export type DisabledReason = 'dev-mode' | 'store-build'
 
-/** The updater of the page, as `exposeUpdater()` gives it to `window.ergosphereIt`. */
-export interface PageUpdater {
-  /** Applies the ready update. Rejects when no update is ready. */
-  applyUpdate: () => Promise<void>
-  /** Checks now, also when a failed download waits for its retry time. */
-  checkForUpdates: () => Promise<UpdaterStatus>
-  /** Adds seconds to the running health check, up to five minutes in all. */
-  delayHealthCheck: (seconds: number) => void
-  dismissRollback: () => Promise<void>
-  /** The bundle that runs now, for example to show its version. */
-  getActiveBundle: () => Promise<BundleInfo>
-  getStatus: () => Promise<UpdaterStatus>
-  /** Tells the updater that this bundle works. Without it, a new bundle is rolled back. */
-  markBundleHealthy: () => void
-  /** Calls the listener on every status change. Returns a function that stops listening. */
-  onStatus: (listener: (status: UpdaterStatus) => void) => () => void
-}
-
 /** Why the app left a bundle. */
 export type RollbackReason = 'crashed-at-launch' | 'not-marked-healthy' | 'withdrawn'
 
@@ -62,7 +44,7 @@ export interface UpdateInfo extends BundleInfo {
 export type UpdateRequirement = 'install' | 'reload' | 'restart'
 
 /**
- * The state of the updater, for an update notice. Main, preload, and page all use this type.
+ * The state of the updater, for an update notice. It is plain data, so the app can send it to its pages over IPC.
  *
  * - `up-to-date`: users see "up to date". `detail` is for logs and support.
  * - `ready`: an update waits for `applyUpdate()`. `update.requires` tells the button text.

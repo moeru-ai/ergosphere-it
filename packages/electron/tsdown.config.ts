@@ -2,7 +2,7 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   clean: true,
-  deps: { neverBundle: ['electron', 'electron-updater', 'electron-vite', 'vite', 'vue'] },
+  deps: { neverBundle: ['electron', 'electron-updater', 'electron-vite', 'vite'] },
   dts: true,
   entry: {
     'cli': 'src/cli/index.ts',
@@ -10,11 +10,9 @@ export default defineConfig({
     'electron-updater': 'src/electron-updater.ts',
     'launcher': 'src/launcher.ts',
     'main': 'src/main.ts',
-    'preload': 'src/preload.ts',
     'release': 'src/release.ts',
-    'renderer': 'src/renderer.ts',
+    'types': 'src/types.ts',
     'vite': 'src/vite.ts',
-    'vue': 'src/vue.ts',
   },
   format: 'esm',
   sourcemap: true,

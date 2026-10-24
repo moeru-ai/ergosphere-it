@@ -19,10 +19,9 @@ import { requirementOf, UpdateClient } from '@ergosphere-it/client'
 import { createNodeFileSystem } from '@ergosphere-it/client/node'
 import { ErgosphereError } from '@ergosphere-it/protocol'
 import { errorMessageFrom, errorStackFrom } from '@moeru/std/error'
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow } from 'electron'
 
 import { writeRuntime } from './global'
-import { IPC } from './ipc'
 import { BUNDLE_LAYOUT, OUT_LAYOUT } from './layout'
 import { registerBundleModuleHooks } from './module-hooks'
 
@@ -75,8 +74,6 @@ class Launcher implements Runtime {
   private healthy = false
   private installer: Installer | undefined
   private readonly installerFailures = new Map<number, { count: number, retryAt: number }>()
-  /** The window that reloads first and reports health. Without it, any window reports health. */
-  private leaderWindow: BrowserWindow | undefined
   private readonly options: LauncherOptions
   private pending: PendingBundle | undefined
   /** A downloaded installer that waits for `applyUpdate()`. */
@@ -116,18 +113,9 @@ class Launcher implements Runtime {
     this.emit({ addedMs, releaseId: this.running.releaseId, type: 'health-delayed' })
   }
 
-  async loadActiveBundle(window: BrowserWindow, options?: LoadOptions): Promise<void> {
-    await window.loadURL(this.pageUrl(options))
-  }
-
-  /**
-   * Records that the bundle works. With a leader window, only a report from the leader counts, because it owns the
-   * state that other windows sync from.
-   */
-  markBundleHealthy(sender?: Electron.WebContents): void {
+  /** Records that the bundle works. The app decides when, for example after its main page reports that it loaded. */
+  markBundleHealthy(): void {
     if (this.healthy)
-      return
-    if (sender && this.leaderWindow && !this.leaderWindow.isDestroyed() && this.leaderWindow.webContents !== sender)
       return
 
     this.healthy = true
@@ -152,7 +140,6 @@ class Launcher implements Runtime {
     if (this.disabled) {
       this.setStatus({ reason: this.disabled, status: 'disabled' })
       writeRuntime(this)
-      this.listen()
       await this.importMain()
 
       return
@@ -173,7 +160,6 @@ class Launcher implements Runtime {
       this.setStatus({ ...rolledBack, status: 'rolled-back' })
 
     writeRuntime(this)
-    this.listen()
     if (!this.readOnly)
       this.watchHealth(this.options.launchHealthTimeoutMs, () => this.onBootHealthTimeout())
 
@@ -318,12 +304,7 @@ class Launcher implements Runtime {
         if (this.status.status === 'rolled-back')
           this.setStatus({ status: 'idle' })
       },
-      get leaderWindow() {
-        return launcher.leaderWindow
-      },
-      set leaderWindow(window) {
-        launcher.leaderWindow = window
-      },
+      markBundleHealthy: () => this.markBundleHealthy(),
       onBundleChange: (listener) => {
         this.bundleChangeListeners.add(listener)
 
@@ -394,17 +375,6 @@ class Launcher implements Runtime {
       await this.client.rollback(this.running.releaseId, 'crashed-at-launch')
       this.restart(this.running.releaseId, 'the bundle main threw during import', 1)
     }
-  }
-
-  /** Answers the preload scripts of every window. */
-  private listen(): void {
-    ipcMain.handle(IPC.getStatus, () => this.status)
-    ipcMain.handle(IPC.apply, () => this.apply())
-    ipcMain.handle(IPC.check, () => this.check(true))
-    ipcMain.handle(IPC.dismissRollback, () => this.updater.dismissRollback())
-    ipcMain.handle(IPC.getActiveBundle, () => ({ fromInstaller: this.running.fromInstaller, releaseId: this.running.releaseId, version: this.running.version }))
-    ipcMain.on(IPC.healthy, event => this.markBundleHealthy(event.sender))
-    ipcMain.on(IPC.delayHealthCheck, (_event, seconds: unknown) => this.delayHealthCheck(Number(seconds)))
   }
 
   private onBootHealthTimeout(): void {
@@ -537,10 +507,6 @@ class Launcher implements Runtime {
     this.emit({ status: next, type: 'status' })
     for (const listener of this.statusListeners)
       listener(next)
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (!window.isDestroyed())
-        window.webContents.send(IPC.status, next)
-    }
   }
 
   private async stageBundle(client: UpdateClient, available: Extract<CheckResult, { status: 'available' }>): Promise<void> {
@@ -600,7 +566,7 @@ class Launcher implements Runtime {
 
   /**
    * Switches to another bundle without a restart, and moves every window that shows a page of the old bundle to the
-   * same page of the new one, with its query and hash. The leader window loads first, so other windows sync from it.
+   * same page of the new one, with its query and hash.
    */
   private async switchTo(next: BootSelection): Promise<void> {
     const before = rendererUrlOf(this.running.dir)
@@ -611,10 +577,7 @@ class Launcher implements Runtime {
     const moves = BrowserWindow.getAllWindows()
       .filter(window => !window.isDestroyed() && fold(window.webContents.getURL()).startsWith(fold(before)))
       .map(window => ({ url: after + window.webContents.getURL().slice(before.length), window }))
-    const leader = moves.find(move => move.window === this.leaderWindow)
-    if (leader)
-      await leader.window.loadURL(leader.url).catch(() => {})
-    await Promise.all(moves.filter(move => move !== leader).map(move => move.window.loadURL(move.url).catch(() => {})))
+    await Promise.all(moves.map(move => move.window.loadURL(move.url).catch(() => {})))
 
     const info: BundleInfo = { fromInstaller: next.fromInstaller, releaseId: next.releaseId, version: next.version }
     for (const listener of this.bundleChangeListeners)

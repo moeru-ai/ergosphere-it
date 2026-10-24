@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { markBundleHealthy, useUpdater } from '@ergosphere-it/electron/vue'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import UpdateDialog from './components/update-dialog.vue'
 import UpdateToast from './components/update-toast.vue'
 
-const { activeBundle, applyUpdate, dismissRollback, status } = useUpdater()
+import { markBundleHealthy, useUpdates } from './composables/use-updates'
 
-const version = computed(() => activeBundle.value?.version ?? '…')
-const origin = computed(() => (activeBundle.value?.fromInstaller ? 'from the installer' : 'downloaded'))
+const { apply: applyUpdate, bundle, dismissRollback, status } = useUpdates()
+
+const version = computed(() => bundle.value?.version ?? '…')
+const origin = computed(() => (bundle.value?.fromInstaller ? 'from the installer' : 'downloaded'))
 // Each version gets its own color, so a page update is easy to see.
 const hue = computed(() => [...version.value].reduce((sum, char) => sum + char.charCodeAt(0) * 37, 0) % 360)
 
@@ -42,7 +43,7 @@ onMounted(async () => {
       </div>
       <h1>{{ version }}</h1>
       <p class="info">
-        {{ origin }} · release {{ activeBundle?.releaseId }}
+        {{ origin }} · release {{ bundle?.releaseId }}
       </p>
     </main>
 

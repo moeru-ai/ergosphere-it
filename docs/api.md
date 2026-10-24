@@ -111,19 +111,19 @@ Internal: the object store and the state file.
 | --- | --- |
 | `/config` | `defineConfig(config)` for `ergo.config.ts`. Types: `ErgoConfig`. |
 | `/vite` | `withUpdates(config, { launcher, main, preload, outDir, root })`. It reads `ergo.config.ts`, and keeps every HTML entry of the renderer. |
-| `/main` | `activeBundle` with `pageUrl(options)`, `loadActiveBundle(window, { page, hash, query })`, `updater` with `leaderWindow`, `onBundleChange()`, and `delayHealthCheck()`, and `markBundleHealthy()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
-| `/preload` | `exposeUpdater()` |
-| `/renderer` | `markBundleHealthy()`, `delayHealthCheck(seconds)`, `watchUpdaterStatus(listener)`, `getPageUpdater()` |
-| `/vue` | `useUpdater()` with `status`, `activeBundle`, `applyUpdate()`, `checkForUpdates()`, `dismissRollback()`, and `markBundleHealthy()` and `delayHealthCheck(seconds)` |
+| `/main` | `activeBundle` with `preload` and `pageUrl({ page, hash, query })`, and `updater` with `status`, `onStatus()`, `checkForUpdates()`, `applyUpdate()`, `dismissRollback()`, `markBundleHealthy()`, `delayHealthCheck()`, `channel`, `cohorts`, `onBundleChange()`, and `onEvent()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
+| `/types` | The status types only, for pages and preload scripts. It has no code. |
 | `/release` | `bundleReleaseFromBuild(options)`, `installerReleaseFromBuild(options)`, `readBuildInfo(outDir)` |
 | `/launcher` | `startLauncher(options)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Installer`. |
 | `/electron-updater` | `createElectronUpdaterInstaller(updater?)`. Without an argument, it creates its own electron-updater instance. |
 | `/virtual` | Types of `virtual:ergosphere-it/config` for a custom launcher |
 | `ergosphere-it` (bin) | `keygen`, `publish bundle`, `register installer`, `promote`, `rollout`, `withdraw`. `--bucket` takes `s3://`, `file://`, or a directory. S3 goes through `s3mini`. |
 
-Status types: `UpdaterStatus`, `UpdateInfo`, `BundleInfo`, `UpdateRequirement`, `UpdateError`, `UpdateErrorCode`, `RollbackReason`, `DisabledReason`, `PageUpdater`.
+Status types: `UpdaterStatus`, `UpdateInfo`, `BundleInfo`, `UpdateRequirement`, `UpdateError`, `UpdateErrorCode`, `RollbackReason`, `DisabledReason`.
 
-Internal: the launcher class, module resolution hooks, the IPC channel names, and the global that holds the runtime.
+The package has no page API. The app passes the updater to its pages with its own channel, for example IPC or Eventa.
+
+Internal: the launcher class, module resolution hooks, and the global that holds the runtime.
 
 ## `@ergosphere-it/server`
 

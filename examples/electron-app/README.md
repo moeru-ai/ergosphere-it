@@ -1,6 +1,6 @@
 # Example Electron app
 
-A small Electron app with over-the-air updates from `@ergosphere-it/electron`. It shows an update toast with a progress bar, a dialog that asks to reload, restart, or install, and a notice after a rollback.
+A small Electron app with over-the-air updates from `@ergosphere-it/electron`. The library has no page API, so the example shows one way to pass the updater to the page: plain IPC. An app can use Eventa or any other channel instead. It shows an update toast with a progress bar, a dialog that asks to reload, restart, or install, and a notice after a rollback.
 
 Read it to see what an app adds. [The Electron guide](../../packages/electron/README.md) explains each step. [`tests/electron`](../../tests/electron) builds the same sources with test variants, and runs the end-to-end test and the release demo.
 
@@ -11,9 +11,10 @@ Read it to see what an app adds. [The Electron guide](../../packages/electron/RE
 | `ergo.config.ts` | The feed URL, the channel, the native version, and the public key |
 | `package.json` | `main` points to the generated launcher. |
 | `electron.vite.config.ts` | `withUpdates()` around the electron-vite config |
-| `src/main/index.ts` | Opens the window with `activeBundle.preload` and `loadActiveBundle()`, and names it the leader window |
-| `src/preload/index.ts` | `exposeUpdater()` |
-| `src/renderer/app.vue` | Shows the active bundle, calls `markBundleHealthy()` after the first render, and shows the toast and the dialog |
+| `src/main/index.ts` | Opens the window with `activeBundle.preload` and `activeBundle.pageUrl()`. A small IPC bridge passes the updater to the page. |
+| `src/preload/index.ts` | The page side of the bridge, as `window.updates` |
+| `src/renderer/composables/use-updates.ts` | The status and the active bundle as Vue state, and `markBundleHealthy()` |
+| `src/renderer/app.vue` | Shows the active bundle, reports health after the first render, and shows the toast and the dialog |
 | `src/renderer/components` | The toast and the dialog. They read `UpdaterStatus`. |
 
 The public key in `ergo.config.ts` is an example. Replace it with your own key before you publish.

@@ -76,8 +76,6 @@ export function withUpdates(config: UserConfig = {}, options: WithUpdatesOptions
   }
   const preload: UserConfig['preload'] = {
     build: {
-      // A sandboxed preload script cannot require packages, so the updater bridge goes into the script.
-      externalizeDeps: { exclude: ['@ergosphere-it/electron'] },
       outDir: join(bundleDir, 'preload'),
       rolldownOptions: {
         input: resolve(root, options.preload ?? 'src/preload/index.ts'),

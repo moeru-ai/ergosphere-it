@@ -1,6 +1,4 @@
-import type { BrowserWindow } from 'electron'
-
-import type { ActiveBundle, LoadOptions, Runtime, Updater } from './runtime'
+import type { ActiveBundle, Runtime, Updater } from './runtime'
 
 import { readRuntime } from './global'
 
@@ -38,7 +36,8 @@ export const activeBundle: ActiveBundle = {
 
 /**
  * The updater. It checks by itself at launch and then on an interval. Call `checkForUpdates()` for a manual check,
- * and `applyUpdate()` when the user agrees.
+ * `applyUpdate()` when the user agrees, and `markBundleHealthy()` when the app works. The app sends `status` to its
+ * pages in its own way, for example over IPC or Eventa.
  */
 export const updater: Updater = {
   applyUpdate: () => runtime().updater.applyUpdate(),
@@ -57,30 +56,11 @@ export const updater: Updater = {
   },
   delayHealthCheck: seconds => runtime().updater.delayHealthCheck(seconds),
   dismissRollback: () => runtime().updater.dismissRollback(),
-  get leaderWindow() {
-    return runtime().updater.leaderWindow
-  },
-  set leaderWindow(window) {
-    runtime().updater.leaderWindow = window
-  },
+  markBundleHealthy: () => runtime().updater.markBundleHealthy(),
   onBundleChange: listener => runtime().updater.onBundleChange(listener),
   onEvent: listener => runtime().updater.onEvent(listener),
   onStatus: listener => runtime().updater.onStatus(listener),
   get status() {
     return runtime().updater.status
   },
-}
-
-/**
- * Loads a page of the active bundle into a window: `renderer/index.html` of the bundle by default, or the development
- * server under `electron-vite dev`. After a page-only update, the launcher loads the window again from the new bundle,
- * with the route that the window shows then.
- */
-export function loadActiveBundle(window: BrowserWindow, options?: LoadOptions): Promise<void> {
-  return runtime().loadActiveBundle(window, options)
-}
-
-/** Tells the updater from main that the bundle works. Pages call `markBundleHealthy()` from the renderer entry instead. */
-export function markBundleHealthy(): void {
-  runtime().markBundleHealthy()
 }

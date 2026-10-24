@@ -10,7 +10,7 @@ The end-to-end test and the release demo of `@ergosphere-it/electron`. They run 
 | --- | --- |
 | `src/launcher.ts` | A custom launcher with settings from the environment, and an installer that downloads a file and quits instead of installing it |
 | `src/main.ts` | A wrapper around the main of the example. It plays the user: it applies every ready update and closes rollback notices. It opens a second window that it loads itself and moves to another route, logs when a page mounts, then loads the example main. |
-| `src/vue-shim.ts` | Replaces `@ergosphere-it/electron/vue` in the page. It logs the health report, skips it for a variant that never reports health, and asks for more time first for a slow variant. |
+| `src/use-updates-shim.ts` | Replaces the update composable of the example in the page. It logs the health report, skips it for a variant that never reports health, and asks for more time first for a slow variant. |
 
 The launcher writes its events to `ERGOSPHERE_IT_LOG`, one JSON line each. The test events of `src/main.ts` go to the same file.
 

@@ -1,5 +1,3 @@
-import type { BrowserWindow } from 'electron'
-
 import type { BundleInfo, RollbackReason, UpdaterStatus } from './status'
 
 /** The bundle that runs now. A page-only update changes it without a restart. */
@@ -7,9 +5,9 @@ export interface ActiveBundle extends BundleInfo {
   /** The directory of the bundle. */
   readonly dir: string
   /**
-   * The URL of a page of the bundle, or of the development server under `electron-vite dev`. Use it when the app
-   * loads windows itself, for example `window.loadURL(activeBundle.pageUrl({ hash: '/settings' }))`. After a page-only
-   * update, the launcher moves every window that shows a page of the old bundle to the same page of the new one.
+   * The URL of a page of the bundle, or of the development server under `electron-vite dev`, for example
+   * `window.loadURL(activeBundle.pageUrl({ hash: '/settings' }))`. After a page-only update, the launcher moves every
+   * window that shows a page of the old bundle to the same page of the new one.
    */
   pageUrl: (options?: LoadOptions) => string
   /** The path of the preload script of the bundle, for `webPreferences.preload`. */
@@ -44,11 +42,6 @@ export interface LoadOptions {
 /** What the launcher gives the bundle. */
 export interface Runtime {
   readonly activeBundle: ActiveBundle
-  /** Adds seconds to the running health check. Pages call it through `delayHealthCheck()`. */
-  delayHealthCheck: (seconds: number) => void
-  loadActiveBundle: (window: BrowserWindow, options?: LoadOptions) => Promise<void>
-  /** Tells the launcher that the bundle works. Pages call it through `markBundleHealthy()`. */
-  markBundleHealthy: () => void
   readonly updater: Updater
 }
 
@@ -73,10 +66,10 @@ export interface Updater {
   /** Forgets the last rollback, after the app told the user. */
   dismissRollback: () => Promise<void>
   /**
-   * The window that owns the state that other windows sync from. It reloads first after a page-only update, and only
-   * its health report counts. Without it, every window reloads at once, and any window reports health.
+   * Records that the bundle works. Call it when the app is usable, for example after the main page reports that its
+   * stores loaded and its first screen rendered. A new bundle that does not call it in time is rolled back.
    */
-  leaderWindow: BrowserWindow | undefined
+  markBundleHealthy: () => void
   /** Calls the listener after a page-only update or a rollback in place switched the bundle. */
   onBundleChange: (listener: (bundle: BundleInfo) => void) => () => void
   /** Calls the listener on every launcher event, for logs. Returns a function that stops listening. */

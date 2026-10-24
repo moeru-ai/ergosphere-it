@@ -252,7 +252,7 @@ The SDK compares the file hashes of the staged bundle and the running bundle, co
 
 | Change | Requires |
 | --- | --- |
-| Only `web` files | `reload`: the windows reload in place, and the process keeps running. Every window that shows a page of the old bundle moves to the same page of the new one, with its query and hash. The window that owns the synced stores (the leader window) reloads first, then the other windows. For transparent stage windows, a later version can swap the window instead of reloading it, to avoid about 300 ms of blank frames. |
+| Only `web` files | `reload`: the windows reload in place, and the process keeps running. Every window that shows a page of the old bundle moves to the same page of the new one, with its query and hash. The windows reload together. For transparent stage windows, a later version can swap the window instead of reloading it, to avoid about 300 ms of blank frames. |
 | `electron-main`, `electron-preload`, or app resources | `restart`: the app restarts at the next safe moment, or when the user confirms. A staged bundle also takes effect on the next start. |
 | A newer installer | `install`: the app quits, and the platform installer runs. |
 
@@ -264,7 +264,7 @@ The apply mode of the app decides when an update takes effect:
 
 ### Health and rollback
 
-- After a reload or a start, the page calls `markBundleHealthy()` when the app is usable, for example after its stores load and the first screen renders. With a leader window, only the report of the leader counts.
+- After a reload or a start, the app calls `markBundleHealthy()` in main when it is usable, for example after its main page reports that its stores loaded and its first screen rendered. The app decides which window or which signal counts.
 - The app sets the timeouts. A page that starts slowly for a good reason asks for more time with `delayHealthCheck(seconds)`, up to five minutes in all for one check. So a short timeout catches a broken bundle fast, and a slow start still passes.
   - The PoC reported healthy when the main window finished loading. A renderer that crashed right after that still counted as healthy.
 - If the report does not arrive in 15 seconds after a reload (the default), the SDK rolls back in place:
@@ -385,8 +385,9 @@ Blind reviews by frontend developers decided the names. Readers who had never se
 1. The terms are bundle, installer, launcher, native version, release ID, channel file, and withdraw. They replace core, shell, host API, `seq`, pointer, and revoke.
 2. The cadence of a channel is gone. A channel that moves once a day is a channel of its own, and CI promotes releases into it.
 3. The launcher detects store builds and the development server. The app does not pass a distribution.
-4. The page reports health with `markBundleHealthy()`.
+4. The app reports health with `updater.markBundleHealthy()` in main.
 5. The app states its settings in `ergo.config.ts` with `defineConfig()`, not in `package.json`. The build reads the file, so the app does not read it at run time.
+6. The library gives a minimal API in main only. How pages reach it, with IPC, Eventa, or another channel, is up to the app. The library has no concept of a main or leader window: every window that shows a page of the old bundle moves to the new one.
 
 ## Open questions
 

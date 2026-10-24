@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { UpdaterStatus } from '@ergosphere-it/electron/vue'
+import type { UpdaterStatus } from '@ergosphere-it/electron/types'
 
 import { computed, ref } from 'vue'
 

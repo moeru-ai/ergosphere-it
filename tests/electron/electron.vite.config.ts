@@ -9,7 +9,7 @@ import { withUpdates } from '@ergosphere-it/electron/vite'
 import { defineConfig } from 'electron-vite'
 
 // The test build compiles the sources of the example, with a test launcher, a test wrapper around its main, and a test
-// shim for the page API.
+// shim for the update composable of the page.
 const example = resolve(import.meta.dirname, '../../examples/electron-app/src')
 
 // The scripts build many releases with these variables. Each release is one variant. The release ID and the version
@@ -28,7 +28,7 @@ export default defineConfig(withUpdates({
     // Only the page reads this constant, so a variant that never reports health is still a page-only update.
     define: { __TEST_NO_HEALTH__: JSON.stringify(env.TEST_NO_HEALTH === '1'), __TEST_SLOW_HEALTH__: JSON.stringify(env.TEST_SLOW_HEALTH === '1') },
     plugins: [Vue(), pageAsset(label, assetBytes)],
-    resolve: { alias: [{ find: /^@ergosphere-it\/electron\/vue$/, replacement: resolve(import.meta.dirname, 'src/vue-shim.ts') }] },
+    resolve: { alias: [{ find: /^\.\/composables\/use-updates$/, replacement: resolve(import.meta.dirname, 'src/use-updates-shim.ts') }] },
     root: join(example, 'renderer'),
   },
 }, {

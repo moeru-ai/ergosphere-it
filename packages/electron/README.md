@@ -98,94 +98,54 @@ Under `electron-vite dev`, the launcher loads the development server, and update
 
 ```ts
 // src/main/index.ts
-import { activeBundle, loadActiveBundle } from '@ergosphere-it/electron/main'
+import { activeBundle } from '@ergosphere-it/electron/main'
 import { app, BrowserWindow } from 'electron'
 
 app.whenReady().then(() => {
   const window = new BrowserWindow({ show: false, webPreferences: { preload: activeBundle.preload, sandbox: true } })
   window.once('ready-to-show', () => window.show())
-  void loadActiveBundle(window)
+  void window.loadURL(activeBundle.pageUrl())
 })
 ```
 
-- `activeBundle` is the bundle that runs now: the bundle of the installer, or a downloaded one. Use `activeBundle.preload` for the preload script, and `activeBundle.resolve(...)` for other files.
-- `loadActiveBundle(window)` loads the page of the active bundle, or the development server. After a page-only update, it loads the window again from the new bundle.
-- The updater checks by itself shortly after start and then every hour. Use `updater.checkForUpdates()` for a "Check for updates" menu item.
+- `activeBundle` is the bundle that runs now: the bundle of the installer, or a downloaded one.
+- `activeBundle.preload` is the path of its preload script.
+- `activeBundle.pageUrl({ page, hash, query })` is the URL of a page: `index.html` by default, another HTML entry with `page`, and a route with `hash`. Under `electron-vite dev`, it is the URL of the development server.
+- Do not build page paths from `import.meta.dirname`. After a page-only update, the main code still runs from the bundle that started, and new windows would load old pages.
 
-## 4. Expose the updater to the page
+After a page-only update, the launcher moves every window that shows a page of the old bundle to the same page of the new one. Each window keeps its query and hash, so it stays on the route that it shows then. The app does not register its windows. `updater.onBundleChange(listener)` tells code that keeps paths of the bundle.
 
-```ts
-// src/preload/index.ts
-import { exposeUpdater } from '@ergosphere-it/electron/preload'
+Transparent windows show a short blank frame while they reload.
 
-exposeUpdater()
-```
+## 4. Connect the updater to your pages
 
-It gives the page `window.ergosphereIt` through `contextBridge`. The page can read the status, check, apply the ready update, and report health. It cannot change the channel or install anything that the launcher did not verify.
+The updater lives in the main process. How your pages reach it is up to the app: IPC, [Eventa](https://github.com/moeru-ai/eventa), or any channel that the app already has. The library adds no IPC channel and no global to the page.
 
-## 5. Report health, and show updates in the page
+The updater in main has what a page needs:
 
-```vue
-<!-- src/renderer/src/app.vue -->
-<script setup lang="ts">
-import { markBundleHealthy, useUpdater } from '@ergosphere-it/electron/vue'
-import { onMounted } from 'vue'
+| Member | Use |
+| --- | --- |
+| `updater.status`, `updater.onStatus(listener)` | The status for an update notice. It is plain data, so it can go over IPC as it is. Pages import its type from `@ergosphere-it/electron/types`. |
+| `updater.applyUpdate()` | Applies the ready update: a reload, a restart, or an install. Call it when the user agrees. |
+| `updater.checkForUpdates()` | A manual check, for example from a menu. Automatic checks run without it. |
+| `updater.dismissRollback()` | Forgets the rollback notice after the user saw it. |
+| `updater.markBundleHealthy()` | Tells the launcher that the bundle works. |
+| `updater.delayHealthCheck(seconds)` | Gives a slow start more time. |
 
-const { applyUpdate, status } = useUpdater()
-const labels = { install: 'Install and restart', reload: 'Reload now', restart: 'Restart now' }
+[The example app](../../examples/electron-app) connects its page with about 20 lines of IPC: `src/main/index.ts`, `src/preload/index.ts`, and `src/renderer/composables/use-updates.ts`.
 
-onMounted(async () => {
-  await loadStores() // your own startup work
-  markBundleHealthy()
-})
-</script>
+## 5. Report health
 
-<template>
-  <div v-if="status.status === 'downloading'">
-    Downloading {{ status.update.version }}: {{ status.percent }}%
-  </div>
-  <div v-else-if="status.status === 'ready'">
-    Version {{ status.update.version }} is ready.
-    <button @click="applyUpdate()">
-      {{ labels[status.update.requires] }}
-    </button>
-  </div>
-</template>
-```
-
-Call `markBundleHealthy()` when the app is usable: after the stores load and the first screen renders, not only after mount. A new bundle that does not call it in time goes back to the bundle before it:
+Call `updater.markBundleHealthy()` when the app is usable: for example when the main page tells main that its stores loaded and its first screen rendered, not only that it mounted. The app decides which window or which signal counts. A new bundle that does not report in time goes back to the bundle before it:
 
 - After a page-only update, the windows reload. Without a report in `health.reloadTimeout` seconds (15 by default), the windows go back to the bundle before it in place.
 - After a restart, the launcher waits `health.launchTimeout` seconds (60 by default). Without a report, it restarts. After `health.maxLaunchAttempts` starts (3 by default), it leaves the bundle.
 
-When a start is slow for a good reason, for example a large model, ask for more time. Keep the timeouts short, so a broken bundle still goes back fast:
-
-```ts
-import { delayHealthCheck, markBundleHealthy } from '@ergosphere-it/electron/vue'
-
-delayHealthCheck(30) // seconds
-await loadModel()
-markBundleHealthy()
-```
-
-`delayHealthCheck()` adds at most five minutes in all to one health check, so a bundle that hangs still goes back.
-
-Without Vue, use `@ergosphere-it/electron/renderer`: `markBundleHealthy()`, `delayHealthCheck(seconds)`, `watchUpdaterStatus(listener)`, and `getPageUpdater()`. In a page without `exposeUpdater()`, for example a web build of the same page, these functions do nothing.
-
-## Many windows
-
-After a page-only update, the launcher moves every window that shows a page of the old bundle to the same page of the new one. It keeps the query and the hash, so each window stays on the route that it shows then. Windows do not need to register.
-
-- **Load pages from the active bundle.** Use `loadActiveBundle(window, { hash: '/settings' })`, or, when the app has its own loader, `activeBundle.pageUrl({ hash: '/settings' })`. Do not build page paths from `import.meta.dirname`: after a page-only update, the main code still runs from the bundle that started, and new windows would load old pages.
-- **Load other HTML entries** with `page`, for example `loadActiveBundle(window, { page: 'beat-sync.html' })`.
-- **Name the leader window.** `updater.leaderWindow = window` names the window that owns the state that other windows sync from. It reloads first, and only its health report counts. Without it, every window reloads at once, and the first report of any window counts.
-- **Follow the switch.** `updater.onBundleChange(listener)` calls the listener after a page-only update or a rollback in place, for code that keeps paths of the bundle.
-
-Transparent windows show a short blank frame while they reload.
+When a start is slow for a good reason, for example a large model, call `updater.delayHealthCheck(30)` first. It adds at most five minutes in all to one health check, so a bundle that hangs still goes back. Keep the timeouts short, so a broken bundle goes back fast.
 
 ## The status
 
-`status.status` is one of these values. Main, preload, and page use the same type, `UpdaterStatus`.
+`status.status` is one of these values. Pages and preload scripts import the type `UpdaterStatus` from `@ergosphere-it/electron/types`, which has types only, and receive the data from main.
 
 | Status | What to show | Fields |
 | --- | --- | --- |
@@ -301,10 +261,8 @@ Set `ERGOSPHERE_IT_LOG` to a file path. The launcher writes each event as one JS
 | --- | --- | --- |
 | `@ergosphere-it/electron/config` | `ergo.config.ts` | `defineConfig(config)` |
 | `@ergosphere-it/electron/vite` | `electron.vite.config.ts` | `withUpdates(config, options)` |
-| `@ergosphere-it/electron/main` | main | `activeBundle` (with `pageUrl()`), `loadActiveBundle(window, options)`, `updater` (with `leaderWindow`, `onBundleChange()`, `delayHealthCheck()`), `markBundleHealthy()` |
-| `@ergosphere-it/electron/preload` | preload | `exposeUpdater()` |
-| `@ergosphere-it/electron/renderer` | page | `markBundleHealthy()`, `delayHealthCheck(seconds)`, `watchUpdaterStatus(listener)`, `getPageUpdater()` |
-| `@ergosphere-it/electron/vue` | page with Vue | `useUpdater()`, `markBundleHealthy()`, `delayHealthCheck(seconds)` |
+| `@ergosphere-it/electron/main` | main | `activeBundle`, `updater`, and the status types |
+| `@ergosphere-it/electron/types` | page, preload | the status types only, with no code |
 | `ergosphere-it` | CI | the command above |
 | `@ergosphere-it/electron/release` | CI scripts | `bundleReleaseFromBuild()`, `installerReleaseFromBuild()`, `readBuildInfo()` |
 | `@ergosphere-it/electron/launcher` | a custom launcher | `startLauncher(options)` |

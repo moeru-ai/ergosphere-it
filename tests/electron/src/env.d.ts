@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference path="../../../examples/electron-app/src/env.d.ts" />
 /// <reference types="@ergosphere-it/electron/virtual" />
 
 declare global {
