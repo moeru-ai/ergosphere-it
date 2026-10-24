@@ -7,12 +7,12 @@ import Vue from '@vitejs/plugin-vue'
 
 import { defineConfig } from 'electron-vite'
 
-// The main process, the preload, and the pages are the ones of the electron-app example. This example adds only the
-// launcher with the Sparkle installer.
+// The main process, the preload, and the pages are the ones of the electron-app example. This example changes only the
+// installer of macOS, in ergo.config.ts, and the package config.
 const example = resolve(import.meta.dirname, '../electron-app/src')
 
 export default defineConfig({
-  main: { plugins: [ergosphereMain({ entry: join(example, 'main/index.ts'), launcher: 'src/launcher.ts' })] },
+  main: { plugins: [ergosphereMain({ entry: join(example, 'main/index.ts') })] },
   preload: { plugins: [ergospherePreload({ entry: join(example, 'preload/index.ts') })] },
   renderer: {
     // electron-vite looks only in src/renderer by itself, so the input names the pages of the other example.

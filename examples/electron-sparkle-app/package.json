@@ -19,7 +19,6 @@
   },
   "devDependencies": {
     "@ergosphere-it/protocol": "workspace:*",
-    "@ergosphere-it/publish": "workspace:*",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "electron": "catalog:",
