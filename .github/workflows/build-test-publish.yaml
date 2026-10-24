@@ -1,0 +1,17 @@
+name: Build, Test, and Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-test-publish:
+    name: Build, Test, and Publish
+    uses: ./.github/workflows/reusable-build-test-publish.yaml
+    with:
+      publish: true
+    permissions:
+      contents: read
+      id-token: write
+    secrets: inherit
