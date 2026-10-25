@@ -16,6 +16,7 @@
   --line-number: #4a4844;
 
   /* Devices are raised plastic; wells are sunk into them. */
+  --device: #18181f;
   --device-hi: #1d1d26;
   --device-lo: #131319;
   --tile-hi: #23232c;
@@ -32,7 +33,7 @@
   --code-bg: #0d0d12;
   --hover-line: rgb(255 255 255 / 4%);
   --wire: rgb(236 233 226 / 14%);
-  --shadow: rgb(0 0 0 / 40%);
+  --shadow: rgb(0 0 0 / 22%);
 
   /* Accents (cyan, orange, red, green) come from src/palette.ts. */
   color-scheme: dark;
@@ -51,6 +52,7 @@
   --muted: #62626a;
   --faint: #8d8d95;
   --line-number: #b4b4bb;
+  --device: #ffffff;
   --device-hi: #ffffff;
   --device-lo: #ececef;
   --tile-hi: #ffffff;
@@ -67,7 +69,7 @@
   --code-bg: #fbfbfc;
   --hover-line: rgb(0 0 0 / 4%);
   --wire: rgb(24 24 27 / 20%);
-  --shadow: rgb(20 20 30 / 12%);
+  --shadow: rgb(20 20 30 / 6%);
   color-scheme: light;
 }
 

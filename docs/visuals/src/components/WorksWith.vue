@@ -36,7 +36,7 @@ import { theme } from '../theme'
 
 .label {
   margin: 0;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 14px;
 }
 

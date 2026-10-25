@@ -80,8 +80,14 @@ onMounted(() => {
   })
   if (wrap.value)
     observer.observe(wrap.value)
-  if (props.stillAt !== undefined)
+  if (props.stillAt !== undefined) {
+    // The banner script records both rounds frame by frame through this hook: 0 to 2 × ROUND seconds.
+    window.__howAt = (t: number) => {
+      roundIndex.value = Math.floor(t / ROUND)
+      time.value = t % ROUND
+    }
     return
+  }
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     time.value = 10.4
     return
@@ -128,7 +134,7 @@ const toneOf = (stored: boolean, i: number): string => (i >= 6 ? (stored ? 'new'
           <span class="led" :class="{ lit: frame.ciGlow > 0.2 }" />
         </div>
         <p class="tag" :style="{ left: `${CI.x}px`, top: `${CI.y + CI.h + 12}px` }">
-          ci
+          CI
         </p>
 
         <!-- bucket: objects, manifests, channel -->
@@ -138,16 +144,16 @@ const toneOf = (stored: boolean, i: number): string => (i >= 6 ? (stored ? 'new'
           <div class="tray" style="top: 184px; height: 62px" />
         </div>
         <p class="tag" :style="{ left: `${BUCKET.x}px`, top: `${BUCKET.y + BUCKET.h + 12}px` }">
-          bucket
+          Bucket
         </p>
         <p class="tag small" :style="{ left: `${BUCKET.x + 25}px`, top: `${BUCKET.y + 16}px` }">
-          objects
+          Objects
         </p>
         <p class="tag small" :style="{ left: `${BUCKET.x + 25}px`, top: `${BUCKET.y + 124}px` }">
-          manifests
+          Manifests
         </p>
         <p class="tag small" :style="{ left: `${LAMP.x + 22}px`, top: `${LAMP.y - 8}px` }">
-          channel
+          Channel
         </p>
         <div
           v-for="(o, i) in OBJECTS"
@@ -178,7 +184,7 @@ const toneOf = (stored: boolean, i: number): string => (i >= 6 ? (stored ? 'new'
           :style="{ left: `${l.x}px`, top: `${l.y}px`, background: `color-mix(in srgb, var(--cyan) ${frame.localFlash * 100}%, var(--surface-3))` }"
         />
         <p class="tag" :style="{ left: `${APP.x}px`, top: `${APP.y + APP.size + 12}px` }">
-          your app
+          Your app
         </p>
 
         <svg class="rings" :width="STAGE.width" :height="STAGE.height" :viewBox="`0 0 ${STAGE.width} ${STAGE.height}`">
@@ -267,7 +273,7 @@ h2 {
   position: relative;
   overflow: hidden;
   border-radius: 28px;
-  background: radial-gradient(90% 120% at 50% 0%, var(--figure-hi), var(--figure-lo));
+  background: var(--surface);
 }
 
 .stage {
@@ -286,13 +292,13 @@ h2 {
 }
 
 .wire {
-  height: 1px;
+  height: 2px;
   background: var(--wire);
 }
 
 .box {
   border-radius: 32px;
-  background: linear-gradient(160deg, var(--device-hi), var(--device-lo));
+  background: var(--device);
   box-shadow: 0 24px 48px var(--shadow);
   transition: box-shadow 0.3s;
 }
@@ -326,13 +332,13 @@ h2 {
 }
 
 .tag {
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 13px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 15px;
 }
 
 .tag.small {
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .square {
@@ -396,7 +402,7 @@ h2 {
 .socket {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 40%, var(--well-hi), var(--well-lo));
+  background: var(--well-lo);
   box-shadow: inset 0 2px 8px var(--well-shadow);
 }
 
@@ -510,7 +516,7 @@ h2 {
 }
 
 .step .num {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 11px;
 }
 

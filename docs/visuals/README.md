@@ -20,22 +20,23 @@ pnpm -F @ergosphere-it/docs-visuals dev
 
 ## Banners
 
-The README shows four banners, each in a dark and a light theme, from `docs/assets/banners`. The hero is animated. Each banner has rounded corners on a transparent ground, so it sits well on any README background. Render them again after a change of the page:
+The README shows four banners and six section figures, each in a dark and a light theme, from `docs/assets/banners`. The hero and how-it-works are animated. Each banner has rounded corners on a transparent ground, so it sits well on any README background. Render them again after a change of the page:
 
 ```bash
 pnpm -F @ergosphere-it/docs-visuals banners
 ```
 
-The script builds the page and serves it with `vite preview`. Still banners are screenshots of `?capture=<scene>` from headless Chrome at 2x, converted with `cwebp`. The hero is drawn one frame at a time through the Chrome DevTools protocol, 15 frames a second, and `img2webp` joins the frames into a looping, lossless WebP: lossy frames show bands in the dark gradients. Both tools come with `brew install webp`. `CHROME` points to another Chrome binary.
+The script builds the page and serves it with `vite preview`. Still banners are screenshots of `?capture=<scene>` from headless Chrome at 2x, converted with `cwebp`. The animated ones are drawn one frame at a time through the Chrome DevTools protocol, and `img2webp` joins the frames into a looping, lossless WebP: lossy frames show bands in the dark gradients. The hero plays its 11-second loop at 15 frames a second, and how-it-works plays both rounds of the machine, 26 seconds, at 12. Both tools come with `brew install webp`. `CHROME` points to another Chrome binary.
 
 | Banner | Size | URL |
 | --- | --- | --- |
 | hero, animated | 1440×480 (3:1) | `?capture=hero` |
 | setup | 1440×480 (3:1) | `?capture=setup` |
-| how-it-works | 1280×640 (2:1) | `?capture=how&at=6.6&round=0` |
+| how-it-works, animated | 1280×640 (2:1) | `?capture=how&at=6.6&round=0` |
 | features | 1440×480 (3:1) | `?capture=features` |
+| figure-keys, figure-build, figure-windows, figure-prompt, figure-host, figure-publish | 1440×480 (3:1) | `?capture=figure-<name>` |
 
-`src/capture.ts` holds the sizes. Add `&theme=light` for the light theme, and `&at=<seconds>` for a still hero. `scripts/sync-readme.ts` points the banners of the package README at raw.githubusercontent.com, so they show on npm too.
+`src/capture.ts` holds the sizes. `?figures` shows the six figures under the README headings they belong to. Add `&theme=light` for the light theme, and `&at=<seconds>` for a still hero. `scripts/sync-readme.ts` points the banners of the package README at raw.githubusercontent.com, so they show on npm too.
 
 ## Credits
 

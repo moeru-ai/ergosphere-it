@@ -2,6 +2,12 @@
 import type { CaptureScene } from '../capture'
 
 import { CAPTURE_SIZES } from '../capture'
+import FigureBuild from '../figures/FigureBuild.vue'
+import FigureHost from '../figures/FigureHost.vue'
+import FigureKeys from '../figures/FigureKeys.vue'
+import FigurePrompt from '../figures/FigurePrompt.vue'
+import FigurePublish from '../figures/FigurePublish.vue'
+import FigureWindows from '../figures/FigureWindows.vue'
 import CodeTour from './CodeTour.vue'
 import FeatureCards from './FeatureCards.vue'
 import HeroFigure from './HeroFigure.vue'
@@ -20,11 +26,22 @@ const props = defineProps<{
 }>()
 
 const size = CAPTURE_SIZES[props.scene]
+
+const FIGURES = {
+  'figure-build': FigureBuild,
+  'figure-host': FigureHost,
+  'figure-keys': FigureKeys,
+  'figure-prompt': FigurePrompt,
+  'figure-publish': FigurePublish,
+  'figure-windows': FigureWindows,
+} as const
+const figure = props.scene in FIGURES ? FIGURES[props.scene as keyof typeof FIGURES] : undefined
 </script>
 
 <template>
   <div class="frame" :class="scene" :style="{ width: `${size.width}px`, height: `${size.height}px` }">
-    <HeroFigure v-if="scene === 'hero'" capture :capture-at="at" />
+    <component :is="figure" v-if="figure" />
+    <HeroFigure v-else-if="scene === 'hero'" capture :capture-at="at" />
     <CodeTour v-else-if="scene === 'setup'" />
     <HowItWorks v-else-if="scene === 'how'" :still-at="at ?? 6.6" :still-round="round ?? 0" />
     <FeatureCards v-else />
@@ -42,8 +59,14 @@ const size = CAPTURE_SIZES[props.scene]
   background: var(--bg);
 }
 
-.frame.hero {
+.frame.hero,
+.frame[class*='figure-'] {
   padding: 0;
+}
+
+/* A capture draws exact frames: nothing eases on its own between them. */
+.frame.how :deep(*) {
+  transition: none !important;
 }
 
 /* At 3:1 the file keys do not fit. The banner shows one file, and its name says which. */

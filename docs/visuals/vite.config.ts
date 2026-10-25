@@ -11,7 +11,7 @@ import { defineConfig } from 'vite'
 import { SAMPLES } from './src/code/samples.ts'
 import { CODE_THEMES } from './src/code/theme.ts'
 import { paletteCss } from './src/palette.ts'
-import { CHECK_ICON, STACK, THEME_ICONS } from './src/stack/stack.ts'
+import { CHECK_ICON, FIGURE_ICONS, STACK, THEME_ICONS } from './src/stack/stack.ts'
 
 const HIGHLIGHTED = 'virtual:highlighted-samples'
 const ICONS = 'virtual:stack-icons'
@@ -56,7 +56,7 @@ function stackIcons(): Plugin {
     load(id) {
       if (id !== `\0${ICONS}`)
         return
-      const data = Object.fromEntries([...STACK.flatMap(s => [s.icon, s.iconLight ?? s.icon]), CHECK_ICON, ...Object.values(THEME_ICONS)].map((name) => {
+      const data = Object.fromEntries([...STACK.flatMap(s => [s.icon, s.iconLight ?? s.icon]), CHECK_ICON, ...Object.values(THEME_ICONS), ...Object.values(FIGURE_ICONS)].map((name) => {
         const [prefix, icon] = name.split(':') as [keyof typeof ICON_SETS, string]
         const found = getIconData(ICON_SETS[prefix], icon)
         if (!found)

@@ -152,7 +152,7 @@ h2 {
 }
 
 .key .num {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 11px;
 }
 
@@ -189,7 +189,7 @@ h2 {
 
 .file {
   padding: 10px 16px 12px;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -267,7 +267,7 @@ code {
 }
 
 .note .where {
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
   transition: color 0.25s;
 }

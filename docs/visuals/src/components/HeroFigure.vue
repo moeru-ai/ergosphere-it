@@ -154,16 +154,16 @@ const repo = 'https://github.com/moeru-ai/ergosphere-it'
   <header ref="hero" class="hero" :class="{ capture }">
     <div ref="stage" class="stage" aria-hidden="true">
       <div class="channel" :style="{ left: `${APP.x + APP.size}px`, top: `${SLOT_Y}px`, width: `${STAGE.width - APP.x - APP.size + 60}px` }" />
-      <p class="label mono channel-label" :style="{ left: `${APP.x + APP.size + 60}px`, top: `${SLOT_Y - 34}px` }">
-        channel
+      <p class="label channel-label" :style="{ left: `${APP.x + APP.size + 60}px`, top: `${SLOT_Y - 34}px` }">
+        Channel
       </p>
 
       <div class="app" :style="{ left: `${APP.x}px`, top: `${APP.y}px`, width: `${APP.size}px`, height: `${APP.size}px` }">
         <div class="socket" :style="{ left: `${APP.size / 2 - 64}px`, top: `${APP.size / 2 - 64}px` }" />
         <div class="socket spare" :style="{ left: '12px', top: `${APP.size - 56}px` }" />
       </div>
-      <p class="label mono" :style="{ left: `${APP.x}px`, top: `${APP.y + APP.size + 14}px` }">
-        your app
+      <p class="label" :style="{ left: `${APP.x}px`, top: `${APP.y + APP.size + 14}px` }">
+        Your app
       </p>
 
       <div v-for="i in 3" :key="i" ref="discEls" class="disc mono" data-tone="new">
@@ -252,14 +252,14 @@ const repo = 'https://github.com/moeru-ai/ergosphere-it'
 
 .channel {
   position: absolute;
-  height: 1px;
+  height: 2px;
   background: linear-gradient(90deg, rgb(var(--cyan-rgb) / 45%), rgb(var(--cyan-rgb) / 10%));
 }
 
 .app {
   position: absolute;
   border-radius: 44px;
-  background: linear-gradient(160deg, var(--device-hi), var(--device-lo));
+  background: var(--device);
   box-shadow: 0 30px 60px var(--shadow);
 }
 
@@ -269,7 +269,7 @@ const repo = 'https://github.com/moeru-ai/ergosphere-it'
   width: 128px;
   height: 128px;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 40%, var(--well-hi), var(--well-lo));
+  background: var(--well-lo);
   box-shadow: inset 0 2px 8px var(--well-shadow);
 }
 
@@ -341,8 +341,8 @@ const repo = 'https://github.com/moeru-ai/ergosphere-it'
 .label {
   position: absolute;
   margin: 0;
-  color: var(--faint);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 15px;
 }
 
 .channel-label {

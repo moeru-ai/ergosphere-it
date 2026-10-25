@@ -104,6 +104,20 @@ The package also installs the `ergosphere-it` command for CI.
 
 ### Create a signing key
 
+<picture>
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-keys-dark.webp"
+    media="(prefers-color-scheme: dark)"
+  />
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-keys-light.webp"
+    media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
+  />
+  <img width="100%" alt="ergosphere-it keygen makes two keys. The public key goes into ergo.config.ts, and the app checks every bundle with it. The private key goes into a CI secret, and CI signs every release with it." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-keys-light.webp" />
+</picture>
+
 ```bash
 pnpm exec ergosphere-it keygen
 ```
@@ -156,6 +170,20 @@ The build reads the file and writes the settings into the launcher. The app does
 The app never states the product name, the release IDs, or the platform. The product name is the electron-builder `appId`, or the package name. The release IDs come from the clock at build time. The platform comes from the running system.
 
 ### Add the build plugins
+
+<picture>
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-build-dark.webp"
+    media="(prefers-color-scheme: dark)"
+  />
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-build-light.webp"
+    media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
+  />
+  <img width="100%" alt="A plugin goes into each process of the electron-vite build: main, preload, and renderer. The build writes a launcher that ships in the installer, and a bundle that updates over the air." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-build-light.webp" />
+</picture>
 
 Add one plugin to each process in the electron-vite config:
 
@@ -211,6 +239,20 @@ Under `electron-vite dev`, the launcher loads the development server, and update
 
 ### Open windows from the active bundle
 
+<picture>
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-windows-dark.webp"
+    media="(prefers-color-scheme: dark)"
+  />
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-windows-light.webp"
+    media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
+  />
+  <img width="100%" alt="A window loads its page with window.loadURL(activeBundle.pageUrl()). After a page-only update, the window reloads on the same route." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-windows-light.webp" />
+</picture>
+
 ```ts
 // src/main/index.ts
 import { activeBundle } from '@ergosphere-it/electron/main'
@@ -232,6 +274,20 @@ Do not build page paths from `import.meta.dirname` or `__dirname`. After a page-
 After a page-only update, the launcher moves every window that shows a page of the old bundle to the same page of the new one. Each window keeps its query and hash, so it stays on its route. You do not register windows.
 
 ### Connect the updater to your pages
+
+<picture>
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-prompt-dark.webp"
+    media="(prefers-color-scheme: dark)"
+  />
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-prompt-light.webp"
+    media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
+  />
+  <img width="100%" alt="An update widget follows updater.status: it shows the download progress, offers Restart to update with updater.applyUpdate(), and shows a rollback notice until updater.dismissRollback()." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-prompt-light.webp" />
+</picture>
 
 The updater lives in the main process. How your pages reach it is up to you: IPC, [Eventa](https://github.com/moeru-ai/eventa), or any channel that the app already has. The package adds no IPC channel and no global to your pages.
 
@@ -327,6 +383,20 @@ On macOS, Sparkle can install new installers instead of electron-updater. It dow
 
 ### Host the updates
 
+<picture>
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-host-dark.webp"
+    media="(prefers-color-scheme: dark)"
+  />
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-host-light.webp"
+    media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
+  />
+  <img width="100%" alt="The bucket can live on Amazon S3, Cloudflare R2, Garage, any service with the S3 API, or a directory. A CDN serves it, and apps read it over HTTPS." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-host-light.webp" />
+</picture>
+
 The app reads static files from `feedUrl`:
 
 ```text
@@ -343,6 +413,20 @@ Any static host works. A bucket behind a CDN is a good fit:
 - Keep the `Cache-Control` headers that the CLI sets: objects and manifests are immutable, and channel files are `no-store`. A CDN then caches the large files forever and never serves an old channel file.
 
 ### Publish from CI
+
+<picture>
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-publish-dark.webp"
+    media="(prefers-color-scheme: dark)"
+  />
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-publish-light.webp"
+    media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
+  />
+  <img width="100%" alt="Two flows in CI. An OTA update publishes a bundle to 20% of the beta channel. A full release publishes installers with electron-builder, and ergosphere-it register installer records them." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-publish-light.webp" />
+</picture>
 
 Each command reads the build output in `out/`, signs with `UPDATES_SIGNING_KEY`, and writes to `--bucket`, or to `UPDATES_BUCKET`:
 

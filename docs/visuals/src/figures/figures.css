@@ -1,0 +1,165 @@
+/*
+ * Shared parts of the README figures: devices, wells, discs, chips, and wires, in the page palette.
+ * A figure is 1440 × 480 and places its parts by absolute position.
+ */
+
+.f-figure {
+  position: relative;
+  overflow: hidden;
+  width: 1440px;
+  height: 480px;
+  border-radius: 28px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+.f-figure > * {
+  position: absolute;
+  margin: 0;
+}
+
+/* Flat fills: depth comes from a soft shadow, not from a gradient. */
+.f-device {
+  border-radius: 28px;
+  background: var(--device);
+  box-shadow: 0 10px 28px var(--shadow);
+}
+
+.f-well {
+  display: grid;
+  border-radius: 50%;
+  background: var(--well-lo);
+  box-shadow: inset 0 2px 6px var(--well-shadow);
+  place-items: center;
+}
+
+.f-disc {
+  display: grid;
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  place-items: center;
+}
+
+.f-disc.run {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.f-disc.new {
+  background: var(--cyan);
+  color: var(--on-cyan);
+}
+
+.f-tile {
+  display: grid;
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
+  background: var(--device);
+  box-shadow: 0 8px 20px var(--shadow);
+  font-size: 38px;
+  place-items: center;
+}
+
+.f-label {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.f-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* Prose in a figure: product names and sentences, in the text face. Code stays in .f-label and .f-chip. */
+.f-note {
+  color: var(--soft);
+  font-size: 15px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.f-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--soft);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.f-plate {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  left: 14px;
+  padding: 7px 0;
+  border-radius: 12px;
+  background: var(--well-lo);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  text-align: center;
+}
+
+.f-lamp {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 7px rgb(var(--orange-rgb) / 28%);
+}
+
+.f-wires {
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.f-wires path {
+  fill: none;
+  stroke: var(--wire);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+/* A row of chips joined by short wires, for steps that read left to right. */
+.f-row {
+  display: flex;
+  align-items: center;
+}
+
+.f-row .f-line {
+  width: 44px;
+  height: 2.5px;
+  flex: none;
+  background: var(--wire);
+}
+
+.f-check {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--green);
+  color: var(--on-green);
+  font-size: 14px;
+  place-items: center;
+}
+
+/* A vertical step: a short line down with an arrowhead. */
+.f-down {
+  display: block;
+  width: 12px;
+  height: 36px;
+  flex: none;
+  color: var(--wire);
+}

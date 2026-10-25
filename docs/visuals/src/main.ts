@@ -7,5 +7,6 @@ import '@fontsource/gabarito/500.css'
 import '@fontsource/gabarito/600.css'
 import '@fontsource/maple-mono/400.css'
 import './style.css'
+import './figures/figures.css'
 
 createApp(App).mount('#app')

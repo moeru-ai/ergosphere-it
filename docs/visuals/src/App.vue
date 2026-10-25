@@ -7,6 +7,7 @@ import CodeTour from './components/CodeTour.vue'
 import FeatureCards from './components/FeatureCards.vue'
 import HeroFigure from './components/HeroFigure.vue'
 import HowItWorks from './components/HowItWorks.vue'
+import FigureGallery from './figures/FigureGallery.vue'
 
 /**
  * `?capture=<scene>` renders one still frame for the README banners: hero, setup, how, or features, at the sizes in capture.ts.
@@ -15,6 +16,8 @@ import HowItWorks from './components/HowItWorks.vue'
  */
 const params = new URLSearchParams(location.search)
 const capture = params.has('capture')
+/** `?figures` shows the README figures for review. */
+const gallery = params.has('figures')
 const scene = (Object.keys(CAPTURE_SIZES) as CaptureScene[]).find(s => s === params.get('capture')) ?? 'hero'
 const at = params.has('at') ? Number(params.get('at')) : undefined
 const round = params.has('round') ? Number(params.get('round')) : undefined
@@ -28,6 +31,7 @@ const repo = 'https://github.com/moeru-ai/ergosphere-it'
 
 <template>
   <CaptureFrame v-if="capture" :scene="scene" :at="at" :round="round" />
+  <FigureGallery v-else-if="gallery" />
   <template v-else>
     <HeroFigure />
     <main>

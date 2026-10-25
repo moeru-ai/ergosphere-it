@@ -1,7 +1,7 @@
 // Renders the README banners, in the dark and the light theme, as WebP in docs/assets/banners.
 // It builds the page and serves it with vite preview. Still banners are screenshots of ?capture=<scene> from headless
-// Chrome at 2x, converted with cwebp. The hero is animated: Chrome draws one frame of its loop at a time through the
-// DevTools protocol, and img2webp joins the frames into a looping WebP.
+// Chrome at 2x, converted with cwebp. The hero and the machine are animated: Chrome draws one frame of the loop at a
+// time through the DevTools protocol, and img2webp joins the frames into a looping, lossless WebP.
 //
 //   pnpm -F @ergosphere-it/docs-visuals banners
 //
@@ -23,6 +23,7 @@ import { build, preview } from 'vite'
 
 import { CAPTURE_SIZES } from '../src/capture.ts'
 import { LOOP } from '../src/hero/timeline.ts'
+import { ROUND } from '../src/how/timeline.ts'
 
 // Async, so the preview server in this process keeps answering while Chrome loads the page.
 const run = promisify(execFile)
@@ -36,12 +37,21 @@ const THEMES = ['dark', 'light'] as const
 /** Still banners: the file name, the scene, and the query that freezes it. */
 const STILLS: { file: string, query: string, scene: CaptureScene }[] = [
   { file: 'setup', query: 'capture=setup', scene: 'setup' },
-  { file: 'how-it-works', query: 'capture=how&at=6.6&round=0', scene: 'how' },
   { file: 'features', query: 'capture=features', scene: 'features' },
+  // The figures of the README sections.
+  ...(['keys', 'build', 'windows', 'prompt', 'host', 'publish'] as const).map(name => ({
+    file: `figure-${name}`,
+    query: `capture=figure-${name}`,
+    scene: `figure-${name}` as const,
+  })),
 ]
 
-/** Frames per second of the animated hero. */
-const FPS = 15
+/** Animated banners: the hook that draws one moment, how long one loop is, and how many frames a second. */
+const ANIMATED: { duration: number, file: string, fps: number, hook: string, query: string, scene: CaptureScene }[] = [
+  { duration: LOOP, file: 'hero', fps: 15, hook: '__heroAt', query: 'capture=hero', scene: 'hero' },
+  // Both rounds: one keeps the new bundle, one sends it back.
+  { duration: 2 * ROUND, file: 'how-it-works', fps: 12, hook: '__howAt', query: 'capture=how&at=0', scene: 'how' },
+]
 
 // A built page, not the dev server: the dev server can reload the page while it optimizes dependencies,
 // and headless Chrome then never finishes.
@@ -105,9 +115,9 @@ class DevTools {
   }
 }
 
-async function animatedHero(theme: string): Promise<void> {
-  const { height, width } = CAPTURE_SIZES.hero
-  const profile = join(work, `profile-hero-${theme}`)
+async function animated({ duration, file, fps, hook, query, scene }: typeof ANIMATED[number], theme: string): Promise<void> {
+  const { height, width } = CAPTURE_SIZES[scene]
+  const profile = join(work, `profile-${file}-${theme}`)
   const browser = spawn(chrome, [
     '--headless=new',
     '--disable-gpu',
@@ -141,26 +151,26 @@ async function animatedHero(theme: string): Promise<void> {
     // Transparent around the rounded corners of the banner.
     await devtools.send('Emulation.setDefaultBackgroundColorOverride', { color: { a: 0, b: 0, g: 0, r: 0 } })
     await devtools.send('Page.enable')
-    await devtools.send('Page.navigate', { url: `${origin}/?capture=hero&theme=${theme}` })
+    await devtools.send('Page.navigate', { url: `${origin}/?${query}&theme=${theme}` })
     await devtools.evaluate(`new Promise(async (resolve) => {
-      while (!window.__heroAt) await new Promise(r => setTimeout(r, 50))
+      while (!window.${hook}) await new Promise(r => setTimeout(r, 50))
       await document.fonts.ready
       resolve(true)
     })`)
 
     const frames: string[] = []
-    const count = Math.round(LOOP * FPS)
+    const count = Math.round(duration * fps)
     for (let i = 0; i < count; i++) {
-      await devtools.evaluate(`window.__heroAt(${i / FPS}); new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`)
+      await devtools.evaluate(`window.${hook}(${i / fps}); new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`)
       const { data } = await devtools.send<{ data: string }>('Page.captureScreenshot', { format: 'png' })
-      const frame = join(work, `hero-${theme}-${String(i).padStart(4, '0')}.png`)
+      const frame = join(work, `${file}-${theme}-${String(i).padStart(4, '0')}.png`)
       writeFileSync(frame, Buffer.from(data, 'base64'))
       frames.push(frame)
     }
     devtools.close()
 
-    const webp = join(out, `hero-${theme}.webp`)
-    await run('img2webp', ['-loop', '0', '-lossless', '-q', '100', '-m', '4', '-d', String(Math.round(1000 / FPS)), ...frames, '-o', webp], { maxBuffer: 1 << 26 })
+    const webp = join(out, `${file}-${theme}.webp`)
+    await run('img2webp', ['-loop', '0', '-lossless', '-q', '100', '-m', '4', '-d', String(Math.round(1000 / fps)), ...frames, '-o', webp], { maxBuffer: 1 << 26 })
     console.info(webp)
   }
   finally {
@@ -192,7 +202,8 @@ async function still(file: string, query: string, scene: CaptureScene, theme: st
 
 try {
   for (const theme of THEMES) {
-    await animatedHero(theme)
+    for (const a of ANIMATED)
+      await animated(a, theme)
     for (const s of STILLS)
       await still(s.file, s.query, s.scene, theme)
   }

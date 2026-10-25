@@ -13,8 +13,8 @@ const installs = Array.from({ length: 10 }, (_, i) => i)
           <div class="box">
             <div class="disc out" />
             <div class="disc in" />
-            <div class="plate mono">
-              launcher
+            <div class="plate">
+              Launcher
             </div>
           </div>
         </div>
@@ -37,14 +37,14 @@ const installs = Array.from({ length: 10 }, (_, i) => i)
 
       <article class="card" tabindex="0">
         <div class="figure files-figure" aria-hidden="true">
-          <div class="sheet mono" style="--n: 0">
-            files
+          <div class="sheet" style="--n: 0">
+            Files
           </div>
-          <div class="sheet mono" style="--n: 1">
-            manifests
+          <div class="sheet" style="--n: 1">
+            Manifests
           </div>
-          <div class="sheet mono channel" style="--n: 2">
-            channel
+          <div class="sheet channel" style="--n: 2">
+            Channel
           </div>
         </div>
         <h3>No update server.</h3>
@@ -101,7 +101,7 @@ h2 {
   overflow: hidden;
   height: 220px;
   border-radius: 20px;
-  background: radial-gradient(120% 90% at 50% 0%, var(--figure-hi), var(--figure-lo));
+  background: var(--figure-lo);
   place-items: center;
 }
 
@@ -111,7 +111,7 @@ h2 {
   width: 132px;
   height: 132px;
   border-radius: 32px;
-  background: linear-gradient(160deg, var(--tile-hi), var(--tile-lo));
+  background: var(--device);
 }
 
 .disc {
@@ -143,8 +143,8 @@ h2 {
   padding: 6px 0;
   border-radius: 12px;
   background: var(--well-lo);
-  color: var(--faint);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 13px;
   text-align: center;
 }
 
@@ -221,17 +221,17 @@ h2 {
   height: 80px;
   padding: 10px 12px;
   border-radius: 14px;
-  background: linear-gradient(160deg, var(--sheet-hi), var(--sheet-lo));
+  background: var(--device);
   box-shadow: 0 12px 24px var(--shadow);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
   transform: translate(calc(var(--n) * 8px), calc(var(--n) * -8px));
   transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
   align-content: end;
 }
 
 .sheet.channel {
-  background: linear-gradient(160deg, var(--channel-hi), var(--channel-lo));
+  background: var(--channel-lo);
   color: var(--cyan-ink);
 }
 

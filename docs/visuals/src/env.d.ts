@@ -22,4 +22,6 @@ declare module 'virtual:stack-icons' {
 interface Window {
   /** Set in capture mode: draws the hero at a time of its loop, for the animated banner. */
   __heroAt?: (t: number) => void
+  /** Set when the machine is frozen: draws it at a time of its two rounds, for the animated banner. */
+  __howAt?: (t: number) => void
 }

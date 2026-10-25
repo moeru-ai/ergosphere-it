@@ -25,3 +25,14 @@ export const THEME_ICONS = {
   dark: 'material-symbols:dark-mode-rounded',
   light: 'material-symbols:light-mode-rounded',
 }
+
+/** Icons of the README figures. */
+export const FIGURE_ICONS = {
+  cloud: 'material-symbols:cloud-rounded',
+  installer: 'material-symbols:package-2-rounded',
+  key: 'material-symbols:key-rounded',
+  lock: 'material-symbols:lock-rounded',
+  refresh: 'material-symbols:refresh-rounded',
+  storage: 'material-symbols:database-rounded',
+  terminal: 'material-symbols:terminal-rounded',
+}
