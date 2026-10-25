@@ -1,7 +1,7 @@
 {
   "name": "@ergosphere-it/client",
   "type": "module",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "The update state machine of ergosphere-it for TypeScript hosts",
   "author": {
     "name": "Moeru AI Project AIRI Team",
