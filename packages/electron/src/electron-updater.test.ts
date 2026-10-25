@@ -15,7 +15,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { createElectronUpdaterInstaller } from './electron-updater'
 
-const update = { feedUrl: 'https://updates.test/installers/8/feeds/darwin-arm64', sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-arm64-mac.zip', version: '0.14.0' }
+const update = { sha512: 'bWFj', size: 100, updaterFeedUrl: 'https://updates.test/installers/8/feeds/darwin-arm64', url: 'https://downloads.test/AIRI-arm64-mac.zip', version: '0.14.0' }
 
 /** An electron-updater instance without Electron. It answers a check with `version`, and downloads `file`. */
 function fakeUpdater(version: string | undefined, file = '/tmp/AIRI-arm64-mac.zip') {
@@ -44,7 +44,7 @@ describe('createElectronUpdaterInstaller', () => {
     const file = await (await createElectronUpdaterInstaller(updater)).download(update, value => progress.push(value))
 
     expect(file).toBe('/tmp/AIRI-arm64-mac.zip')
-    expect(updater.setFeedURL).toHaveBeenCalledWith({ provider: 'generic', url: update.feedUrl })
+    expect(updater.setFeedURL).toHaveBeenCalledWith({ provider: 'generic', url: update.updaterFeedUrl })
     expect([updater.autoDownload, updater.autoInstallOnAppQuit]).toEqual([false, false])
     expect(progress).toEqual([{ phase: 'download', totalBytes: 100, transferredBytes: 40 }])
     expect(updater.listenerCount('download-progress')).toBe(0)
@@ -83,10 +83,10 @@ describe('installer release feeds', () => {
       signingKey,
       version: '0.14.0',
     })
-    const feed = release.platformFiles[0]!
+    const feed = release.feedFiles[0]!
     const name = feedFileName('darwin-arm64')
 
-    expect(parseUpdateInfo(new TextDecoder().decode(feed.bytes), name, new URL(`${update.feedUrl}/${name}`))).toMatchObject({
+    expect(parseUpdateInfo(new TextDecoder().decode(feed.bytes), name, new URL(`${update.updaterFeedUrl}/${name}`))).toMatchObject({
       files: [{ sha512: 'bWFj', size: 100, url: update.url }],
       version: '0.14.0',
     })

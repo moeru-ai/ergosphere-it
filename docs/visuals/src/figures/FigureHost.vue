@@ -4,7 +4,7 @@ import icons from 'virtual:stack-icons'
 
 import { FIGURE_ICONS } from '../stack/stack'
 
-/** Where the bucket can live. Any service with the S3 API works through UPDATES_S3_ENDPOINT. */
+/** Where the bucket can live. Any service with the S3 API works through ERGOSPHERE_IT_S3_ENDPOINT. */
 const providers = [
   { icon: 'selfhst:amazon-s3', name: 'Amazon S3' },
   { icon: 'selfhst:cloudflare', name: 'Cloudflare R2' },

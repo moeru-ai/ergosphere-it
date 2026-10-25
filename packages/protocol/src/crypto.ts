@@ -3,6 +3,11 @@ import type { TrustedKey } from './schema'
 import canonicalize from 'canonicalize'
 
 const ED25519 = { name: 'Ed25519' } as const
+/** The DER of an Ed25519 public key in SPKI form, before the 32 bytes of the key. */
+const SPKI_HEADER = Uint8Array.fromHex('302a300506032b6570032100')
+/** The OpenSSH wire form of an Ed25519 public key, before the 32 bytes of the key: the key type and the key length. */
+const SSH_HEADER = Uint8Array.fromHex('0000000b7373682d6564323535313900000020')
+const KEY_LENGTH = 32
 
 /** A signed document: the exact bytes to publish and their detached base64 signature. */
 export interface SignedDocument {
@@ -63,22 +68,35 @@ export function decodeBase64(text: string): Uint8Array<ArrayBuffer> | undefined 
   }
 }
 
+/** Whether text is an Ed25519 public key as an OpenSSH key (`ssh-ed25519 AAAA...`) or a PEM. */
+export function isPublicKey(text: string): boolean {
+  return spkiFromPublicKey(text) !== undefined
+}
+
 /** Returns the key ID of an SPKI public key: the first 16 hex characters of its SHA-256. */
 export async function keyIdOf(spki: Uint8Array<ArrayBuffer>): Promise<string> {
   return (await contentHash(spki)).slice(0, 16)
 }
 
 /**
- * Rebuilds a key pair from a base64 PKCS#8 private key, so a release pipeline needs one secret.
+ * Rebuilds a key pair from an unencrypted PKCS#8 PEM private key (`-----BEGIN PRIVATE KEY-----`), so a release
+ * pipeline needs one secret. OpenSSL, `ergosphere-it keygen`, and the SSH keys of 1Password give this form.
  *
  * The public key comes from the JWK form of the private key, which carries both halves.
  */
-export async function keyPairFromPrivateKey(privateKey: string): Promise<{ signingKey: SigningKey, trustedKey: TrustedKey }> {
-  const der = decodeBase64(privateKey)
+export async function keyPairFromPrivateKey(pem: string): Promise<{ signingKey: SigningKey, trustedKey: TrustedKey }> {
+  const der = decodePem(pem, 'PRIVATE KEY')
   if (!der)
-    throw new TypeError('The private key is not base64.')
+    throw new TypeError('The private key is not an unencrypted PKCS#8 PEM that starts with -----BEGIN PRIVATE KEY-----.')
 
-  const jwk = await crypto.subtle.exportKey('jwk', await crypto.subtle.importKey('pkcs8', der, ED25519, true, ['sign']))
+  let privateKey: CryptoKey
+  try {
+    privateKey = await crypto.subtle.importKey('pkcs8', der, ED25519, true, ['sign'])
+  }
+  catch {
+    throw new TypeError('The private key is not an Ed25519 key.')
+  }
+  const jwk = await crypto.subtle.exportKey('jwk', privateKey)
   const publicKey = await crypto.subtle.importKey('jwk', { crv: jwk.crv, kty: jwk.kty, x: jwk.x }, ED25519, true, ['verify'])
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', publicKey))
   const keyId = await keyIdOf(spki)
@@ -102,13 +120,29 @@ export async function signDocument(document: Record<string, unknown>, signingKey
   return { bytes, signature: new Uint8Array(await crypto.subtle.sign(ED25519, key, bytes)).toBase64() }
 }
 
-/** Builds a trusted key from a base64 SPKI public key. */
-export async function trustedKeyFromPublicKey(publicKey: string): Promise<TrustedKey> {
-  const der = decodeBase64(publicKey)
-  if (!der)
-    throw new TypeError('The public key is not base64.')
+/** Writes a signing key as a PKCS#8 PEM, the form that {@link keyPairFromPrivateKey} reads. */
+export function signingKeyToPem(signingKey: SigningKey): string {
+  const lines = signingKey.privateKey.match(/.{1,64}/g) ?? []
 
-  return { keyId: await keyIdOf(der), publicKey }
+  return `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----\n`
+}
+
+/** Builds a trusted key from an Ed25519 public key in a form that {@link isPublicKey} reads. */
+export async function trustedKeyFromPublicKey(text: string): Promise<TrustedKey> {
+  const publicKey = spkiFromPublicKey(text)
+  if (publicKey === undefined)
+    throw new TypeError('The public key is not an Ed25519 key as ssh-ed25519 AAAA... or as a PEM.')
+
+  return { keyId: await keyIdOf(decodeBase64(publicKey)!), publicKey }
+}
+
+/** Writes a trusted key as an OpenSSH key, `ssh-ed25519 AAAA...`, the form that ssh-keygen and 1Password show. */
+export function trustedKeyToOpenSsh(trustedKey: TrustedKey): string {
+  const der = decodeBase64(trustedKey.publicKey)
+  if (!isKey(der, SPKI_HEADER))
+    throw new TypeError('The public key is not an Ed25519 SPKI key.')
+
+  return `ssh-ed25519 ${new Uint8Array([...SSH_HEADER, ...der.subarray(SPKI_HEADER.length)]).toBase64()}`
 }
 
 /** Verifies a detached Ed25519 signature over bytes. */
@@ -120,4 +154,33 @@ export async function verifyBytes(bytes: Uint8Array<ArrayBuffer>, signature: Uin
   const publicKey = await crypto.subtle.importKey('spki', der, ED25519, false, ['verify'])
 
   return crypto.subtle.verify(ED25519, publicKey, signature, bytes)
+}
+
+/** Decodes the body of a PEM with this label. Returns `undefined` for anything else, such as another label. */
+function decodePem(text: string, label: string): Uint8Array<ArrayBuffer> | undefined {
+  const pem = new RegExp(`^-----BEGIN ${label}-----([\\s\\S]+)-----END ${label}-----$`).exec(text.trim())
+
+  return pem ? decodeBase64(pem[1]!.replaceAll(/\s/g, '')) : undefined
+}
+
+/** Whether the bytes are the header and then the 32 bytes of a key. */
+function isKey(bytes: Uint8Array<ArrayBuffer> | undefined, header: Uint8Array): bytes is Uint8Array<ArrayBuffer> {
+  return bytes?.length === header.length + KEY_LENGTH && header.every((byte, index) => bytes[index] === byte)
+}
+
+/**
+ * Reads an Ed25519 public key and returns its SPKI DER in base64, or `undefined` for anything else. It takes an
+ * OpenSSH key (`ssh-ed25519 AAAA... comment`) or a PEM (`-----BEGIN PUBLIC KEY-----`).
+ */
+function spkiFromPublicKey(text: string): string | undefined {
+  const ssh = /^ssh-ed25519\s+(\S+)/.exec(text.trim())
+  if (ssh) {
+    const wire = decodeBase64(ssh[1]!)
+
+    return isKey(wire, SSH_HEADER) ? new Uint8Array([...SPKI_HEADER, ...wire.subarray(SSH_HEADER.length)]).toBase64() : undefined
+  }
+
+  const der = decodePem(text, 'PUBLIC KEY')
+
+  return isKey(der, SPKI_HEADER) ? der.toBase64() : undefined
 }

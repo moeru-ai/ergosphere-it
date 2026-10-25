@@ -59,7 +59,9 @@ One trusted Ed25519 key signs both layers. The native part contains the public k
 
 - The native part contains a list of trusted public keys. Each signed document names its key with `signature.keyId`.
 - A planned rotation takes two installer releases. The first installer trusts the old key and the new key. After most installs run it, CI signs with the new key. A later installer removes the old key.
-- A leaked key stays trusted by every install that has it, until that install takes a newer installer. Bundles have no platform code signing, so this is the risk of the layer. Keep the signing key in CI secrets only, and remove a leaked key with an installer release at once.
+- A leaked key stays trusted by every install that has it, until that install takes a newer installer. Bundles have no platform code signing, so this is the risk of the layer. Keep the signing key only in CI secrets and in one offline backup, and remove a leaked key with an installer release at once.
+- A second trusted key, whose private key stays in the offline backup, lets CI sign at once when the first key is lost.
+- Tools read and write keys in standard forms: a private key as an unencrypted PKCS#8 PEM, and a public key as an OpenSSH key (`ssh-ed25519 AAAA...`) or a PEM.
 - Version 1 has no runtime key list. A root key that signs a key list (TUF style) or a signed revocation list can come later. Most desktop updaters, for example Tauri, CodePush, and LobeHub Desktop, also rotate keys with an app update.
 
 ### Release identity
@@ -92,9 +94,9 @@ One trusted Ed25519 key signs both layers. The native part contains the public k
 - A client reports a bundle for another native version as up to date, with the detail `needs-newer-native-version`. When the channel also names a newer installer, the client offers the installer.
 - When a staged bundle no longer fits the native version, for example after the app went back to an older installer, the client keeps it as `deferred` and tries it again on each boot.
 
-### Server layout
+### Default layout
 
-The server is static files on R2 or S3. Any static server works, including the test simulator.
+By default, the server is static files on R2 or S3 in this layout. Any static server works, including the test simulator. A release server can also keep the files anywhere, as [file locations](#file-locations) describes.
 
 ```text
 <feedUrl>/
@@ -112,6 +114,35 @@ The server is static files on R2 or S3. Any static server works, including the t
 - A channel name has only letters, digits, `.`, `_`, and `-`, for example `stable`, `beta`, or `beta-daily`.
 - A channel that moves at most once a day is a channel of its own. CI promotes the release of one channel to another on a schedule, for example from `beta` to `beta-daily`. It is not a separate build.
 - A release gets published in this order: objects, then manifests and feeds, then channel files. `uploadStages` returns the files in these three stages. Upload each stage completely before the next one.
+
+### File locations
+
+The location of a file carries no trust:
+
+- A channel file, a bundle manifest, and an installer manifest are trusted because of their detached signature over their exact bytes.
+- An object is trusted because its SHA-256 and size are in a signed bundle manifest.
+- An installer file is trusted because its SHA-512 is in a signed installer manifest.
+
+So a client asks a locator where each file is. The default locator gives the default layout under `feedUrl`. A host can take another locator, for example one that asks a release server, and the locator can give any URL, for example a signed CDN URL. A bad locator can only stop updates, as a bad server can.
+
+| Ref `kind` | Fields | File |
+| --- | --- | --- |
+| `channel` | `channel` (string) | A channel file and its signature |
+| `bundle` | `releaseId` (integer) | A bundle manifest and its signature |
+| `installer` | `releaseId` (integer) | An installer manifest and its signature |
+| `object` | `releaseId` (integer), `sha256` (lowercase hex), `size` (bytes) | An object. `releaseId` is the bundle that needs it, so a locator can look up all objects of a bundle at once. |
+
+- A location is a URL, or a URL and, for a document, the URL of its detached signature (`signatureUrl` in TypeScript). The signature defaults to the URL of the document plus `.sig`.
+- A server gives back each document as the exact bytes that CI signed. It never builds or changes a document, because it has no signing key. Content for each install stays in the signed channel file: the channel, cohorts, and the rollout.
+- A host adds refs for the files of its installers, and this document does not define them. The Electron host adds `installer-feed`, the base URL of the electron-updater feed of a platform.
+- Installer files keep the absolute URLs of the signed installer manifest. A locator does not change them.
+
+On the publish side, a release store keeps typed releases: objects, signed manifests with the files that installers read, and signed channel files. The default store writes the default layout. Every store keeps these rules:
+
+1. It keeps the bytes and the signature of each document exactly.
+2. A write is complete when it returns, and the publisher writes in the order of the default layout: objects, then manifests and feeds, then channel files.
+3. It returns the newest channel file. Before the publisher changes a channel file, it verifies the signature with its trusted keys, so a store cannot make it sign content that no trusted key signed. An expired channel file passes this check.
+4. It can compare and set channel files. Then two publishes at the same time cannot lose a change: the store rejects the write that read an older file, and the publisher reads the channel again and signs it again.
 
 ### Bundle manifest
 
@@ -347,8 +378,8 @@ The updater is one project with four parts. An app connects to it only through d
 | Part | Content | Built from |
 | --- | --- | --- |
 | Specification | This document, the JSON schemas (Valibot), and conformance cases | New |
-| Publish API | Build bundle releases, installer releases, and channel files as files in memory, and order the uploads. The caller uploads them to any backend. | `ota-update-server` store and core modules |
-| Client SDK (TypeScript) | Channel check, download, content store, staging, boot selection, activation diff, health, rollback | `ota-lab` shell modules, plus the PoC tests |
+| Publish API | Build bundle releases, installer releases, and channel files in memory, as typed releases and as files of the default layout, and order the uploads. Release stores keep them in any backend: the default layout in a storage of files, or the API of a release server. | `ota-update-server` store and core modules |
+| Client SDK (TypeScript) | Channel check, file locations, download, content store, staging, boot selection, activation diff, health, rollback | `ota-lab` shell modules, plus the PoC tests |
 | Test server | Tree server in memory with fault injection and a release console | `ota-update-server` |
 
 The PoC files `feed.ts` and `pack-core.ts`, the PoC CI workflows, and the `ota-lab` test bench shell are not used.
@@ -359,8 +390,8 @@ The project lives in its own repository, `moeru-ai/ergosphere-it`. Packages that
 | --- | --- |
 | `@ergosphere-it/protocol` | Schemas, canonical JSON, signatures, verification rules, and conformance cases |
 | `@ergosphere-it/client` | The update state machine for TypeScript hosts. The host injects the network, file system, and clock. `@ergosphere-it/client/node` gives a Node.js file system. |
-| `@ergosphere-it/publish` | Builds signed bundle releases, installer releases, and channel files as files in memory. It does no I/O. |
-| `@ergosphere-it/electron` | The Electron host: the electron-vite plugin, the launcher, the updater of main, preload, and page, and the release functions for CI |
+| `@ergosphere-it/publish` | Builds signed bundle releases, installer releases, and channel files in memory, and defines release stores. It does no I/O: a store gets its storage or its API from the caller. |
+| `@ergosphere-it/electron` | The Electron host: the electron-vite plugin, the launcher, the updater of main, preload, and page, and the CLI and the S3 storage for CI |
 | `@ergosphere-it/server` | Tree server in memory with fault injection and a release console, for tests and demos |
 
 Version 1 has only the Electron host. A Kirie host (with a C# client) and a Tauri host can follow. They use the same protocol and pass the same conformance cases.
@@ -418,6 +449,11 @@ Tests with Sparkle through electron-sparkle-updater showed what the first instal
 5. `withdrawn` covers installers. Installers only move forward.
 6. An installer release can name a `downloadPage`. A failing installer does not stop bundles, and the status counts its attempts.
 7. The status has `preparing` for work after a download, for example a Sparkle patch.
+
+Later the same day, keys and release servers changed:
+
+8. Keys use standard forms: an unencrypted PKCS#8 PEM for the private key, and an OpenSSH key or a PEM for the public key.
+9. Files can live anywhere. A client asks a locator for each file, and a publisher writes to a release store. The file tree is the default of both.
 
 ## Open questions
 

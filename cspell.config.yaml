@@ -58,4 +58,7 @@ words:
   - velopack
   - zstd
 ignoreWords: []
+# The base64 of an OpenSSH public key, such as ssh-ed25519 AAAA...
+ignoreRegExpList:
+  - "ssh-[\\w-]+ [A-Za-z0-9+/=]+"
 import: []

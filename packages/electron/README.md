@@ -118,13 +118,45 @@ The package also installs the `ergosphere-it` command for CI.
 </picture>
 
 ```bash
-pnpm exec ergosphere-it keygen
+pnpm exec ergosphere-it keygen --out-private-key ~/signing-key.pem
 ```
 
-It prints two lines:
+`keygen` makes two keys. `--out-private-key` is required:
 
-- The **public key**, for example `ed25519:<your public key>`. Put it into `ergo.config.ts`. It is safe to commit.
-- The **private key**. Put it into the CI secret `UPDATES_SIGNING_KEY`. Never commit it. Anyone with it can ship code to your users.
+- The **public key**, an OpenSSH key such as `ssh-ed25519 AAAA...`. `keygen` prints it. Put it into `publicKeys` of `ergo.config.ts`. It is safe to commit. `publicKeys` also takes a PEM (`-----BEGIN PUBLIC KEY-----`).
+- The **private key**, a PKCS#8 PEM (`-----BEGIN PRIVATE KEY-----`). `keygen` writes it to a new file that only you can read, and never to the output. Never commit it. Anyone with it can ship code to your users.
+
+Write the file outside the repository, for example in your home directory. The command warns when the file is in a git work tree. Windows does not apply the file permissions, so the file gets the permissions of its folder: keep it in your user folder.
+
+Then keep the private key in two places, and delete the file:
+
+1. The CI secret `ERGOSPHERE_IT_SIGNING_KEY`. With GitHub, create an environment `release` in the settings of the repository first, and put the secret into it. Only the release workflow uses it (see [the workflow](#publish-from-ci)):
+
+   ```bash
+   gh secret set ERGOSPHERE_IT_SIGNING_KEY --env release < ~/signing-key.pem
+   ```
+
+2. A backup in a password manager or a vault, for example 1Password. You cannot read a CI secret back. Without the key, no update can ship, and your users must install the next version by hand.
+
+```bash
+rm ~/signing-key.pem
+```
+
+`ERGOSPHERE_IT_SIGNING_KEY` also takes the PEM in base64 (`base64 < key.pem`), so a secret store can keep it on one line.
+
+> [!IMPORTANT]
+> Make a second key pair now, and keep its private key only in the backup. Put both public keys into `publicKeys`. When the first key is lost, CI signs with the second key at once, with no installer release first.
+
+> [!WARNING]
+> When a private key leaks, every install that trusts it accepts what it signs, until the install gets a new installer:
+>
+> 1. Remove the leaked public key from `publicKeys`, and release an installer that CI signs with the other key.
+> 2. Put the other key into `ERGOSPHERE_IT_SIGNING_KEY`, and make a new second key.
+> 3. Withdraw what the leaked key signed with `ergosphere-it withdraw`.
+>
+> [The specification](https://github.com/moeru-ai/ergosphere-it/blob/main/docs/spec.md#keys) describes key rotation.
+
+Both keys are standard forms of an Ed25519 key, so other tools can make and keep the pair. For example, a 1Password SSH key works. Make a new SSH key only for updates, of the type Ed25519. Never use an SSH key that you also use to sign in or to sign git commits. Put its public key into `publicKeys`. To get its private key, open the private key field of the item, choose to export it as PKCS#8 without a passphrase, and copy it into the CI secret.
 
 ### Configure updates
 
@@ -137,16 +169,16 @@ export default defineConfig({
   channel: 'stable',
   feedUrl: 'https://updates.example.com',
   nativeVersion: 1,
-  publicKeys: ['ed25519:<your public key>'],
+  publicKeys: ['ssh-ed25519 <your public key>'],
 })
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `feedUrl` | The URL where the app reads updates. |
+| `feedUrl` | The public HTTPS URL of the files that the CLI publishes to the release store, for example the custom domain of an R2 bucket. The app reads its updates there. |
 | `channel` | The channel that this build follows, for example `stable` or `beta`. The app can change it at run time. |
 | `nativeVersion` | An integer for what only an installer can change. Increase it when you upgrade Electron, change a native module, or upgrade `@ergosphere-it/electron`. Main and preload changes do not need it. |
-| `publicKeys` | The public keys that sign updates. |
+| `publicKeys` | The public keys that the app accepts signatures of: OpenSSH keys (`ssh-ed25519 AAAA...`) or PEMs. `ergosphere-it keygen` prints one. |
 
 <details>
 <summary>Optional fields</summary>
@@ -161,6 +193,7 @@ export default defineConfig({
 | `disabled` | `false` | Turns updates off, for example in a Steam build |
 | `installers` | `electron-updater` on each platform | The installer of each platform: `{ darwin, linux, win32 }`. `darwin` can be `sparkle`. `false` turns installer updates off on that platform. |
 | `singleInstance` | `true` | Quits a second instance at start. With `false`, a second instance runs without changing the update state. |
+| `store` | none | The release store of the CLI, for example `createS3Store()`. See [release stores](#publish-from-ci). `--store` and `ERGOSPHERE_IT_STORE` take precedence. The app does not use it. |
 
 </details>
 
@@ -232,7 +265,7 @@ Under `electron-vite dev`, the launcher loads the development server, and update
 | `outDir` | all | `out` | The output directory. Pass the same value to all three. |
 | `root` | all | the current directory | The directory with `package.json` and `ergo.config.ts`. Pass the same value to all three. |
 
-`UPDATES_RELEASE_ID`, `UPDATES_INSTALLER_RELEASE_ID`, and `UPDATES_VERSION` override the release IDs and the version of a build.
+`ERGOSPHERE_IT_RELEASE_ID`, `ERGOSPHERE_IT_INSTALLER_RELEASE_ID`, and `ERGOSPHERE_IT_VERSION` override the release IDs and the version of a build.
 
 </details>
 
@@ -427,17 +460,17 @@ Any static host works. A bucket behind a CDN is a good fit:
   <img width="100%" alt="Two flows in CI. An OTA update publishes a bundle to 20% of the beta channel. A full release publishes installers with electron-builder, and ergosphere-it register installer records them." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/figure-publish-light.webp" />
 </picture>
 
-Each command reads the build output in `out/`, signs with `UPDATES_SIGNING_KEY`, and writes to `--bucket`, or to `UPDATES_BUCKET`:
+Each command reads the build output in `out/`, signs with `ERGOSPHERE_IT_SIGNING_KEY`, and writes to the release store: `--store`, then `ERGOSPHERE_IT_STORE`, then `store` of `ergo.config.ts`. The command prints which one it uses. The release stores below tell how to set one up for S3 or R2:
 
 ```bash
 # An OTA update of the bundle to 20% of the beta channel
 pnpm build
-pnpm exec ergosphere-it publish bundle --channel beta --rollout 20 --bucket s3://my-app-updates
+pnpm exec ergosphere-it publish bundle --channel beta --rollout 20 --store s3://my-app-updates
 
 # A full release: electron-builder uploads the installers, ergosphere-it records them
 pnpm build
 pnpm exec electron-builder --publish always
-pnpm exec ergosphere-it register installer --channel stable --files-url https://github.com/<owner>/<repo>/releases/download/v1.5.0 --bucket s3://my-app-updates
+pnpm exec ergosphere-it register installer --channel stable --files-url https://github.com/<owner>/<repo>/releases/download/v1.5.0 --store s3://my-app-updates
 ```
 
 `register installer` reads the `latest*.yml` files of electron-builder in `dist/`. `--files-url` is where the installer files are, for example the download URL of a GitHub release.
@@ -449,20 +482,67 @@ pnpm exec ergosphere-it register installer --channel stable \
   --files-url https://github.com/<owner>/<repo>/releases/download/v1.5.0 \
   --sparkle darwin-arm64=dist/appcast.xml \
   --download-page https://example.com/download \
-  --bucket s3://my-app-updates
+  --store s3://my-app-updates
 ```
 
 A release with both a zip and an appcast moves an app from electron-updater to Sparkle: installs of the old app take the zip, and the new app takes the appcast.
 
 <details>
-<summary>Buckets</summary>
+<summary>Release stores</summary>
 
-| `--bucket` | Credentials |
+`--store` and `ERGOSPHERE_IT_STORE` take a URL, and keep the file tree of [the specification](https://github.com/moeru-ai/ergosphere-it/blob/main/docs/spec.md#default-layout) there. `feedUrl` is the public URL of the same files:
+
+| `--store` | Credentials |
 | --- | --- |
 | `s3://<bucket>/<prefix>` on AWS | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` |
-| `s3://<bucket>/<prefix>` on R2 | `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` of an R2 API token, and `UPDATES_S3_ENDPOINT=https://<account id>.r2.cloudflarestorage.com` |
-| `s3://<bucket>/<prefix>` on another S3 service, for example MinIO | The same keys, and `UPDATES_S3_ENDPOINT` |
+| `s3://<bucket>/<prefix>` on R2 | `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` of an R2 API token, and `ERGOSPHERE_IT_S3_ENDPOINT=https://<account id>.r2.cloudflarestorage.com` |
+| `s3://<bucket>/<prefix>` on another S3 service, for example MinIO | The same keys, and `ERGOSPHERE_IT_S3_ENDPOINT` |
 | `file://<dir>` or a directory | None. Upload the directory with another tool, for example rclone. |
+
+Without `--store` and `ERGOSPHERE_IT_STORE`, the CLI uses `store` of `ergo.config.ts`. Only the CLI uses it, in CI. Keep the file tree on S3 or R2 there, with credentials from any variables:
+
+```ts
+import { env } from 'node:process'
+
+import { defineConfig } from '@ergosphere-it/electron/config'
+import { createS3Store } from '@ergosphere-it/electron/storage/s3'
+
+export default defineConfig({
+  // ...
+  // Any variable names work. The CLI does not read R2_* by itself.
+  store: createS3Store({
+    accessKeyId: env.R2_ACCESS_KEY_ID,
+    bucket: 'my-app-updates',
+    endpoint: env.R2_ENDPOINT, // https://<account id>.r2.cloudflarestorage.com
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+  }),
+})
+```
+
+The build reads `ergo.config.ts` too, without the credentials, so `createS3Store` checks them at its first read or write. For another storage of files, give `createFileTreeStore` of `@ergosphere-it/electron/config` a `read` and a `write` callback, and an optional `list`. A storage moves bytes by key, and the file tree store turns releases into those files.
+
+With a release server of your own, give the CLI typed releases instead of files. `createReleaseStore` takes callbacks, for example calls to the API of the server:
+
+```ts
+// Put it into `store` of ergo.config.ts. `api` stands for your own client of the server.
+const store = createReleaseStore({
+  // The bytes and the base64 signature of a channel file, or undefined. The CLI verifies them before it changes the channel.
+  getChannel: async channel => api.getChannel(channel),
+  // Optional. Without it, the CLI uploads every object.
+  hasObject: async sha256 => api.hasObject(sha256),
+  // Optional. Without it, withdraw needs --channel.
+  listChannels: async () => api.listChannels(),
+  putBundle: async ({ bytes, document, signature }) => api.putBundle(document.releaseId, bytes, signature),
+  // `expected` is what getChannel returned. When the stored signature differs, throw a ChannelConflictError, and the CLI
+  // reads the channel again and tries again.
+  putChannel: async ({ bytes, document, signature }, expected) => api.putChannel(document.channel, bytes, signature, expected?.signature),
+  // Store the feeds (electron-updater feeds and Sparkle appcasts) before the manifest.
+  putInstaller: async ({ bytes, document, feeds, signature }) => api.putInstaller(document.releaseId, bytes, signature, feeds),
+  putObject: async ({ bytes, sha256 }) => api.putObject(sha256, bytes),
+})
+```
+
+Import `createReleaseStore` and `ChannelConflictError` from `@ergosphere-it/electron/config`. Keep the bytes and the signature of each document exactly as the CLI gives them, because apps verify these bytes. Then tell the app where the files are with `locate` of [a custom launcher](https://github.com/moeru-ai/ergosphere-it/blob/main/docs/api.md#a-custom-launcher), and see [the API reference](https://github.com/moeru-ai/ergosphere-it/blob/main/docs/api.md#ergosphere-itelectron) for the types. Locations carry no trust: the app verifies every document with `publicKeys`, and every object with its hash.
 
 </details>
 
@@ -482,16 +562,19 @@ on:
     tags: ['v*']
 
 env:
-  UPDATES_BUCKET: s3://my-app-updates
-  UPDATES_SIGNING_KEY: ${{ secrets.UPDATES_SIGNING_KEY }}
+  # Remove it when store of ergo.config.ts names the release store. It takes precedence over store.
+  ERGOSPHERE_IT_STORE: s3://my-app-updates
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  # On AWS. For R2, remove AWS_REGION, put the keys of an R2 API token into the two secrets above, and set:
+  # ERGOSPHERE_IT_S3_ENDPOINT: https://<account id>.r2.cloudflarestorage.com
   AWS_REGION: us-east-1
 
 jobs:
   bundle:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -500,6 +583,8 @@ jobs:
       - run: pnpm install
       - run: pnpm build
       - run: pnpm exec ergosphere-it publish bundle --channel beta --rollout ${{ inputs.rollout }}
+        env:
+          ERGOSPHERE_IT_SIGNING_KEY: ${{ secrets.ERGOSPHERE_IT_SIGNING_KEY }}
 
   installer:
     if: startsWith(github.ref, 'refs/tags/')
@@ -507,6 +592,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    environment: release
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -518,7 +604,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm exec ergosphere-it register installer --channel stable --files-url https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+        env:
+          ERGOSPHERE_IT_SIGNING_KEY: ${{ secrets.ERGOSPHERE_IT_SIGNING_KEY }}
 ```
+
+Only the steps that sign get `ERGOSPHERE_IT_SIGNING_KEY`. `pnpm install` runs the scripts of every dependency, and a build runs every plugin, so they do not get it. Keep the secret in the `release` environment, and give the environment required reviewers and a rule that allows only tags and the main branch. Never give it to a workflow that runs for pull requests.
 
 A bundle built on one platform runs on every platform, as long as it has no native files. Build installers on each platform, and register each one.
 
@@ -527,7 +617,7 @@ A bundle built on one platform runs on every platform, as long as it has no nati
 ### Manage releases
 
 ```bash
-# Raise the rollout. Installs keep their buckets, so the installs that had the update keep it.
+# Raise the rollout. Each install keeps its place in the rollout, so the installs that had the update keep it.
 pnpm exec ergosphere-it rollout --channel beta 50
 
 # Withdraw a bad bundle on every channel. Apps that run it go back to the bundle before it.
@@ -566,7 +656,7 @@ On macOS, `pnpm -F @ergosphere-it/tests-electron-sparkle demo` installs a new in
 | Release ID | Orders releases. The build sets it from the clock. `version` stays for people. |
 | Channel | A stream of releases, for example `stable`, `beta`, or `beta-daily` |
 | Channel file | A small signed file that names what a channel serves: a bundle, an installer, and withdrawn bundles |
-| Rollout | The percentage of installs that get a bundle. Each install keeps its bucket. |
+| Rollout | The percentage of installs that get a bundle. Each install keeps its place in the rollout. |
 | Cohort | A named group of installs, for example `qa` |
 | Withdraw | Removes a bad bundle or installer. Apps that run the bundle go back to the bundle before it. |
 

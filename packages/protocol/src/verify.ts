@@ -172,6 +172,15 @@ export async function verifyChannelFile(bytes: Uint8Array<ArrayBuffer>, signatur
   return file
 }
 
+/**
+ * Verifies the signature and the schema of a channel file, without the checks of freshness. A publisher runs it before
+ * it changes a channel file and signs it again, so a store cannot make it sign content that no trusted key signed. An
+ * expired channel file passes, because a publisher must be able to replace it. Clients use `verifyChannelFile`.
+ */
+export async function verifyChannelFileSignature(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<ChannelFile> {
+  return validateChannelFile(await verifySignature(bytes, signature, trustedKeys))
+}
+
 /** Verifies the signature and the rules of an installer manifest. Throws an `ErgosphereError` subclass. */
 export async function verifyInstallerManifest(bytes: Uint8Array<ArrayBuffer>, signature: string, trustedKeys: readonly TrustedKey[]): Promise<InstallerManifest> {
   return validateInstallerManifest(await verifySignature(bytes, signature, trustedKeys))

@@ -20,12 +20,16 @@ Formats, keys, signatures, and verification. No I/O.
 | Export | Purpose |
 | --- | --- |
 | `createKeyPair()` | Creates a `SigningKey` and its `TrustedKey` with WebCrypto. |
-| `keyPairFromPrivateKey(privateKey)` | Rebuilds both keys from a base64 PKCS#8 private key, so a pipeline needs one secret. |
-| `trustedKeyFromPublicKey(publicKey)` | Builds a `TrustedKey` from a base64 SPKI public key. |
+| `keyPairFromPrivateKey(pem)` | Rebuilds both keys from an unencrypted PKCS#8 PEM private key, so a pipeline needs one secret. |
+| `signingKeyToPem(signingKey)` | Writes a `SigningKey` as a PKCS#8 PEM. |
+| `trustedKeyToOpenSsh(trustedKey)` | Writes a `TrustedKey` as an OpenSSH key, `ssh-ed25519 AAAA...`. |
+| `isPublicKey(text)` | Whether text is an Ed25519 public key as an OpenSSH key or a PEM. |
+| `trustedKeyFromPublicKey(text)` | Builds a `TrustedKey` from an OpenSSH or PEM Ed25519 public key. |
 | `signDocument(document, signingKey)` | Returns the canonical bytes of a document and their detached signature. |
 | `verifyBundleManifest(bytes, signature, trustedKeys)` | Returns the verified `BundleManifest`, or throws. |
 | `verifyChannelFile(bytes, signature, trustedKeys, context)` | Returns the verified `ChannelFile`, or throws. `context` names the product and channel that the client asked for. |
 | `verifyInstallerManifest(bytes, signature, trustedKeys)` | Returns the verified `InstallerManifest`, or throws. |
+| `verifyChannelFileSignature(bytes, signature, trustedKeys)` | Verifies the signature and the schema of a channel file, without the checks of freshness. A publisher runs it before it changes a channel file. Clients use `verifyChannelFile`. |
 | `validateBundleManifest(document)`, `validateChannelFile(document)`, `validateInstallerManifest(document)` | Check the schema and rules of a document without its signature. Clients run them after the signature verifies, and publishers run them before they sign. |
 | `checkBundleCandidate(manifest, context)` | Throws a `CandidateError` when an install cannot take a verified bundle. |
 | `checkInstallerCandidate(manifest, context)` | Returns the installer file of a verified installer release for this platform, in the first of `context.formats` that the release has, or throws a `CandidateError`. |
@@ -80,11 +84,18 @@ for (const stage of uploadStages([release], [channel]))
 | `buildInstallerRelease(input)` | Returns the signed installer manifest and `platformFiles`: one electron-updater feed per electron-updater file, and a copy of each Sparkle appcast. Installer URLs must be absolute. A Sparkle appcast needs `feedUrl`. |
 | `checkSparkleAppcast(appcast, version)` | Throws when the appcast does not offer `version`, or names an archive with a relative URL. `buildInstallerRelease` runs it. |
 | `uploadStages(releases, channelFiles)` | Groups files in upload order: objects, then manifests and feeds, then channel files. |
+| `createReleaseStore(callbacks)` | A `ReleaseStore` from callbacks, for example calls to the API of a release server. It checks the required callbacks, and fills `hasObject` and `name`. |
+| `createFileTreeStore(storage)` | A `ReleaseStore` that keeps the default layout in a `FileTreeStorage`: `read`, `write`, and an optional `list`. |
+| `ChannelConflictError`, `isChannelConflict(error)`, `isReleaseStore(value)` | A store throws `ChannelConflictError` from `putChannel` when the stored channel file is not `expected`, and the publisher tries again. |
 | `createReleaseId(minimum?)` | The next release ID: the current time in milliseconds, or one more than `minimum`. |
 | `feedFileName(platform)` | The feed file that electron-updater reads on a platform, for example `latest-mac.yml`. |
-| Types: `TreeFile`, `BundleRelease`, `BundleDescriptor`, `BundleFile`, `InstallerRelease`, `InstallerFileInput`, `ChannelFileRelease`, `ComponentSpec` | Data. |
+| Types: `TreeFile`, `BundleRelease`, `BundleDescriptor`, `BundleFile`, `BundleObject`, `InstallerRelease`, `InstallerFeed`, `InstallerFileInput`, `ChannelFileRelease`, `ComponentSpec`, `ReleaseStore`, `ReleaseStoreCallbacks`, `FileTreeStorage`, `Signed`, `StoredDocument` | Data. |
 
 `TreeFile` is `{ key, bytes, headers: { 'Content-Type', 'Cache-Control' }, immutable }`. An immutable file never changes, so a backend can skip it when the key exists.
+
+A release has its parts twice: typed, for a release store, and as `*Files`, `TreeFile`s of the default layout. Every release has `signed`, the exact bytes of its document and their base64 signature. A bundle release has `objects` (`{ bytes, sha256, size }`) and `objectFiles`. An installer release has `feeds` (the electron-updater feeds and Sparkle appcasts, each with `format`, `platform`, `name`, `contentType`, and `bytes`) and `feedFiles`.
+
+A `ReleaseStore` gets `Signed<T>`: `bytes`, `signature`, and the parsed `document`. `getChannel` returns a `StoredDocument`, `{ bytes, signature }`, where `bytes` is any `Uint8Array`, and `putChannel(next, expected)` gets it back as `expected`. Compare the signatures to detect a change of another publish. The publisher tries 5 times. Store the bytes exactly as they come, because clients verify them.
 
 ## `@ergosphere-it/client`
 
@@ -94,11 +105,12 @@ The update state machine of one install. The host injects the network, file syst
 | --- | --- |
 | `UpdateClient` | `check({ force })`, `checkInstaller()`, `stage(available, { onProgress })`, `boot({ readOnly })`, `markHealthy(selection)`, `activateInPlace(releaseId)`, `rollback(releaseId, reason)`, `dismissRollback()`, `storedBundle(releaseId)`, `bundleDir(releaseId)`, `collectGarbage()`, `state()`. |
 | `requirementOf(running, next)` | What a change needs: `none`, `reload`, or `restart`. |
+| `defineLocator(locate)`, `createTreeLocator(feedUrl)` | Types a locator callback, and the locator of the default layout. Types: `Locator`, `FileRef`, `FileLocation`. |
 | Types: `UpdateClientOptions`, `CheckResult`, `CheckOptions`, `UpToDateDetail`, `InstalledApp`, `InstallerCheckResult`, `StageResult`, `StageProgress`, `BootSelection`, `InstallerBundle`, `UpdateFileSystem`, `Fetch`, `ClientState`, `BundleRef`, `RollbackReason` | Data. |
 | `@ergosphere-it/client/node` → `createNodeFileSystem()` | File system for Node.js hosts. |
 
 - `check()` returns `available`, `up-to-date` with an optional `detail`, `retry-scheduled` after a failed download, or `verification-failed` with the `ErgosphereError`. Network and file system errors throw. `force` skips the wait for a retry.
-- `UpdateClientOptions` needs `product`, `host`, `channel`, `feedUrl`, `nativeVersion`, and `installerBundle`. With `installedApp: { releaseId, formats }`, the client also checks for installers in those formats. Download options: `concurrency` (4), `idleTimeoutMs` (30 s), `retries` (3), and `retryDelayMs` (1 s).
+- `UpdateClientOptions` needs `product`, `host`, `channel`, `feedUrl`, `nativeVersion`, and `installerBundle`. With `installedApp: { releaseId, formats }`, the client also checks for installers in those formats. Download options: `concurrency` (4), `idleTimeoutMs` (30 s), `retries` (3), and `retryDelayMs` (1 s). `locate` tells the client where each file is, and defaults to the default layout under `feedUrl`. It gets a `FileRef` (`{ kind: 'channel', channel }`, `{ kind: 'bundle' | 'installer', releaseId }`, or `{ kind: 'object', releaseId, sha256, size }`; `releaseId` is a number) and returns a `FileLocation`: a URL, or `{ url, signatureUrl? }` for a document, where `signatureUrl` defaults to `<url>.sig`. A location with another field throws. See [file locations](spec.md#file-locations).
 - `UpdateFileSystem` streams large files: `appendFile` writes a `.part` file, and `hashFile` hashes a file without reading it into memory.
 - `boot()` records a boot attempt, so it is not a query. `boot({ readOnly: true })` selects without a change, for a second instance.
 
@@ -110,16 +122,17 @@ Internal: the object store and the state file.
 
 | Entry | Exports |
 | --- | --- |
-| `/config` | `defineConfig(config)` for `ergo.config.ts`. Types: `ErgoConfig`. |
+| `/config` | `defineConfig(config)` for `ergo.config.ts`, and, from `@ergosphere-it/publish`, the release stores for its `store`: `createReleaseStore`, `createFileTreeStore`, and `ChannelConflictError`, with their types. |
+| `/storage/s3` | `createS3Store(options)`: a release store with the default layout on S3, or on a service with the same API, such as R2. `createS3Storage(options)`: the storage of files under it, for `createFileTreeStore`. They go through `s3mini`, and check the credentials at the first read or write. |
 | `/vite/main`, `/vite/preload`, `/vite/renderer` | One electron-vite plugin each, as the default export. Options: `outDir` and `root` for all, `entry` for main and preload, and `launcher` for main. The main plugin reads `ergo.config.ts`, and the renderer plugin keeps every HTML entry and writes `out/bundle.json`. |
 | `/main` | `activeBundle` with `preload` and `pageUrl({ page, hash, query })`, and `updater` with `status`, `onStatus()`, `checkForUpdates()`, `applyUpdate()`, `dismissRollback()`, `markBundleHealthy()`, `delayHealthCheck()`, `channel`, `cohorts`, `onBundleChange()`, and `onEvent()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
 | `/types` | The status types only, for pages and preload scripts. It has no code. |
 | `/release` | `bundleReleaseFromBuild(options)`, `installerReleaseFromBuild(options)`, `readBuildInfo(outDir)` |
-| `/launcher` | `startLauncher(options)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Installer`, `ElectronUpdaterInstaller`, `SparkleInstaller`, `InstallerProgress`. |
+| `/launcher` | `startLauncher(options)`, `defineLocator(locate)`, and `createTreeLocator(feedUrl)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Locator`, `LauncherFileRef`, `FileLocation`, `Installer`, `InstallerFile`, `ElectronUpdaterInstaller`, `SparkleInstaller`, `InstallerProgress`. |
 | `/electron-updater` | `createElectronUpdaterInstaller(updater?)`. Without an argument, it creates its own electron-updater instance. |
 | `/sparkle` | `createSparkleInstaller(bridge?)`. Without an argument, it loads the bridge of electron-sparkle-updater, and returns `undefined` when Sparkle is not available. |
 | `/virtual` | Types of `virtual:ergosphere-it/config` for a custom launcher |
-| `ergosphere-it` (bin) | `keygen`, `publish bundle`, `register installer` (with `--files-url`, `--sparkle <platform>=<appcast>`, `--download-page`), `promote`, `rollout`, `withdraw` (bundles and installers). `--bucket` takes `s3://`, `file://`, or a directory. S3 goes through `s3mini`. |
+| `ergosphere-it` (bin) | `keygen --out-private-key <path>`, `publish bundle`, `register installer` (with `--files-url`, `--sparkle <platform>=<appcast>`, `--download-page`), `promote`, `rollout`, `withdraw` (bundles and installers). `--store` (or `ERGOSPHERE_IT_STORE`) takes `s3://`, `file://`, or a directory. Without it, the commands use `store` of `ergo.config.ts`. `--bucket` is an old name of `--store`. The S3 endpoint comes from `ERGOSPHERE_IT_S3_ENDPOINT` or `AWS_ENDPOINT_URL_S3`. |
 
 Status types: `UpdaterStatus`, `UpdateInfo`, `BundleInfo`, `UpdateRequirement`, `UpdateError`, `UpdateErrorCode`, `RollbackReason`, `DisabledReason`.
 
@@ -172,7 +185,23 @@ import { startLauncher } from '@ergosphere-it/electron/launcher'
 void startLauncher({ ...config, installer: myInstaller, launcherUrl: import.meta.url })
 ```
 
-`startLauncher` also takes `dataDir`, `platform`, and `onEvent`. `installer` replaces the installer that `installers` of `ergo.config.ts` names, and `installer: false` turns off installer updates. An installer has a `format`, and the launcher checks each format in its own way. See [the specification](spec.md#installer-formats). Add `"types": ["@ergosphere-it/electron/virtual"]` to the tsconfig of the main process for the virtual module.
+`startLauncher` also takes `dataDir`, `platform`, `onEvent`, `locate`, and `fetch`. `installer` replaces the installer that `installers` of `ergo.config.ts` names, and `installer: false` turns off installer updates. An installer has a `format`, and the launcher checks each format in its own way. See [the specification](spec.md#installer-formats). Add `"types": ["@ergosphere-it/electron/virtual"]` to the tsconfig of the main process for the virtual module.
+
+`locate` tells the launcher where each file is, for an app that updates from a release server of its own. It gets a `LauncherFileRef`: the refs of [file locations](spec.md#file-locations), and `{ kind: 'installer-feed', platform, releaseId }`, the base URL of the electron-updater feed of a platform. Write it with `defineLocator` of `/launcher`, so the callback gets every kind.
+
+`fetch` replaces the global `fetch` of the launcher, for example to add the credentials of a private server. It gets every URL that the launcher fetches, including the absolute URLs of installer files in signed manifests, which can be on another host, so add credentials only for the origin of your server. The default `fetch` does not cache. electron-updater fetches its feed and installer files with its own network stack, without `fetch`, so the `installer-feed` location must be public or presigned. A custom `Installer` gets the feed as `updaterFeedUrl`, which is not the `feedUrl` of `ergo.config.ts`.
+
+```ts
+void startLauncher({
+  ...config,
+  launcherUrl: import.meta.url,
+  locate: defineLocator(async (ref) => {
+    if (ref.kind === 'object')
+      return releases.objectUrl(ref.releaseId, ref.sha256)
+    return releases.documentUrl(ref)
+  }),
+})
+```
 
 ### Logs
 

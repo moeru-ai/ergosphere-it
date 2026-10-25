@@ -31,25 +31,25 @@ const contexts = new Map<string, BuildContext>()
  * Returns the context of the build: the directories and the release IDs.
  *
  * electron-vite builds main, preload, and renderer one after another in one process, so the plugins share one context
- * per output directory. The release IDs come from the clock, or from `UPDATES_RELEASE_ID` and
- * `UPDATES_INSTALLER_RELEASE_ID`. `UPDATES_VERSION` overrides the version of `package.json`.
+ * per output directory. The release IDs come from the clock, or from `ERGOSPHERE_IT_RELEASE_ID` and
+ * `ERGOSPHERE_IT_INSTALLER_RELEASE_ID`. `ERGOSPHERE_IT_VERSION` overrides the version of `package.json`.
  */
 export function buildContext(options: PluginOptions = {}): BuildContext {
   const root = resolve(options.root ?? cwd())
   const outDir = resolve(root, options.outDir ?? 'out')
-  const key = `${outDir}\0${env.UPDATES_RELEASE_ID ?? ''}\0${env.UPDATES_VERSION ?? ''}`
+  const key = `${outDir}\0${env.ERGOSPHERE_IT_RELEASE_ID ?? ''}\0${env.ERGOSPHERE_IT_VERSION ?? ''}`
   const known = contexts.get(key)
   if (known)
     return known
 
-  const releaseId = Number(env.UPDATES_RELEASE_ID ?? createReleaseId())
+  const releaseId = Number(env.ERGOSPHERE_IT_RELEASE_ID ?? createReleaseId())
   const context: BuildContext = {
     bundleDir: join(outDir, OUT_LAYOUT.bundle),
-    installerReleaseId: Number(env.UPDATES_INSTALLER_RELEASE_ID ?? createReleaseId(releaseId)),
+    installerReleaseId: Number(env.ERGOSPHERE_IT_INSTALLER_RELEASE_ID ?? createReleaseId(releaseId)),
     outDir,
     releaseId,
     root,
-    version: env.UPDATES_VERSION ?? readPackageJson(root).version ?? '0.0.0',
+    version: env.ERGOSPHERE_IT_VERSION ?? readPackageJson(root).version ?? '0.0.0',
   }
   contexts.set(key, context)
 

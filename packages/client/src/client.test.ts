@@ -1,3 +1,4 @@
+import type { FileRef } from './locate'
 import type { BundleFiles } from './testing'
 
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
@@ -7,6 +8,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { UpdateClient } from './client'
+import { createTreeLocator, defineLocator } from './locate'
 import { createNodeFileSystem } from './node'
 import { requirementOf } from './requirement'
 import { brokenResponse, buildComponents, FakeServer, stalledResponse, trustedKeys } from './testing'
@@ -161,6 +163,59 @@ describe('updateClient stage and boot', () => {
     expect(progress[0]).toEqual({ downloadedBytes: 0, totalBytes: total })
     expect(progress.at(-1)).toEqual({ downloadedBytes: total, totalBytes: total })
     expect(progress.every((event, index) => index === 0 || event.downloadedBytes >= progress[index - 1]!.downloadedBytes)).toBe(true)
+  })
+
+  it('fetches every file where the locator says, and gives object refs the release of their bundle', async () => {
+    await server.publishBundle(11, { ...installerFiles, web: { ...installerFiles.web, 'renderer/app.js': 'app v2' } })
+    await server.publishChannel(11)
+    // A release server that gives its own URLs: documents from its API, and objects from a CDN.
+    const refs: FileRef[] = []
+    const locate = defineLocator(async (ref) => {
+      refs.push(ref)
+      if (ref.kind === 'object')
+        return `https://cdn.test/${ref.sha256}`
+      const id = ref.kind === 'channel' ? ref.channel : ref.releaseId
+
+      return { signatureUrl: `https://api.test/${ref.kind}/${id}/signature`, url: `https://api.test/${ref.kind}/${id}` }
+    })
+    const treePath = (url: string) => {
+      const [, kind, id, part] = new URL(url).pathname.split('/')
+      const sig = part === 'signature' ? '.sig' : ''
+      if (url.startsWith('https://cdn.test/'))
+        return `/objects/sha256/${kind!.slice(0, 2)}/${kind}`
+
+      return kind === 'channel' ? `/channels/${id}.json${sig}` : `/bundles/${id}/bundle.json${sig}`
+    }
+    const client = await createClient({ fetch: async (url, init) => server.fetch(`${server.feedUrl}${treePath(url)}`, init), locate })
+
+    expect(await checkAndStage(client)).toMatchObject({ releaseId: 11, status: 'staged' })
+    expect(refs.map(ref => ref.kind)).toEqual(['channel', 'bundle', 'object'])
+    expect(refs[2]).toMatchObject({ kind: 'object', releaseId: 11, size: 'app v2'.length })
+  })
+
+  it('rejects a location with a field that a location does not have, instead of fetching the wrong signature', async () => {
+    await server.publishChannel(undefined)
+    const tree = createTreeLocator(server.feedUrl)
+    const client = await createClient({ locate: async ref => ({ signature: 'https://api.test/signature', url: await tree(ref) as string }) as never })
+
+    await expect(client.check()).rejects.toThrow('a location with the field signature')
+  })
+
+  it('fails a stage when the locator finds no URL for an object, and keeps the install', async () => {
+    await server.publishBundle(11, { ...installerFiles, web: { ...installerFiles.web, 'renderer/app.js': 'app v2' } })
+    await server.publishChannel(11)
+    const tree = createTreeLocator(server.feedUrl)
+    const client = await createClient({
+      locate: async (ref) => {
+        if (ref.kind === 'object')
+          throw new Error('the release server is down')
+
+        return tree(ref)
+      },
+    })
+
+    expect(await checkAndStage(client)).toMatchObject({ detail: 'the locator found no URL: the release server is down', status: 'failed' })
+    expect(await client.boot()).toMatchObject({ fromInstaller: true })
   })
 
   it('needs a restart when main code changes', async () => {
@@ -519,14 +574,13 @@ describe('updateClient installer check', () => {
     })
   }
 
-  it('returns a newer installer with the file and the feed of this platform', async () => {
+  it('returns a newer installer with the file of this platform', async () => {
     await publishInstaller(8)
     await server.publishChannel(undefined, { installer: { releaseId: 8 } })
     const client = await createClient({ installedApp: { formats: ['electron-updater'], releaseId: 7 } })
 
     expect(await client.checkInstaller()).toMatchObject({
       artifact: { url: 'https://downloads.test/AIRI-arm64-mac.zip' },
-      feedUrl: `${server.feedUrl}/installers/8/feeds/darwin-arm64`,
       manifest: { nativeVersion: 4, releaseId: 8 },
       status: 'available',
     })

@@ -26,11 +26,14 @@ export type Installer = ElectronUpdaterInstaller | SparkleInstaller
 
 /** An installer file to download. `sha512` and `size` come from the signed installer manifest. */
 export interface InstallerFile {
-  /** The electron-updater feed of this platform in the installer release, `installers/<releaseId>/feeds/<platform>`. */
-  feedUrl: string
   /** SHA-512 of the installer file as base64. */
   sha512: string
   size: number
+  /**
+   * The URL of the electron-updater feed of this platform in the installer release, where electron-updater reads
+   * `latest*.yml`. It is not the `feedUrl` of `ergo.config.ts`.
+   */
+  updaterFeedUrl: string
   /** The absolute URL of the installer file. */
   url: string
   version: string

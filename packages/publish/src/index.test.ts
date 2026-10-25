@@ -45,8 +45,8 @@ describe('buildBundleRelease', () => {
 
     expect(verified).toMatchObject({ product: 'app', releaseId: 100, totalSize: 16, version: '1.0.0' })
     expect(built.objects).toHaveLength(3)
-    expect(built.objects.map(object => object.key)).toContain(`objects/sha256/${(await contentHash(encode('same'))).slice(0, 2)}/${await contentHash(encode('same'))}`)
-    expect(built.objects.every(object => object.immutable && object.headers['Cache-Control'].includes('immutable'))).toBe(true)
+    expect(built.objectFiles.map(object => object.key)).toContain(`objects/sha256/${(await contentHash(encode('same'))).slice(0, 2)}/${await contentHash(encode('same'))}`)
+    expect(built.objectFiles.every(object => object.immutable && object.headers['Cache-Control'].includes('immutable'))).toBe(true)
     expect(built.descriptor).toEqual({ components: verified.components, releaseId: 100, version: '1.0.0' })
   })
 
@@ -121,8 +121,8 @@ describe('buildInstallerRelease', () => {
 
     expect(manifest!.key).toBe('installers/7/installer.json')
     expect(checkInstallerCandidate(verified, { formats: ['electron-updater'], host: 'electron', installerReleaseId: 6, platform: 'win32-x64', product: 'app' })).toMatchObject({ url: artifacts[1]!.url })
-    expect(built.platformFiles.map(feed => feed.key)).toEqual(['installers/7/feeds/darwin-arm64/latest-mac.yml', 'installers/7/feeds/win32-x64/latest.yml'])
-    expect(parse(decode(built.platformFiles[0]!.bytes))).toEqual({
+    expect(built.feedFiles.map(feed => feed.key)).toEqual(['installers/7/feeds/darwin-arm64/latest-mac.yml', 'installers/7/feeds/win32-x64/latest.yml'])
+    expect(parse(decode(built.feedFiles[0]!.bytes))).toEqual({
       files: [{ sha512: 'bWFj', size: 100, url: 'https://downloads.test/AIRI-0.13.0-arm64-mac.zip' }],
       path: 'https://downloads.test/AIRI-0.13.0-arm64-mac.zip',
       releaseDate: '2026-10-24T00:00:00.000Z',
@@ -156,11 +156,11 @@ describe('buildInstallerRelease', () => {
       size: appcast.byteLength,
       url: 'https://updates.test/app/installers/7/sparkle/darwin-arm64/appcast.xml',
     })
-    expect(built.platformFiles.map(file => [file.key, file.headers['Content-Type'], file.immutable])).toEqual([
+    expect(built.feedFiles.map(file => [file.key, file.headers['Content-Type'], file.immutable])).toEqual([
       ['installers/7/feeds/darwin-arm64/latest-mac.yml', 'application/x-yaml', true],
       ['installers/7/sparkle/darwin-arm64/appcast.xml', 'application/xml', true],
     ])
-    expect(built.platformFiles[1]!.bytes).toEqual(appcast)
+    expect(built.feedFiles[1]!.bytes).toEqual(appcast)
   })
 
   it('needs the feed URL for a Sparkle appcast', async () => {

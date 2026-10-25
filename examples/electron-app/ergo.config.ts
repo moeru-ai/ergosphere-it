@@ -5,5 +5,5 @@ export default defineConfig({
   channel: 'canary',
   feedUrl: 'http://127.0.0.1:4100',
   nativeVersion: 1,
-  publicKeys: ['ed25519:MCowBQYDK2VwAyEAenjtyIa4GbhQJba2WuMAcvHUR1Sw6EVnl0Wa+NseEdU='],
+  publicKeys: ['ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHp47ciGuBm4UCW2tlrjAHLx1EdUsOhFZ5dFmvjbHhHV'],
 })

@@ -46,6 +46,11 @@
       "types": "./dist/sparkle.d.mts",
       "default": "./dist/sparkle.mjs"
     },
+    "./storage/s3": {
+      "@ergosphere-it/source": "./src/storage/s3.ts",
+      "types": "./dist/storage/s3.d.mts",
+      "default": "./dist/storage/s3.mjs"
+    },
     "./types": {
       "@ergosphere-it/source": "./src/types.ts",
       "types": "./dist/types.d.mts",

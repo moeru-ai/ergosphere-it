@@ -1,8 +1,10 @@
-import type { BundleManifest, ChannelFile, Component, ComponentType, InstallerArtifact, InstallerManifest, NativeVersionRange, SignedDocument, SigningKey } from '@ergosphere-it/protocol'
+import type { BundleManifest, ChannelFile, Component, ComponentType, InstallerArtifact, InstallerFormat, InstallerManifest, NativeVersionRange, SignedDocument, SigningKey } from '@ergosphere-it/protocol'
 
 import { contentHash, signDocument, validateBundleManifest, validateChannelFile, validateInstallerManifest } from '@ergosphere-it/protocol'
 import { sumBy } from 'es-toolkit'
 import { stringify } from 'yaml'
+
+import { bundleTreeFiles, channelTreeFiles, feedTreeFile, installerTreeFiles, objectTreeFile } from './tree'
 
 /** What an installer needs to ship a bundle: its components, release, and version. */
 export interface BundleDescriptor {
@@ -18,15 +20,26 @@ export interface BundleFile {
   path: string
 }
 
+/** One distinct content of a bundle, addressed by its SHA-256. */
+export interface BundleObject {
+  bytes: Uint8Array<ArrayBuffer>
+  sha256: string
+  size: number
+}
+
 export interface BundleRelease {
   /** What the installer ships next to the bundle files, so the app knows the bundle it came with. */
   descriptor: BundleDescriptor
   manifest: BundleManifest
-  /** The signed manifest and its signature. */
+  /** The signed manifest and its signature, as files of the default layout. */
   manifestFiles: TreeFile[]
-  /** One file per distinct content, addressed by its hash. */
-  objects: TreeFile[]
+  /** `objects` as files of the default layout. */
+  objectFiles: TreeFile[]
+  /** One object per distinct content, addressed by its SHA-256. */
+  objects: BundleObject[]
   releaseId: number
+  /** The exact bytes of the manifest and their signature. */
+  signed: SignedDocument
   version: string
 }
 
@@ -74,6 +87,8 @@ export interface ChannelFileInput {
 export interface ChannelFileRelease {
   channelFile: ChannelFile
   files: TreeFile[]
+  /** The exact bytes of the channel file and their signature. */
+  signed: SignedDocument
 }
 
 /** Maps a top-level directory of the bundle to a component. */
@@ -82,6 +97,16 @@ export interface ComponentSpec {
   /** Path of the entry file, relative to the bundle root. */
   entry?: string
   type: ComponentType
+}
+
+/** A file that an installer reads from the release: an electron-updater feed, or a copy of a Sparkle appcast. */
+export interface InstallerFeed {
+  bytes: Uint8Array<ArrayBuffer>
+  contentType: string
+  format: InstallerFormat
+  /** The file name, for example `latest-mac.yml` or `appcast.xml`. */
+  name: string
+  platform: string
 }
 
 /**
@@ -111,12 +136,16 @@ export type InstallerFileInput
   }
 
 export interface InstallerRelease {
-  manifest: InstallerManifest
-  /** The signed manifest and its signature. */
-  manifestFiles: TreeFile[]
+  /** `feeds` as files of the default layout. */
+  feedFiles: TreeFile[]
   /** Files that installers read: one electron-updater feed per platform, and the Sparkle appcasts. */
-  platformFiles: TreeFile[]
+  feeds: InstallerFeed[]
+  manifest: InstallerManifest
+  /** The signed manifest and its signature, as files of the default layout. */
+  manifestFiles: TreeFile[]
   releaseId: number
+  /** The exact bytes of the manifest and their signature. */
+  signed: SignedDocument
   version: string
 }
 
@@ -152,8 +181,6 @@ export interface TreeFile {
   key: string
 }
 
-const IMMUTABLE = 'public, max-age=31536000, immutable'
-const NO_STORE = 'no-store'
 const DAY = 86_400_000
 
 /**
@@ -164,7 +191,7 @@ const DAY = 86_400_000
 export async function buildBundleRelease(input: BundleReleaseInput): Promise<BundleRelease> {
   const releaseId = input.releaseId ?? createReleaseId()
   const components: Component[] = input.components.map(spec => ({ entry: spec.entry, files: [], type: spec.type }))
-  const objects = new Map<string, TreeFile>()
+  const contents = new Map<string, BundleObject>()
 
   for (const bundleFile of [...input.files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))) {
     const index = input.components.findIndex(spec => bundleFile.path.startsWith(`${spec.dir}/`))
@@ -172,8 +199,8 @@ export async function buildBundleRelease(input: BundleReleaseInput): Promise<Bun
       throw new Error(`The file ${bundleFile.path} is in no component. Add a component for its directory.`)
 
     const hash = await contentHash(bundleFile.bytes)
-    if (!objects.has(hash))
-      objects.set(hash, treeFile(`objects/sha256/${hash.slice(0, 2)}/${hash}`, bundleFile.bytes, 'application/octet-stream', true))
+    if (!contents.has(hash))
+      contents.set(hash, { bytes: bundleFile.bytes, sha256: hash, size: bundleFile.bytes.byteLength })
     components[index]!.files.push({ path: bundleFile.path, sha256: hash, size: bundleFile.bytes.byteLength })
   }
 
@@ -196,9 +223,11 @@ export async function buildBundleRelease(input: BundleReleaseInput): Promise<Bun
   return {
     descriptor: { components: used, releaseId, version: input.version },
     manifest: { ...manifest, signature: { alg: 'ed25519', keyId: input.signingKey.keyId } } as BundleManifest,
-    manifestFiles: documentFiles(`bundles/${releaseId}/bundle.json`, signed, true),
-    objects: [...objects.values()],
+    manifestFiles: bundleTreeFiles(releaseId, signed),
+    objectFiles: [...contents.values()].map(objectTreeFile),
+    objects: [...contents.values()],
     releaseId,
+    signed,
     version: input.version,
   }
 }
@@ -227,7 +256,8 @@ export async function buildChannelFile(input: ChannelFileInput): Promise<Channel
 
   return {
     channelFile: { ...channelFile, signature: { alg: 'ed25519', keyId: input.signingKey.keyId } } as ChannelFile,
-    files: documentFiles(`channels/${input.channel}.json`, signed, false),
+    files: channelTreeFiles(input.channel, signed),
+    signed,
   }
 }
 
@@ -240,16 +270,17 @@ export async function buildChannelFile(input: ChannelFileInput): Promise<Channel
 export async function buildInstallerRelease(input: InstallerReleaseInput): Promise<InstallerRelease> {
   const releaseId = input.releaseId ?? createReleaseId()
   const createdAt = input.createdAt ?? new Date().toISOString()
-  const platformFiles: TreeFile[] = []
+  const feeds: InstallerFeed[] = []
   const artifacts = await Promise.all(input.artifacts.map(async (artifact): Promise<InstallerArtifact> => {
     if (artifact.format === 'electron-updater') {
       const { format, platform, sha512, size, url } = artifact
-      platformFiles.push(treeFile(
-        `installers/${releaseId}/feeds/${platform}/${feedFileName(platform)}`,
-        new TextEncoder().encode(feedYaml(artifact, input.version, createdAt)) as Uint8Array<ArrayBuffer>,
-        'application/x-yaml',
-        true,
-      ))
+      feeds.push({
+        bytes: new TextEncoder().encode(feedYaml(artifact, input.version, createdAt)) as Uint8Array<ArrayBuffer>,
+        contentType: 'application/x-yaml',
+        format,
+        name: feedFileName(platform),
+        platform,
+      })
 
       return { format, platform, sha512, size, url }
     }
@@ -258,15 +289,15 @@ export async function buildInstallerRelease(input: InstallerReleaseInput): Promi
       throw new Error('buildInstallerRelease: a Sparkle appcast needs feedUrl, because the release hosts the appcast.')
     checkSparkleAppcast(artifact.appcast, input.version)
 
-    const key = `installers/${releaseId}/sparkle/${artifact.platform}/appcast.xml`
-    platformFiles.push(treeFile(key, artifact.appcast, 'application/xml', true))
+    const feed: InstallerFeed = { bytes: artifact.appcast, contentType: 'application/xml', format: 'sparkle', name: 'appcast.xml', platform: artifact.platform }
+    feeds.push(feed)
 
     return {
       format: 'sparkle',
       platform: artifact.platform,
       sha512: await sha512Base64(artifact.appcast),
       size: artifact.appcast.byteLength,
-      url: `${input.feedUrl.replace(/\/+$/, '')}/${key}`,
+      url: `${input.feedUrl.replace(/\/+$/, '')}/${feedTreeFile(releaseId, feed).key}`,
     }
   }))
 
@@ -287,10 +318,12 @@ export async function buildInstallerRelease(input: InstallerReleaseInput): Promi
   const signed = await signValidated(manifest, input.signingKey, validateInstallerManifest)
 
   return {
+    feedFiles: feeds.map(feed => feedTreeFile(releaseId, feed)),
+    feeds,
     manifest: { ...manifest, signature: { alg: 'ed25519', keyId: input.signingKey.keyId } } as InstallerManifest,
-    manifestFiles: documentFiles(`installers/${releaseId}/installer.json`, signed, true),
-    platformFiles,
+    manifestFiles: installerTreeFiles(releaseId, signed),
     releaseId,
+    signed,
     version: input.version,
   }
 }
@@ -363,17 +396,10 @@ export async function reissueChannelFile(channelFile: ChannelFile, signingKey: S
  * names.
  */
 export function uploadStages(releases: readonly (BundleRelease | InstallerRelease)[], channelFiles: readonly ChannelFileRelease[] = []): TreeFile[][] {
-  const objects = new Map(releases.flatMap(release => ('objects' in release ? release.objects : [])).map(object => [object.key, object]))
-  const documents = releases.flatMap(release => ('platformFiles' in release ? [...release.platformFiles, ...release.manifestFiles] : release.manifestFiles))
+  const objects = new Map(releases.flatMap(release => ('objectFiles' in release ? release.objectFiles : [])).map(object => [object.key, object]))
+  const documents = releases.flatMap(release => ('feedFiles' in release ? [...release.feedFiles, ...release.manifestFiles] : release.manifestFiles))
 
   return [[...objects.values()], documents, channelFiles.flatMap(channelFile => channelFile.files)].filter(stage => stage.length > 0)
-}
-
-function documentFiles(key: string, { bytes, signature }: SignedDocument, immutable: boolean): TreeFile[] {
-  return [
-    treeFile(key, bytes, 'application/json', immutable),
-    treeFile(`${key}.sig`, new TextEncoder().encode(signature) as Uint8Array<ArrayBuffer>, 'text/plain', immutable),
-  ]
 }
 
 /** Writes an electron-updater feed with one file, in the shape that electron-builder writes. */
@@ -400,6 +426,7 @@ async function signValidated<TDocument extends Record<string, unknown>>(document
   return signDocument(document, signingKey)
 }
 
-function treeFile(key: string, bytes: Uint8Array<ArrayBuffer>, contentType: string, immutable: boolean): TreeFile {
-  return { bytes, headers: { 'Cache-Control': immutable ? IMMUTABLE : NO_STORE, 'Content-Type': contentType }, immutable, key }
-}
+export { createFileTreeStore } from './file-tree'
+export type { FileTreeStorage } from './file-tree'
+export { ChannelConflictError, createReleaseStore, isChannelConflict, isReleaseStore } from './store'
+export type { ReleaseStore, ReleaseStoreCallbacks, Signed, StoredDocument } from './store'

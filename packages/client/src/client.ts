@@ -1,6 +1,7 @@
 import type { BundleManifest, ChannelFile, Component, InstallerArtifact, InstallerFormat, InstallerManifest, TrustedKey } from '@ergosphere-it/protocol'
 
 import type { Fetch, UpdateFileSystem } from './io'
+import type { Locator } from './locate'
 import type { BundleRef, ClientState, RollbackReason } from './state'
 
 import { CandidateError, checkBundleCandidate, checkInstallerCandidate, DocumentError, ErgosphereError, isInRollout, SignatureError, verifyBundleManifest, verifyChannelFile, verifyInstallerManifest } from '@ergosphere-it/protocol'
@@ -9,6 +10,7 @@ import { withRetry } from '@moeru/std/with-retry'
 import { delay, sumBy } from 'es-toolkit'
 
 import { DownloadError, downloadFile } from './download'
+import { createTreeLocator, locateDocument, locateFile } from './locate'
 import { loadState, saveState } from './state'
 import { ObjectStore } from './store'
 
@@ -58,12 +60,9 @@ export interface InstallerBundle {
   version: string
 }
 
-/**
- * The result of an installer check. For an `electron-updater` file, `feedUrl` is the electron-updater feed of this
- * platform in the release.
- */
+/** The result of an installer check. */
 export type InstallerCheckResult
-  = | { artifact: InstallerArtifact, feedUrl: string, manifest: InstallerManifest, status: 'available' }
+  = | { artifact: InstallerArtifact, manifest: InstallerManifest, status: 'available' }
     | { error: ErgosphereError, status: 'verification-failed' }
     | { status: 'up-to-date' }
 
@@ -90,7 +89,7 @@ export interface UpdateClientOptions {
   concurrency?: number
   /** The directory that the client owns, for example `<userData>/updates`. */
   dataDir: string
-  /** The URL of the static update server, without a trailing slash. */
+  /** The URL of the static update server. The default locator reads the file tree under it. */
   feedUrl: string
   fetch?: Fetch
   fs: UpdateFileSystem
@@ -101,6 +100,11 @@ export interface UpdateClientOptions {
   /** The installed app. Without it, the client does not check for installer updates. */
   installedApp?: InstalledApp
   installerBundle: InstallerBundle
+  /**
+   * Tells the client where each file is, for example with a lookup on a release server. Defaults to the file tree
+   * under `feedUrl`. Locations carry no trust, so the checks do not change.
+   */
+  locate?: Locator
   /** Boots without a healthy report before a bundle is blocked. */
   maxBootAttempts?: number
   /** The native version of this install. A bundle runs only when its range includes it. */
@@ -147,6 +151,7 @@ export class UpdateClient {
   private readonly idleTimeoutMs: number
   /** The channel file of the last check, so a bundle check and an installer check in a row fetch it once. */
   private lastChannelFile: undefined | { at: number, file: ChannelFile }
+  private readonly locate: Locator
   private readonly maxBootAttempts: number
   private readonly now: () => Date
   private readonly objects: ObjectStore
@@ -164,6 +169,7 @@ export class UpdateClient {
     this.options = options
     this.fs = options.fs
     this.fetch = options.fetch ?? ((url, init) => globalThis.fetch(url, init))
+    this.locate = options.locate ?? createTreeLocator(options.feedUrl)
     this.now = options.now ?? (() => new Date())
     this.maxBootAttempts = options.maxBootAttempts ?? 3
     this.concurrency = options.concurrency ?? 4
@@ -244,7 +250,7 @@ export class UpdateClient {
    * lists it, so the host can drop a download of it.
    */
   async checkInstaller(): Promise<InstallerCheckResult> {
-    const { feedUrl, installedApp, platform, product, trustedKeys } = this.options
+    const { installedApp, platform, product, trustedKeys } = this.options
     if (installedApp === undefined)
       return { status: 'up-to-date' }
 
@@ -254,8 +260,8 @@ export class UpdateClient {
       if (target === undefined || target <= installedApp.releaseId)
         return { status: 'up-to-date' }
 
-      const manifestUrl = `${feedUrl}/installers/${target}/installer.json`
-      const manifest = await verifyInstallerManifest(await this.fetchBytes(manifestUrl), await this.fetchText(`${manifestUrl}.sig`), trustedKeys)
+      const location = await locateDocument(this.locate, { kind: 'installer', releaseId: target })
+      const manifest = await verifyInstallerManifest(await this.fetchBytes(location.url), await this.fetchText(location.signature), trustedKeys)
       if (manifest.releaseId !== target)
         throw new DocumentError('invalid-schema', `The installer manifest releaseId ${manifest.releaseId} is not the channel releaseId ${target}.`)
 
@@ -268,7 +274,7 @@ export class UpdateClient {
         withdrawn: channelFile.withdrawn,
       })
 
-      return { artifact, feedUrl: `${feedUrl}/installers/${target}/feeds/${platform}`, manifest, status: 'available' }
+      return { artifact, manifest, status: 'available' }
     }
     catch (error) {
       if (error instanceof ErgosphereError)
@@ -413,7 +419,7 @@ export class UpdateClient {
   }
 
   private async checkChannel({ force = false }: CheckOptions): Promise<CheckResult> {
-    const { feedUrl, trustedKeys } = this.options
+    const { trustedKeys } = this.options
     const channelFile = await this.fetchChannelFile()
     const state = await this.state()
     const served = channelFile.bundle
@@ -442,9 +448,9 @@ export class UpdateClient {
     if (failure && !force && this.now().getTime() < failure.retryAt)
       return { error: failure.error, manifest: failure.manifest, retryAt: new Date(failure.retryAt), status: 'retry-scheduled' }
 
-    const manifestUrl = `${feedUrl}/bundles/${target}/bundle.json`
-    const manifestBytes = await this.fetchBytes(manifestUrl)
-    const signature = await this.fetchText(`${manifestUrl}.sig`)
+    const location = await locateDocument(this.locate, { kind: 'bundle', releaseId: target })
+    const manifestBytes = await this.fetchBytes(location.url)
+    const signature = await this.fetchText(location.signature)
     const manifest = await verifyBundleManifest(manifestBytes, signature, trustedKeys)
     if (manifest.releaseId !== target)
       throw new DocumentError('invalid-schema', `The manifest releaseId ${manifest.releaseId} is not the channel releaseId ${target}.`)
@@ -472,8 +478,15 @@ export class UpdateClient {
   }
 
   /** Downloads one object into the store. Returns why it failed, or `undefined` when the object is stored. */
-  private async downloadObject(hash: string, size: number, onBytes: (received: number) => void): Promise<string | undefined> {
+  private async downloadObject(releaseId: number, hash: string, size: number, onBytes: (received: number) => void): Promise<string | undefined> {
     const part = this.objects.partPath(hash)
+    let url: string
+    try {
+      url = await locateFile(this.locate, { kind: 'object', releaseId, sha256: hash, size })
+    }
+    catch (error) {
+      return `the locator found no URL: ${errorMessageFrom(error) ?? 'unknown error'}`
+    }
     const download = withRetry(async () => downloadFile({
       fetch: this.fetch,
       fs: this.fs,
@@ -481,7 +494,7 @@ export class UpdateClient {
       onBytes,
       path: part,
       size,
-      url: `${this.options.feedUrl}/objects/sha256/${hash.slice(0, 2)}/${hash}`,
+      url,
     }), {
       onError: (error) => {
         // withRetry retries every error. Stop early for errors that another attempt cannot fix.
@@ -536,12 +549,12 @@ export class UpdateClient {
     if (reuse && this.lastChannelFile && now.getTime() - this.lastChannelFile.at < CHANNEL_FILE_REUSE_MS)
       return this.lastChannelFile.file
 
-    const { channel, feedUrl, trustedKeys } = this.options
+    const { channel, trustedKeys } = this.options
     const state = await this.state()
-    const url = `${feedUrl}/channels/${channel}.json`
+    const location = await locateDocument(this.locate, { channel, kind: 'channel' })
     const fetchVerified = async () => verifyChannelFile(
-      await this.fetchBytes(url),
-      await this.fetchText(`${url}.sig`),
+      await this.fetchBytes(location.url),
+      await this.fetchText(location.signature),
       trustedKeys,
       { channel, lastIssuedAt: state.channelIssuedAt?.[channel], now, product: this.options.product },
     )
@@ -785,7 +798,7 @@ export class UpdateClient {
     const worker = async () => {
       for (let next = queue.shift(); next && !failure; next = queue.shift()) {
         const [hash, object] = next
-        const problem = await this.downloadObject(hash, object.size, (bytes) => {
+        const problem = await this.downloadObject(manifest.releaseId, hash, object.size, (bytes) => {
           received.set(hash, bytes)
           report()
         })

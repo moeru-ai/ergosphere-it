@@ -1,6 +1,13 @@
+import { generateKeyPairSync } from 'node:crypto'
+
 import { describe, expect, it } from 'vitest'
 
-import { canonicalJson, createKeyPair, keyPairFromPrivateKey, signDocument, verifyBytes } from './crypto'
+import { canonicalJson, createKeyPair, isPublicKey, keyPairFromPrivateKey, signDocument, signingKeyToPem, trustedKeyFromPublicKey, trustedKeyToOpenSsh, verifyBytes } from './crypto'
+
+// One key in two forms: ssh-keygen made the OpenSSH key, and Node made the PEM from the JWK of the same 32 bytes.
+const SSH = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEnCGr/Q1PZzU/9dlC4UH/Pb1uml+D4Bzcojc9U2vX9m'
+const PEM = '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAScIav9DU9nNT/12ULhQf89vW6aX4PgHNyiNz1Ta9f2Y=\n-----END PUBLIC KEY-----\n'
+const SPKI = 'MCowBQYDK2VwAyEAScIav9DU9nNT/12ULhQf89vW6aX4PgHNyiNz1Ta9f2Y='
 
 describe('canonicalJson', () => {
   it('sorts keys at every level and drops whitespace', () => {
@@ -30,20 +37,58 @@ describe('canonicalJson', () => {
 })
 
 describe('keyPairFromPrivateKey', () => {
-  it('rebuilds the same key pair from the private key alone', async () => {
+  it('rebuilds the same key pair from the PEM of the private key alone', async () => {
     const pair = await createKeyPair()
 
-    expect(await keyPairFromPrivateKey(pair.signingKey.privateKey)).toEqual(pair)
+    expect(await keyPairFromPrivateKey(signingKeyToPem(pair.signingKey))).toEqual(pair)
+  })
+
+  it('reads the PEM of OpenSSL, also with CRLF newlines', async () => {
+    const pem = generateKeyPairSync('ed25519').privateKey.export({ format: 'pem', type: 'pkcs8' })
+    const pair = await keyPairFromPrivateKey(pem)
+
+    expect(signingKeyToPem(pair.signingKey)).toBe(pem)
+    expect(await keyPairFromPrivateKey(pem.replaceAll('\n', '\r\n'))).toEqual(pair)
   })
 
   it('signs documents that the rebuilt trusted key verifies', async () => {
-    const { signingKey, trustedKey } = await keyPairFromPrivateKey((await createKeyPair()).signingKey.privateKey)
+    const { signingKey, trustedKey } = await keyPairFromPrivateKey(signingKeyToPem((await createKeyPair()).signingKey))
     const { bytes, signature } = await signDocument({ kind: 'test' }, signingKey)
 
     expect(await verifyBytes(bytes, Uint8Array.fromBase64(signature) as Uint8Array<ArrayBuffer>, trustedKey)).toBe(true)
   })
 
-  it('rejects a private key that is not base64', async () => {
-    await expect(keyPairFromPrivateKey('not base64!')).rejects.toThrow('not base64')
+  it('rejects base64 DER, an encrypted PEM, and a key of another type', async () => {
+    const { signingKey } = await createKeyPair()
+    const encrypted = generateKeyPairSync('ed25519', { privateKeyEncoding: { cipher: 'aes-256-cbc', format: 'pem', passphrase: 'secret', type: 'pkcs8' }, publicKeyEncoding: { format: 'pem', type: 'spki' } }).privateKey
+    const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ format: 'pem', type: 'pkcs8' })
+
+    await expect(keyPairFromPrivateKey(signingKey.privateKey)).rejects.toThrow('not an unencrypted PKCS#8 PEM')
+    await expect(keyPairFromPrivateKey(encrypted)).rejects.toThrow('not an unencrypted PKCS#8 PEM')
+    await expect(keyPairFromPrivateKey(rsa)).rejects.toThrow('not an Ed25519 key')
+  })
+})
+
+describe('public keys', () => {
+  it('reads an OpenSSH key, with or without a comment, and a PEM', async () => {
+    expect(isPublicKey(SSH)).toBe(true)
+    expect((await trustedKeyFromPublicKey(SSH)).publicKey).toBe(SPKI)
+    expect((await trustedKeyFromPublicKey(`${SSH} release@example.test`)).publicKey).toBe(SPKI)
+    expect((await trustedKeyFromPublicKey(PEM)).publicKey).toBe(SPKI)
+    expect((await trustedKeyFromPublicKey(PEM.replaceAll('\n', '\r\n'))).publicKey).toBe(SPKI)
+    expect(await trustedKeyFromPublicKey(SSH)).toEqual(await trustedKeyFromPublicKey(PEM))
+  })
+
+  it('writes the OpenSSH key that ssh-keygen writes', () => {
+    expect(trustedKeyToOpenSsh({ keyId: '', publicKey: SPKI })).toBe(SSH)
+  })
+
+  it('rejects base64 SPKI, the old ed25519: form, and keys of other types', async () => {
+    expect(isPublicKey(SPKI)).toBe(false)
+    expect(isPublicKey(`ed25519:${SPKI}`)).toBe(false)
+    expect(isPublicKey(generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey.export({ format: 'pem', type: 'spki' }))).toBe(false)
+    expect(isPublicKey('ssh-rsa AAAAB3NzaC1yc2EAAAADAQAB')).toBe(false)
+    expect(isPublicKey('ssh-ed25519 AAAAB3NzaC1yc2EAAAADAQAB')).toBe(false)
+    await expect(trustedKeyFromPublicKey(SPKI)).rejects.toThrow('not an Ed25519 key')
   })
 })
