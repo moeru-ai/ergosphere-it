@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 /// <reference path="../../../examples/electron-app/src/env.d.ts" />
 /// <reference types="@ergosphere-it/electron/virtual" />
+/// <reference types="electron-vite/node" />
 
 declare global {
   /** Build constants of the test variants, from `electron.vite.config.ts`. */

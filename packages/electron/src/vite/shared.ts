@@ -10,6 +10,11 @@ import { OUT_LAYOUT } from '../layout'
 export interface BuildContext {
   /** `out/bundle`: everything that updates over the air. */
   bundleDir: string
+  /**
+   * The entry files of the bundle that a process starts from, relative to the bundle, for example `main/index.mjs`. The
+   * main and preload plugins set them, and the renderer plugin writes them into `out/bundle.json`.
+   */
+  entries: { main?: string, preload?: string }
   installerReleaseId: number
   outDir: string
   releaseId: number
@@ -45,6 +50,7 @@ export function buildContext(options: PluginOptions = {}): BuildContext {
   const releaseId = Number(env.ERGOSPHERE_IT_RELEASE_ID ?? createReleaseId())
   const context: BuildContext = {
     bundleDir: join(outDir, OUT_LAYOUT.bundle),
+    entries: {},
     installerReleaseId: Number(env.ERGOSPHERE_IT_INSTALLER_RELEASE_ID ?? createReleaseId(releaseId)),
     outDir,
     releaseId,

@@ -24,14 +24,18 @@ const options = { outDir: env.TEST_OUT ?? 'out', root: import.meta.dirname }
 
 export default defineConfig({
   main: {
+    // Two main entries: the bundle main, and a script for a utility process.
+    build: { rolldownOptions: { input: { index: 'src/main.ts', sync: 'src/entries/sync.ts' } } },
     define: {
       __TEST_CRASH__: JSON.stringify(env.TEST_CRASH === '1'),
       __TEST_MAIN_TAG__: JSON.stringify(env.TEST_MAIN_TAG ?? '1'),
     },
-    plugins: [ergosphereMain({ ...options, entry: 'src/main.ts', launcher: 'src/launcher.ts' })],
+    plugins: [ergosphereMain({ ...options, launcher: 'src/launcher.ts' })],
   },
   preload: {
-    plugins: [ergospherePreload({ ...options, entry: join(example, 'preload/index.ts') })],
+    // Two preload entries: the preload of the example, and one that a window loads with preloadOf('extra').
+    build: { lib: { entry: { extra: 'src/entries/extra-preload.ts', index: join(example, 'preload/index.ts') } } },
+    plugins: [ergospherePreload(options)],
   },
   renderer: {
     // The pages are in the example, so the input names them. electron-vite looks only in src/renderer by itself.

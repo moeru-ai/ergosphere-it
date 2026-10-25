@@ -26,6 +26,7 @@
       "entry": [
         "ergo.config.ts",
         "src/launcher.ts",
+        "src/entries/sync.ts",
         "src/main.ts",
         "src/use-updates-shim.ts"
       ]
