@@ -15,9 +15,9 @@ import { defineConfig } from 'electron-vite'
 const example = resolve(import.meta.dirname, '../../examples/electron-app/src')
 
 // The scripts build many releases with these variables. Each release is one variant. The release ID and the version
-// come from UPDATES_RELEASE_ID and UPDATES_VERSION.
+// come from ERGOSPHERE_IT_RELEASE_ID and ERGOSPHERE_IT_VERSION.
 const assetBytes = Math.round(Number(env.TEST_ASSET_MB ?? 0) * 1024 * 1024)
-const label = env.UPDATES_VERSION ?? '1.0.0'
+const label = env.ERGOSPHERE_IT_VERSION ?? '1.0.0'
 
 // The three plugins of one build share the output directory.
 const options = { outDir: env.TEST_OUT ?? 'out', root: import.meta.dirname }

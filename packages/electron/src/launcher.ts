@@ -1,11 +1,12 @@
 import type { AddressInfo } from 'node:net'
 
-import type { BootSelection, CheckResult, InstallerCheckResult } from '@ergosphere-it/client'
+import type { BootSelection, CheckResult, Fetch, InstallerCheckResult, Locator } from '@ergosphere-it/client'
 import type { BundleManifest, ErrorCode } from '@ergosphere-it/protocol'
 
 import type { LauncherConfig } from './config'
 import type { Installer, InstallerProgress } from './installer'
 import type { BuildInfo } from './layout'
+import type { LauncherFileRef } from './locate'
 import type { ActiveBundle, LauncherEvent, LoadOptions, Runtime, Updater } from './runtime'
 import type { BundleInfo, DisabledReason, UpdateError, UpdateErrorCode, UpdateInfo, UpdaterStatus } from './status'
 
@@ -26,10 +27,13 @@ import { app, BrowserWindow } from 'electron'
 
 import { writeRuntime } from './global'
 import { BUNDLE_LAYOUT, OUT_LAYOUT } from './layout'
+import { createTreeLocator } from './locate'
 import { registerBundleModuleHooks } from './module-hooks'
 
 export type { LauncherConfig } from './config'
 export type { ElectronUpdaterInstaller, Installer, InstallerFile, InstallerFormat, InstallerProgress, SparkleAppcast, SparkleInstaller } from './installer'
+export { createTreeLocator, defineLocator } from './locate'
+export type { FileLocation, LauncherFileRef, Locator } from './locate'
 export type { ActiveBundle, LauncherEvent, LoadOptions, Updater } from './runtime'
 export type * from './status'
 
@@ -38,12 +42,25 @@ export interface LauncherOptions extends LauncherConfig {
   /** Defaults to `<userData>/ergosphere-it`. */
   dataDir?: string
   /**
+   * Fetches the files of updates, for example with the credentials of a private release server. Defaults to the global
+   * `fetch` without a cache. It gets every URL that the launcher fetches: the locations of `locate`, and the absolute
+   * URLs of installer files in signed installer manifests, which can be on another host. So add credentials only for
+   * the origin of your server. electron-updater fetches its feed and installer files with its own network stack, without
+   * it.
+   */
+  fetch?: Fetch
+  /**
    * Installs new versions of the app, instead of the installer that `installers` of `ergo.config.ts` names for this
    * platform. `false` turns off installer updates, so the app updates only its bundle.
    */
   installer?: false | Installer
   /** `import.meta.url` of the launcher. Bare imports of downloaded bundles resolve from here. */
   launcherUrl: string
+  /**
+   * Tells the launcher where each file is, for example with a lookup on a release server. Defaults to the file tree
+   * under `feedUrl`. Locations carry no trust: the launcher verifies documents and objects as always.
+   */
+  locate?: Locator<LauncherFileRef>
   onEvent?: (event: LauncherEvent) => void
   /** Defaults to `<platform>-<arch>`, for example `darwin-arm64`. */
   platform?: string
@@ -85,6 +102,7 @@ class Launcher implements Runtime {
   private installer: Installer | undefined
   /** Failures of each installer release in this process, and the status that the last failure showed. */
   private readonly installerFailures = new Map<number, { count: number, retryAt: number, status: UpdaterStatus }>()
+  private readonly locate: Locator<LauncherFileRef>
   private readonly options: LauncherOptions
   private pending: PendingBundle | undefined
   private pendingInstaller: PendingInstaller | undefined
@@ -97,6 +115,7 @@ class Launcher implements Runtime {
 
   constructor(options: LauncherOptions) {
     this.options = options
+    this.locate = options.locate ?? createTreeLocator(options.feedUrl)
     const outDir = join(dirname(fileURLToPath(options.launcherUrl)), '..')
     this.bundleRoot = join(outDir, OUT_LAYOUT.bundle)
     this.buildInfo = readBuildInfo(join(outDir, OUT_LAYOUT.buildInfo), options)
@@ -276,10 +295,12 @@ class Launcher implements Runtime {
       cohorts: this.preferences.cohorts,
       dataDir: this.dataDir,
       feedUrl: this.options.feedUrl,
+      fetch: this.options.fetch,
       fs: createNodeFileSystem(),
       host: 'electron',
       installedApp: this.installer ? { formats: [this.installer.format], releaseId: installerReleaseId } : undefined,
       installerBundle: { components, dir: this.bundleRoot, releaseId, version },
+      locate: this.locate,
       maxBootAttempts: this.options.maxLaunchAttempts,
       nativeVersion: this.options.nativeVersion,
       platform: this.options.platform ?? `${platform}-${arch}`,
@@ -604,12 +625,14 @@ class Launcher implements Runtime {
         if (artifact.format !== 'electron-updater')
           throw new Error(`The installer takes electron-updater files, and the release offers ${artifact.format}.`)
 
-        const file = await installer.download({ feedUrl: available.feedUrl, sha512: artifact.sha512, size: artifact.size, url: artifact.url, version }, onProgress)
+        const location = await this.locate({ kind: 'installer-feed', platform: artifact.platform, releaseId: available.manifest.releaseId })
+        const updaterFeedUrl = typeof location === 'string' ? location : location.url
+        const file = await installer.download({ sha512: artifact.sha512, size: artifact.size, updaterFeedUrl, url: artifact.url, version }, onProgress)
         if (await sha512Of(file) !== artifact.sha512)
           return fail({ code: 'installer-mismatch', message: `${file} does not match the sha512 of the signed installer manifest.` })
       }
       else {
-        const bytes = await fetchChecked(artifact.url, artifact.sha512)
+        const bytes = await fetchChecked(this.options.fetch ?? ((url, init) => fetch(url, { ...init, cache: 'no-store' })), artifact.url, artifact.sha512)
         if (!bytes)
           return fail({ code: 'installer-mismatch', message: `The appcast at ${artifact.url} does not match the sha512 of the signed installer manifest.` })
 
@@ -695,8 +718,8 @@ function classifyError(error: unknown): UpdateError {
 }
 
 /** Downloads a small file, and returns its bytes when their SHA-512 is `sha512`. */
-async function fetchChecked(url: string, sha512: string): Promise<Uint8Array | undefined> {
-  const response = await fetch(url, { cache: 'no-store' })
+async function fetchChecked(fetchFile: Fetch, url: string, sha512: string): Promise<Uint8Array | undefined> {
+  const response = await fetchFile(url)
   if (!response.ok)
     throw new Error(`${url} returned HTTP ${response.status}.`)
 

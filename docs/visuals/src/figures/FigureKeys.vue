@@ -40,7 +40,7 @@ import { FIGURE_ICONS } from '../stack/stack'
         Private key
       </p>
       <p class="f-note">
-        Goes into the CI secret UPDATES_SIGNING_KEY. Never commit it.
+        Goes into the CI secret ERGOSPHERE_IT_SIGNING_KEY. Never commit it.
       </p>
     </div>
 

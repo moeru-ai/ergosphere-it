@@ -374,16 +374,16 @@ export async function launchApp(workspace: Workspace, options: LaunchOptions): P
 /** Runs `electron-vite build` with the release ID and the build constants of a variant. */
 async function buildApp(out: string, releaseId: number, variant: Variant): Promise<void> {
   const variables: Record<string, string> = {
+    // The installed app is installer release 1, so installer releases of the test are newer.
+    ERGOSPHERE_IT_INSTALLER_RELEASE_ID: '1',
+    ERGOSPHERE_IT_RELEASE_ID: String(releaseId),
+    ERGOSPHERE_IT_VERSION: variant.label,
     TEST_ASSET_MB: String(variant.assetMb ?? 0),
     TEST_CRASH: variant.crash ? '1' : '0',
     TEST_MAIN_TAG: variant.mainTag ?? '1',
     TEST_NO_HEALTH: variant.noHealth ? '1' : '0',
     TEST_OUT: out,
     TEST_SLOW_HEALTH: variant.slowHealth ? '1' : '0',
-    // The installed app is installer release 1, so installer releases of the test are newer.
-    UPDATES_INSTALLER_RELEASE_ID: '1',
-    UPDATES_RELEASE_ID: String(releaseId),
-    UPDATES_VERSION: variant.label,
   }
   // electron.vite.config.ts reads the variant from the environment, as `pnpm build` does.
   const previous = Object.fromEntries(Object.keys(variables).map(name => [name, env[name]]))

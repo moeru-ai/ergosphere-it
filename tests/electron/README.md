@@ -18,8 +18,8 @@ A test variant changes one thing:
 
 | Variable | Effect |
 | --- | --- |
-| `UPDATES_VERSION` | The version of the build. A page file holds it, so a new version changes the page, and the app reloads. |
-| `UPDATES_RELEASE_ID` | The release ID of the build |
+| `ERGOSPHERE_IT_VERSION` | The version of the build. A page file holds it, so a new version changes the page, and the app reloads. |
+| `ERGOSPHERE_IT_RELEASE_ID` | The release ID of the build |
 | `TEST_MAIN_TAG` | A tag in the main code. A new tag changes main, so the app restarts. |
 | `TEST_ASSET_MB` | The size of a page asset, so a download takes time |
 | `TEST_CRASH` | The bundle main throws at start, so the launcher rolls it back |

@@ -12,6 +12,7 @@ export default defineConfig({
     'main': 'src/main.ts',
     'release': 'src/release.ts',
     'sparkle': 'src/sparkle.ts',
+    'storage/s3': 'src/storage/s3.ts',
     'types': 'src/types.ts',
     'vite/main': 'src/vite/main.ts',
     'vite/preload': 'src/vite/preload.ts',

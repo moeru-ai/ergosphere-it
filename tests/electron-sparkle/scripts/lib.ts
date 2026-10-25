@@ -4,6 +4,7 @@ import type { Server } from 'node:http'
 
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
+import { createPrivateKey, createPublicKey } from 'node:crypto'
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
@@ -70,9 +71,9 @@ export async function prepareReleases({ port, work = mkdtempSync(join(tmpdir(), 
     ...env,
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
     ERGO_FEED_URL: `${origin}/bucket`,
-    ERGO_PUBLIC_KEY: `ed25519:${trustedKey.publicKey}`,
+    ERGO_PUBLIC_KEY: createPublicKey({ format: 'der', key: Buffer.from(trustedKey.publicKey, 'base64'), type: 'spki' }).export({ format: 'pem', type: 'spki' }),
+    ERGOSPHERE_IT_SIGNING_KEY: createPrivateKey({ format: 'der', key: Buffer.from(signingKey.privateKey, 'base64'), type: 'pkcs8' }).export({ format: 'pem', type: 'pkcs8' }),
     SPARKLE_ED_PUBLIC_KEY: sparklePublic.toString('base64'),
-    UPDATES_SIGNING_KEY: `ed25519:${signingKey.privateKey}`,
   }
   const run = (command: string, args: string[], extra: Record<string, string> = {}) => {
     execFileSync(command, args, { cwd: example, env: { ...buildEnv, ...extra }, stdio: 'inherit' })
@@ -83,7 +84,7 @@ export async function prepareReleases({ port, work = mkdtempSync(join(tmpdir(), 
 
   for (const version of versions) {
     console.info(`\n== Build ${version}`)
-    run('pnpm', ['exec', 'electron-vite', 'build'], { UPDATES_VERSION: version })
+    run('pnpm', ['exec', 'electron-vite', 'build'], { ERGOSPHERE_IT_VERSION: version })
     cpSync(join(example, 'out'), join(work, `out-${version}`), { recursive: true })
     run('pnpm', ['exec', 'electron-builder', '--mac', '--publish', 'never', '--config', 'electron-builder.config.ts', `-c.extraMetadata.version=${version}`, `-c.directories.output=${join(work, `dist-${version}`)}`])
     const zip = readdirSync(join(work, `dist-${version}`)).find(name => name.endsWith('.zip'))!
@@ -98,7 +99,7 @@ export async function prepareReleases({ port, work = mkdtempSync(join(tmpdir(), 
     cli,
     'register',
     'installer',
-    '--bucket',
+    '--store',
     join(work, 'serve/bucket'),
     '--channel',
     'stable',

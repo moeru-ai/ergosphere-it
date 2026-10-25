@@ -1,4 +1,6 @@
 export * from './client'
 export type * from './io'
+export { createTreeLocator, defineLocator } from './locate'
+export type { FileLocation, FileRef, Locator } from './locate'
 export * from './requirement'
 export type { BundleRef, ClientState, RollbackReason } from './state'

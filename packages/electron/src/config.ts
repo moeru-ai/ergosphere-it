@@ -12,9 +12,6 @@ import { parse as parseYaml } from 'yaml'
 
 import { ergoConfigSchema } from './define-config'
 
-/** The prefix of a public key in `publicKeys`. The rest is the SPKI DER of an Ed25519 key, in base64. */
-const PUBLIC_KEY_PREFIX = 'ed25519:'
-
 /** Names that the build looks for, in this order, next to `package.json`. */
 const CONFIG_FILES = ['ergo.config.ts', 'ergo.config.mts', 'ergo.config.js', 'ergo.config.mjs']
 
@@ -46,16 +43,20 @@ interface PackageJson {
   version?: string
 }
 
-/** Loads `ergo.config.ts` from `root`, checks it, and resolves what the launcher needs. Throws on a bad field. */
-export async function loadLauncherConfig(root: string): Promise<LauncherConfig> {
-  const path = CONFIG_FILES.map(name => join(root, name)).find(file => existsSync(file))
+/** Returns the path of `ergo.config.ts` in `root`, or `undefined` when `root` has none. */
+export function findErgoConfig(root: string): string | undefined {
+  return CONFIG_FILES.map(name => join(root, name)).find(file => existsSync(file))
+}
+
+/** Loads `ergo.config.ts` from `root`, and checks it. Throws on a bad field. */
+export async function loadErgoConfig(root: string): Promise<ResolvedErgoConfig> {
+  const path = findErgoConfig(root)
   if (!path)
     throw new Error(`ergosphere-it: ${root} has no ergo.config.ts. See the README of @ergosphere-it/electron.`)
 
   const module = await import(pathToFileURL(path).href) as { default?: unknown }
-  let config: ResolvedErgoConfig
   try {
-    config = parse(ergoConfigSchema, module.default)
+    return parse(ergoConfigSchema, module.default)
   }
   catch (error) {
     if (error instanceof ValiError)
@@ -63,7 +64,12 @@ export async function loadLauncherConfig(root: string): Promise<LauncherConfig> 
 
     throw error
   }
-  const trustedKeys = await Promise.all(config.publicKeys.map(key => trustedKeyFromPublicKey(key.slice(PUBLIC_KEY_PREFIX.length))))
+}
+
+/** Loads `ergo.config.ts` from `root`, checks it, and resolves what the launcher needs. Throws on a bad field. */
+export async function loadLauncherConfig(root: string): Promise<LauncherConfig> {
+  const config = await loadErgoConfig(root)
+  const trustedKeys = await Promise.all(config.publicKeys.map(key => trustedKeyFromPublicKey(key)))
 
   return {
     applyMode: config.applyMode,

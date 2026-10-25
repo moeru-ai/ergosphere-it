@@ -27,20 +27,20 @@ export async function createElectronUpdaterInstaller(updater?: AppUpdater): Prom
     },
     async download(update, onProgress) {
       instance.autoInstallOnAppQuit = false
-      instance.setFeedURL({ provider: 'generic', url: update.feedUrl })
+      instance.setFeedURL({ provider: 'generic', url: update.updaterFeedUrl })
 
       const listener = (info: ProgressInfo) => onProgress({ phase: 'download', totalBytes: info.total, transferredBytes: info.transferred })
       instance.on('download-progress', listener)
       try {
         const result = await instance.checkForUpdates()
         if (!result?.isUpdateAvailable)
-          throw new Error(`electron-updater finds no newer version than this app at ${update.feedUrl}. The installer version must be newer than the app version.`)
+          throw new Error(`electron-updater finds no newer version than this app at ${update.updaterFeedUrl}. The installer version must be newer than the app version.`)
         if (result.updateInfo.version !== update.version)
-          throw new Error(`The feed at ${update.feedUrl} offers ${result.updateInfo.version}, and the installer manifest says ${update.version}.`)
+          throw new Error(`The feed at ${update.updaterFeedUrl} offers ${result.updateInfo.version}, and the installer manifest says ${update.version}.`)
 
         const [file] = await instance.downloadUpdate(result.cancellationToken)
         if (!file)
-          throw new Error(`electron-updater downloaded no file from ${update.feedUrl}.`)
+          throw new Error(`electron-updater downloaded no file from ${update.updaterFeedUrl}.`)
 
         return file
       }

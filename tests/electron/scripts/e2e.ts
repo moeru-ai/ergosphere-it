@@ -119,7 +119,7 @@ try {
   await workspace.point(2)
   const reloaded = await waitFor('page v2', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v2'))
   // The app downloads only the files that changed, and they are all page files.
-  const known = new Set(installed.objects.map(object => object.key))
+  const known = new Set(installed.objectFiles.map(object => object.key))
   const changed = pageOnly.manifest.components.flatMap(component => component.files.filter(file => !known.has(`objects/sha256/${file.sha256.slice(0, 2)}/${file.sha256}`)))
   const downloaded = requests.slice(objectRequests).filter(r => r.path.startsWith('/objects/')).length
   const onlyPage = changed.length > 0 && changed.every(file => file.path.startsWith('renderer/'))

@@ -4,18 +4,20 @@
 import { argv, cwd, env, exit } from 'node:process'
 import { parseArgs } from 'node:util'
 
+import { trustedKeyFromPublicKey } from '@ergosphere-it/protocol'
 import { errorMessageFrom } from '@moeru/std/error'
 
-import { loadLauncherConfig } from '../config'
-import { openBucket } from './bucket'
-import { keygen, parseSigningKey, promote, publishBundle, registerInstaller, setRollout, withdraw } from './commands'
+import { findErgoConfig, loadErgoConfig, loadLauncherConfig } from '../config'
+import { gitRootOf, keygen, parseSigningKey, promote, publishBundle, registerInstaller, setRollout, withdraw, writePrivateKey } from './commands'
+import { resolveStore } from './store'
 
 const usage = `Usage: ergosphere-it <command> [options]
 
 Commands:
-  keygen
-      Creates a key pair. Put the public key into "publicKeys" of ergo.config.ts, and the private key into the
-      CI secret UPDATES_SIGNING_KEY.
+  keygen --out-private-key <path>
+      Creates a key pair. It prints the public key, for "publicKeys" of ergo.config.ts, and writes the private key
+      to a new file, for the CI secret ERGOSPHERE_IT_SIGNING_KEY. Keep a backup of the key in a password manager or a
+      vault, then delete the file.
   publish bundle --channel <name> [--rollout <percent>] [--cohorts <a,b>] [--min-native-version <n>]
       Uploads the bundle of the build output and serves it on a channel.
   register installer --channel <name> [--files-url <url>] [--dist <dir>] [--sparkle <platform>=<appcast>]
@@ -33,13 +35,16 @@ Commands:
       bundle before it. Apps drop a download of the installer.
 
 Options:
-  --bucket <url>  s3://<bucket>/<prefix>, file://<dir>, or a directory. Defaults to UPDATES_BUCKET.
+  --store <url>   The release store: s3://<bucket>/<prefix>, file://<dir>, or a directory. Defaults to
+                  ERGOSPHERE_IT_STORE, then to store of ergo.config.ts.
   --out <dir>     The build output of the ergosphere-it plugins. Defaults to out.
 
 Environment:
-  UPDATES_SIGNING_KEY                         The private key from keygen
+  ERGOSPHERE_IT_SIGNING_KEY                   The private key from keygen: an unencrypted PKCS#8 PEM, as text or base64
   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY    Credentials of an s3:// bucket
-  UPDATES_S3_ENDPOINT                         The endpoint of an S3 service, for example https://<account>.r2.cloudflarestorage.com
+  ERGOSPHERE_IT_STORE                         The release store, as --store takes it
+  ERGOSPHERE_IT_S3_ENDPOINT                   The endpoint of an S3 service, for example https://<account>.r2.cloudflarestorage.com.
+                                              AWS_ENDPOINT_URL_S3 works too.
   AWS_REGION                                  The region of an AWS bucket
 `
 
@@ -58,8 +63,10 @@ const { positionals, values } = parseArgs({
     'help': { short: 'h', type: 'boolean' },
     'min-native-version': { type: 'string' },
     'out': { default: 'out', type: 'string' },
+    'out-private-key': { type: 'string' },
     'rollout': { type: 'string' },
     'sparkle': { multiple: true, type: 'string' },
+    'store': { type: 'string' },
     'to': { type: 'string' },
   },
 })
@@ -85,27 +92,37 @@ async function run(): Promise<string> {
   if (values.help || !command)
     return usage
   if (command === 'keygen') {
+    // The private key goes into a file and not to the output, so a terminal, a log, or a screen recording keeps no copy.
+    const path = required('--out-private-key', values['out-private-key'])
     const { privateKey, publicKey } = await keygen()
+    writePrivateKey(path, privateKey)
+    const gitRoot = gitRootOf(path)
+    const warning = gitRoot === undefined ? '' : `\n\nWarning: ${path} is in the git work tree ${gitRoot}. Move it out, so that git cannot commit it.`
 
-    return `Public key, for "publicKeys" in ergo.config.ts:\n  ${publicKey}\n\nPrivate key, for the CI secret UPDATES_SIGNING_KEY. Keep it secret:\n  ${privateKey}`
+    return `Public key, for "publicKeys" in ergo.config.ts:\n${publicKey}\n\nPrivate key, for the CI secret ERGOSPHERE_IT_SIGNING_KEY: ${path}\nKeep it secret. Put it into the CI secret and into a password manager or a vault as a backup, then delete the file. Without the key, no update can ship.${warning}`
   }
 
-  const bucket = openBucket(required('--bucket or UPDATES_BUCKET', values.bucket ?? env.UPDATES_BUCKET))
-  const signingKey = await parseSigningKey(required('UPDATES_SIGNING_KEY', env.UPDATES_SIGNING_KEY))
+  // --bucket is the name of --store before release stores.
+  const { source, store } = await resolveStore(values.store ?? values.bucket, env.ERGOSPHERE_IT_STORE, cwd())
+  // A variable or a flag takes precedence over store of ergo.config.ts, so say which store this run writes to.
+  console.info(`Release store: ${store.name}, from ${source}.`)
+  const signingKey = await parseSigningKey(required('ERGOSPHERE_IT_SIGNING_KEY', env.ERGOSPHERE_IT_SIGNING_KEY))
+  // A channel file in the store can be signed with any key of publicKeys, for example the key before a rotation.
+  const publicKeys = findErgoConfig(cwd()) === undefined ? [] : (await loadErgoConfig(cwd())).publicKeys
+  const context = { signingKey, store, trustedKeys: await Promise.all(publicKeys.map(key => trustedKeyFromPublicKey(key))) }
   const channel = values.channel?.[0]
 
   if (command === 'publish' && subcommand === 'bundle') {
     const result = await publishBundle({
-      bucket,
       channel: required('--channel', channel),
       cohorts: values.cohorts?.split(',').map(cohort => cohort.trim()).filter(Boolean),
       minNativeVersion: integer('--min-native-version', values['min-native-version']),
       outDir: values.out,
       rollout: integer('--rollout', values.rollout),
-      signingKey,
+      ...context,
     })
 
-    return `Published bundle ${result.releaseId} on ${channel} in ${bucket.url} (${result.uploaded} files uploaded).`
+    return `Published bundle ${result.releaseId} on ${channel} in ${store.name} (${result.uploaded} new objects).`
   }
   if (command === 'register' && subcommand === 'installer') {
     const sparkleAppcasts = Object.fromEntries((values.sparkle ?? []).map((entry) => {
@@ -117,21 +134,20 @@ async function run(): Promise<string> {
     }))
     const feedUrl = values['feed-url'] ?? (Object.keys(sparkleAppcasts).length > 0 ? (await loadLauncherConfig(cwd())).feedUrl : undefined)
     const result = await registerInstaller({
-      bucket,
       channel: required('--channel', channel),
       distDir: values.dist,
       downloadPage: values['download-page'],
       feedUrl,
       filesUrl: values['files-url'],
       outDir: values.out,
-      signingKey,
       sparkleAppcasts,
+      ...context,
     })
 
     return `Registered installer ${result.releaseId} with ${result.files.join(', ')} on ${channel}.`
   }
   if (command === 'promote') {
-    const file = await promote(bucket, required('--from', values.from), required('--to', values.to), signingKey)
+    const file = await promote(context, required('--from', values.from), required('--to', values.to))
 
     return `Channel ${file.channel} now serves bundle ${file.bundle?.releaseId ?? 'none'} and installer ${file.installer?.releaseId ?? 'none'}.`
   }
@@ -140,7 +156,7 @@ async function run(): Promise<string> {
     if (percentage === undefined || percentage > 100)
       throw new Error('ergosphere-it: rollout needs a percentage from 0 to 100.')
 
-    const file = await setRollout(bucket, required('--channel', channel), percentage, signingKey)
+    const file = await setRollout(context, required('--channel', channel), percentage)
 
     return `Channel ${file.channel} serves bundle ${file.bundle?.releaseId} to ${percentage}% of installs.`
   }
@@ -149,7 +165,7 @@ async function run(): Promise<string> {
     if (releaseId === undefined)
       throw new Error('ergosphere-it: withdraw needs a release ID.')
 
-    const channels = await withdraw(bucket, releaseId, signingKey, values.channel)
+    const channels = await withdraw(context, releaseId, values.channel)
 
     return `Withdrew release ${releaseId} on ${channels.join(', ') || 'no channel'}.`
   }

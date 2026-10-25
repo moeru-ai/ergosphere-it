@@ -10,5 +10,5 @@ export default defineConfig({
   // Sparkle installs new installers on macOS. Other platforms keep electron-updater.
   installers: { darwin: 'sparkle' },
   nativeVersion: 1,
-  publicKeys: [env.ERGO_PUBLIC_KEY ?? 'ed25519:MCowBQYDK2VwAyEAenjtyIa4GbhQJba2WuMAcvHUR1Sw6EVnl0Wa+NseEdU='],
+  publicKeys: [env.ERGO_PUBLIC_KEY ?? 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHp47ciGuBm4UCW2tlrjAHLx1EdUsOhFZ5dFmvjbHhHV'],
 })

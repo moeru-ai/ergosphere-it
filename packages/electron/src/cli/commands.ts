@@ -1,22 +1,21 @@
-import type { ChannelFile, SigningKey } from '@ergosphere-it/protocol'
-import type { ChannelFileInput, InstallerFileInput, TreeFile } from '@ergosphere-it/publish'
+import type { ChannelFile, SigningKey, TrustedKey } from '@ergosphere-it/protocol'
+import type { ChannelFileInput, InstallerFileInput, ReleaseStore, StoredDocument } from '@ergosphere-it/publish'
 
-import type { Bucket } from './bucket'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
-
-import { createKeyPair, keyPairFromPrivateKey } from '@ergosphere-it/protocol'
-import { buildChannelFile, uploadStages } from '@ergosphere-it/publish'
+import { createKeyPair, keyPairFromPrivateKey, signingKeyToPem, trustedKeyToOpenSsh, verifyChannelFileSignature } from '@ergosphere-it/protocol'
+import { buildChannelFile, isChannelConflict } from '@ergosphere-it/publish'
 import { parse } from 'yaml'
 
 import { bundleReleaseFromBuild, installerReleaseFromBuild, readBuildInfo } from '../release'
 
-/** The prefix of keys in `UPDATES_SIGNING_KEY` and in `publicKeys` of `ergo.config.ts`. */
-const KEY_PREFIX = 'ed25519:'
+/** The start of `-----BEGIN` in base64. */
+const PEM_IN_BASE64 = 'LS0tLS1CRUdJT'
+/** Writes of a channel file that a store can reject for a change of another publish, before the command fails. */
+const CHANNEL_WRITE_ATTEMPTS = 5
 
-export interface BundleCommandOptions {
-  bucket: Bucket
+export interface BundleCommandOptions extends PublishContext {
   channel: string
   /** Limits the bundle to these cohorts. */
   cohorts?: string[]
@@ -25,11 +24,9 @@ export interface BundleCommandOptions {
   outDir: string
   /** Percentage of installs that get the bundle. Defaults to 100. */
   rollout?: number
-  signingKey: SigningKey
 }
 
-export interface InstallerCommandOptions {
-  bucket: Bucket
+export interface InstallerCommandOptions extends PublishContext {
   channel: string
   /** The electron-builder output directory with the `latest*.yml` files. */
   distDir: string
@@ -43,60 +40,97 @@ export interface InstallerCommandOptions {
    */
   filesUrl?: string
   outDir: string
-  signingKey: SigningKey
   /** Sparkle appcasts by platform, for example `{ 'darwin-arm64': 'dist/appcast.xml' }`. */
   sparkleAppcasts?: Record<string, string>
 }
 
-/** Creates a key pair. The private key goes into the CI secret `UPDATES_SIGNING_KEY`, the public key into `ergo.config.ts`. */
+/** What every command that publishes needs. */
+export interface PublishContext {
+  signingKey: SigningKey
+  store: ReleaseStore
+  /**
+   * Keys that a channel file in the store may be signed with, for example `publicKeys` of `ergo.config.ts`. The key of
+   * `signingKey` is always trusted. A command verifies a channel file before it changes it.
+   */
+  trustedKeys?: TrustedKey[]
+}
+
+/** Returns the root of the git work tree that has the path, or `undefined` when no work tree has it. */
+export function gitRootOf(path: string): string | undefined {
+  for (let dir = dirname(resolve(path)); ; dir = dirname(dir)) {
+    if (existsSync(join(dir, '.git')))
+      return dir
+    if (dirname(dir) === dir)
+      return undefined
+  }
+}
+
+/**
+ * Creates a key pair. The private key is a PKCS#8 PEM for the CI secret `ERGOSPHERE_IT_SIGNING_KEY`. The public key is an
+ * OpenSSH key for `publicKeys` of `ergo.config.ts`.
+ */
 export async function keygen(): Promise<{ privateKey: string, publicKey: string }> {
   const { signingKey, trustedKey } = await createKeyPair()
 
-  return { privateKey: `${KEY_PREFIX}${signingKey.privateKey}`, publicKey: `${KEY_PREFIX}${trustedKey.publicKey}` }
+  return { privateKey: signingKeyToPem(signingKey), publicKey: trustedKeyToOpenSsh(trustedKey) }
 }
 
-/** Reads a signing key from the form that `keygen` prints. */
+/**
+ * Reads a signing key from an unencrypted PKCS#8 PEM, as `keygen`, OpenSSL, and the SSH keys of 1Password give it.
+ *
+ * A secret store can keep a PEM on one line, with escaped newlines or as base64 of the whole PEM, so `\n` counts as a
+ * newline and base64 that starts with `-----BEGIN` counts as the PEM.
+ */
 export async function parseSigningKey(text: string): Promise<SigningKey> {
-  if (!text.startsWith(KEY_PREFIX))
-    throw new Error(`ergosphere-it: the signing key must start with ${KEY_PREFIX}. Run \`ergosphere-it keygen\` to make one.`)
-
-  return (await keyPairFromPrivateKey(text.slice(KEY_PREFIX.length))).signingKey
+  try {
+    return (await keyPairFromPrivateKey(unwrapPem(text))).signingKey
+  }
+  catch (error) {
+    throw new Error(`ergosphere-it: ERGOSPHERE_IT_SIGNING_KEY is not valid. ${(error as Error).message} Run \`ergosphere-it keygen\` to make one.`, { cause: error })
+  }
 }
 
 /** Moves the bundle and the installer of one channel into another, for example from `beta` to `beta-daily`. */
-export async function promote(bucket: Bucket, from: string, to: string, signingKey: SigningKey): Promise<ChannelFile> {
-  const source = await readChannelFile(bucket, from)
+export async function promote(context: PublishContext, from: string, to: string): Promise<ChannelFile> {
+  const source = (await readChannel(context, from))?.file
   if (!source)
-    throw new Error(`ergosphere-it: ${bucket.url} has no channel ${from}.`)
+    throw new Error(`ergosphere-it: ${context.store.name} has no channel ${from}.`)
 
-  return writeChannelFile(bucket, to, source.product, signingKey, current => ({
+  return writeChannelFile(context, to, current => ({
     bundle: source.bundle && { cohorts: source.bundle.cohorts, releaseId: source.bundle.releaseId, rollout: source.bundle.rollout?.percentage, salt: source.bundle.rollout?.salt },
     installer: source.installer ?? current?.installer,
+    product: source.product,
     withdrawn: [...new Set([...current?.withdrawn ?? [], ...source.withdrawn ?? []])],
   }))
 }
 
-/** Uploads the bundle of the build output and serves it on a channel. Objects that the bucket has are skipped. */
+/** Uploads the bundle of the build output and serves it on a channel. Objects that the store has are skipped. */
 export async function publishBundle(options: BundleCommandOptions): Promise<{ releaseId: number, uploaded: number }> {
-  const { bucket, channel, signingKey } = options
+  const { channel, signingKey, store } = options
   const info = readBuildInfo(options.outDir)
   const release = await bundleReleaseFromBuild({
     nativeVersion: { max: info.nativeVersion, min: options.minNativeVersion ?? info.nativeVersion },
     outDir: options.outDir,
     signingKey,
   })
-  const [objects = [], documents = []] = uploadStages([release])
-  const uploaded = await uploadMissing(bucket, objects)
-  for (const file of documents)
-    await bucket.put(file)
+  let uploaded = 0
+  for (const object of release.objects) {
+    if (await store.hasObject(object.sha256))
+      continue
 
-  await writeChannelFile(bucket, channel, release.manifest.product, signingKey, current => ({
+    await store.putObject(object)
+    uploaded++
+  }
+  await store.putBundle({ ...release.signed, document: release.manifest })
+
+  await writeChannelFile(options, channel, current => ({
     bundle: { cohorts: options.cohorts, releaseId: release.releaseId, rollout: options.rollout },
     installer: current?.installer,
+    product: release.manifest.product,
     withdrawn: current?.withdrawn,
   }))
 
-  return { releaseId: release.releaseId, uploaded: uploaded + documents.length }
+  return { releaseId: release.releaseId, uploaded }
 }
 
 /**
@@ -107,7 +141,7 @@ export async function publishBundle(options: BundleCommandOptions): Promise<{ re
  * the signed manifest, the electron-updater feeds, and the appcasts. Each release keeps its own copy of the appcast.
  */
 export async function registerInstaller(options: InstallerCommandOptions): Promise<{ files: string[], releaseId: number }> {
-  const { bucket, channel, signingKey } = options
+  const { channel, signingKey, store } = options
   const artifacts: InstallerFileInput[] = [
     ...(options.filesUrl === undefined ? [] : readElectronBuilderFeeds(options.distDir, options.filesUrl)),
     ...Object.entries(options.sparkleAppcasts ?? {}).map(([platform, path]): InstallerFileInput => ({
@@ -120,12 +154,12 @@ export async function registerInstaller(options: InstallerCommandOptions): Promi
     throw new Error('ergosphere-it: register installer needs --files-url for electron-builder installers, or --sparkle <platform>=<appcast>.')
 
   const release = await installerReleaseFromBuild({ artifacts, downloadPage: options.downloadPage, feedUrl: options.feedUrl, outDir: options.outDir, signingKey })
-  for (const file of uploadStages([release]).flat())
-    await bucket.put(file)
+  await store.putInstaller({ ...release.signed, document: release.manifest, feeds: release.feeds })
 
-  await writeChannelFile(bucket, channel, release.manifest.product, signingKey, current => ({
+  await writeChannelFile(options, channel, current => ({
     bundle: current?.bundle && { cohorts: current.bundle.cohorts, releaseId: current.bundle.releaseId, rollout: current.bundle.rollout?.percentage, salt: current.bundle.rollout?.salt },
     installer: { releaseId: release.releaseId },
+    product: release.manifest.product,
     withdrawn: current?.withdrawn,
   }))
 
@@ -133,18 +167,20 @@ export async function registerInstaller(options: InstallerCommandOptions): Promi
 }
 
 /** Changes the rollout percentage of the bundle of a channel. Installs keep their buckets. */
-export async function setRollout(bucket: Bucket, channel: string, percentage: number, signingKey: SigningKey): Promise<ChannelFile> {
-  const current = await readChannelFile(bucket, channel)
-  if (!current?.bundle)
-    throw new Error(`ergosphere-it: channel ${channel} serves no bundle.`)
+export async function setRollout(context: PublishContext, channel: string, percentage: number): Promise<ChannelFile> {
+  return writeChannelFile(context, channel, (current) => {
+    if (!current?.bundle)
+      throw new Error(`ergosphere-it: channel ${channel} serves no bundle.`)
 
-  const { bundle } = current
+    const { bundle } = current
 
-  return writeChannelFile(bucket, channel, current.product, signingKey, () => ({
-    bundle: { cohorts: bundle.cohorts, releaseId: bundle.releaseId, rollout: percentage, salt: bundle.rollout?.salt },
-    installer: current.installer,
-    withdrawn: current.withdrawn,
-  }))
+    return {
+      bundle: { cohorts: bundle.cohorts, releaseId: bundle.releaseId, rollout: percentage, salt: bundle.rollout?.salt },
+      installer: current.installer,
+      product: current.product,
+      withdrawn: current.withdrawn,
+    }
+  })
 }
 
 /**
@@ -154,23 +190,45 @@ export async function setRollout(bucket: Bucket, channel: string, percentage: nu
  * channel that names the installer stops naming an installer, and apps drop a download of it. Installers only move
  * forward, so apps that installed it keep it until a newer installer.
  */
-export async function withdraw(bucket: Bucket, releaseId: number, signingKey: SigningKey, channels?: string[]): Promise<string[]> {
-  const names = channels ?? (await bucket.list('channels/')).filter(key => key.endsWith('.json')).map(key => key.slice('channels/'.length, -'.json'.length))
-  for (const name of names) {
-    const current = await readChannelFile(bucket, name)
-    if (!current)
-      throw new Error(`ergosphere-it: ${bucket.url} has no channel ${name}.`)
+export async function withdraw(context: PublishContext, releaseId: number, channels?: string[]): Promise<string[]> {
+  const { store } = context
+  if (!channels && !store.listChannels)
+    throw new Error(`ergosphere-it: ${store.name} cannot list its channels. Give withdraw a --channel.`)
 
-    await writeChannelFile(bucket, name, current.product, signingKey, () => ({
-      bundle: current.bundle && current.bundle.releaseId !== releaseId
-        ? { cohorts: current.bundle.cohorts, releaseId: current.bundle.releaseId, rollout: current.bundle.rollout?.percentage, salt: current.bundle.rollout?.salt }
-        : undefined,
-      installer: current.installer?.releaseId === releaseId ? undefined : current.installer,
-      withdrawn: [...new Set([...current.withdrawn ?? [], releaseId])],
-    }))
+  const names = channels ?? await store.listChannels!()
+  for (const name of names) {
+    await writeChannelFile(context, name, (current) => {
+      if (!current)
+        throw new Error(`ergosphere-it: ${store.name} has no channel ${name}.`)
+
+      return {
+        bundle: current.bundle && current.bundle.releaseId !== releaseId
+          ? { cohorts: current.bundle.cohorts, releaseId: current.bundle.releaseId, rollout: current.bundle.rollout?.percentage, salt: current.bundle.rollout?.salt }
+          : undefined,
+        installer: current.installer?.releaseId === releaseId ? undefined : current.installer,
+        product: current.product,
+        withdrawn: [...new Set([...current.withdrawn ?? [], releaseId])],
+      }
+    })
   }
 
   return names
+}
+
+/**
+ * Writes a private key to a new file that only its owner can read. It never replaces a file, so a key in use stays.
+ * Windows does not apply the mode.
+ */
+export function writePrivateKey(path: string, privateKey: string): void {
+  try {
+    writeFileSync(path, privateKey, { flag: 'wx', mode: 0o600 })
+  }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST')
+      throw new Error(`ergosphere-it: ${path} exists. Give another --out-private-key, so the key in it stays.`, { cause: error })
+
+    throw error
+  }
 }
 
 /** Maps the platform of electron-builder feeds to the platforms of installer releases. */
@@ -184,10 +242,22 @@ function platformsOf(feedName: string, fileName: string): string | undefined {
   return fileName.endsWith('.exe') ? `win32-${arch}` : undefined
 }
 
-async function readChannelFile(bucket: Bucket, channel: string): Promise<ChannelFile | undefined> {
-  const bytes = await bucket.get(`channels/${channel}.json`)
+/**
+ * Reads a channel file from the store, and verifies its signature with the key of the signing key and the trusted
+ * keys, so a store cannot make the CLI sign content that no trusted key signed. An expired file passes.
+ */
+async function readChannel(context: PublishContext, channel: string): Promise<undefined | { file: ChannelFile, stored: StoredDocument }> {
+  const stored = await context.store.getChannel(channel)
+  if (!stored)
+    return undefined
 
-  return bytes && JSON.parse(new TextDecoder().decode(bytes)) as ChannelFile
+  const { trustedKey } = await keyPairFromPrivateKey(signingKeyToPem(context.signingKey))
+  try {
+    return { file: await verifyChannelFileSignature(new Uint8Array(stored.bytes), stored.signature, [trustedKey, ...context.trustedKeys ?? []]), stored }
+  }
+  catch (error) {
+    throw new Error(`ergosphere-it: channel ${channel} in ${context.store.name} does not verify. ${(error as Error).message} Put the key that signed it into publicKeys of ergo.config.ts.`, { cause: error })
+  }
 }
 
 /**
@@ -215,39 +285,49 @@ function readElectronBuilderFeeds(distDir: string, filesUrl: string): InstallerF
   return [...artifacts.values()]
 }
 
-/** Uploads files whose key the bucket does not have. Returns how many it uploaded. */
-async function uploadMissing(bucket: Bucket, files: TreeFile[]): Promise<number> {
-  let uploaded = 0
-  for (const file of files) {
-    if (file.immutable && await bucket.get(file.key))
-      continue
+/**
+ * Undoes how a secret store can keep a PEM on one line: escaped newlines, or base64 of the whole PEM. Other text stays
+ * as it is, so the PEM check reports it.
+ */
+function unwrapPem(text: string): string {
+  const value = text.replaceAll('\\n', '\n').trim()
+  if (!value.startsWith(PEM_IN_BASE64))
+    return value
 
-    await bucket.put(file)
-    uploaded++
+  try {
+    return new TextDecoder().decode(Uint8Array.fromBase64(value))
   }
-
-  return uploaded
+  catch {
+    return value
+  }
 }
 
 /**
  * Signs a channel file again from its current content after `change` gives the fields to set. Issue times keep
- * increasing, because a client rejects a channel file older than one it accepted.
+ * increasing, because a client rejects a channel file older than one it accepted. When the store rejects the write for
+ * a change of another publish, it reads the channel again and calls `change` again.
  */
 async function writeChannelFile(
-  bucket: Bucket,
+  context: PublishContext,
   channel: string,
-  product: string,
-  signingKey: SigningKey,
-  change: (current: ChannelFile | undefined) => Pick<ChannelFileInput, 'bundle' | 'installer' | 'withdrawn'>,
+  change: (current: ChannelFile | undefined) => Pick<ChannelFileInput, 'bundle' | 'installer' | 'product' | 'withdrawn'>,
 ): Promise<ChannelFile> {
-  const current = await readChannelFile(bucket, channel)
-  if (current && current.product !== product)
-    throw new Error(`ergosphere-it: channel ${channel} is for ${current.product}, and this build is ${product}.`)
+  for (let attempt = 1; ; attempt++) {
+    const current = await readChannel(context, channel)
+    const next = change(current?.file)
+    if (current && current.file.product !== next.product)
+      throw new Error(`ergosphere-it: channel ${channel} is for ${current.file.product}, and this build is ${next.product}.`)
 
-  const issuedAt = new Date(Math.max(Date.now(), current ? Date.parse(current.issuedAt) + 1 : 0)).toISOString()
-  const built = await buildChannelFile({ ...change(current), channel, issuedAt, product, signingKey })
-  for (const file of built.files)
-    await bucket.put(file)
+    const issuedAt = new Date(Math.max(Date.now(), current ? Date.parse(current.file.issuedAt) + 1 : 0)).toISOString()
+    const built = await buildChannelFile({ ...next, channel, issuedAt, signingKey: context.signingKey })
+    try {
+      await context.store.putChannel({ ...built.signed, document: built.channelFile }, current?.stored)
 
-  return built.channelFile
+      return built.channelFile
+    }
+    catch (error) {
+      if (!isChannelConflict(error) || attempt >= CHANNEL_WRITE_ATTEMPTS)
+        throw error
+    }
+  }
 }

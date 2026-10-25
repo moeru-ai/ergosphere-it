@@ -1,6 +1,9 @@
+import type { ReleaseStore } from '@ergosphere-it/publish'
 import type { InferInput, InferOutput } from 'valibot'
 
-import { array, boolean, integer, literal, maxValue, minLength, minValue, number, object, optional, picklist, pipe, regex, string, union, url } from 'valibot'
+import { isPublicKey } from '@ergosphere-it/protocol'
+import { isReleaseStore } from '@ergosphere-it/publish'
+import { array, boolean, check, custom, integer, literal, maxValue, minLength, minValue, number, object, optional, picklist, pipe, regex, string, union, url } from 'valibot'
 
 /** The schema of `ergo.config.ts`. The build checks the config with it. */
 export const ergoConfigSchema = object({
@@ -45,14 +48,25 @@ export const ergoConfigSchema = object({
    * a native module, or the launcher changes. Main and preload changes ship as bundles and do not need it.
    */
   nativeVersion: pipe(number(), integer(), minValue(1)),
-  /** Public keys that sign updates, as `ed25519:<base64>`. `ergosphere-it keygen` prints one. */
-  publicKeys: pipe(array(pipe(string(), regex(/^ed25519:[\w+/=]+$/, 'A public key looks like `ed25519:<base64>`.'))), minLength(1)),
+  /**
+   * Ed25519 public keys that the app accepts signatures of: OpenSSH keys (`ssh-ed25519 AAAA...`), as
+   * `ergosphere-it keygen` prints them, or PEMs (`-----BEGIN PUBLIC KEY-----`).
+   */
+  publicKeys: pipe(array(pipe(string(), check(isPublicKey, 'A public key is an Ed25519 key as `ssh-ed25519 AAAA...` or as a PEM.'))), minLength(1)),
   /**
    * Quits a second instance of the app at start, as most desktop apps do. Defaults to true. With false, a second
    * instance runs the same bundle and does not change the update state.
    */
   singleInstance: optional(boolean(), true),
+  /**
+   * Where the CLI keeps releases: `createS3Store` of `@ergosphere-it/electron/storage/s3`, `createFileTreeStore`, or
+   * `createReleaseStore`. `--store` and `ERGOSPHERE_IT_STORE` take precedence. Only the CLI uses it, in CI.
+   */
+  store: optional(custom<ReleaseStore>(isReleaseStore, 'The store must come from createS3Store(), createFileTreeStore(), or createReleaseStore().')),
 })
+
+export { ChannelConflictError, createFileTreeStore, createReleaseStore } from '@ergosphere-it/publish'
+export type { FileTreeStorage, ReleaseStore, ReleaseStoreCallbacks, Signed, StoredDocument } from '@ergosphere-it/publish'
 
 /** What `ergo.config.ts` exports. */
 export type ErgoConfig = InferInput<typeof ergoConfigSchema>
@@ -69,7 +83,7 @@ export type ResolvedErgoConfig = InferOutput<typeof ergoConfigSchema>
  *   feedUrl: 'https://updates.example.com',
  *   channel: 'stable',
  *   nativeVersion: 1,
- *   publicKeys: ['ed25519:...'],
+ *   publicKeys: ['ssh-ed25519 AAAA...'],
  * })
  * ```
  */
