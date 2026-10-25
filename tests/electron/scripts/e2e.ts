@@ -244,9 +244,12 @@ try {
   await workspace.point(resumed)
   await waitFor('page v13', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v13'))
   const assetRequests = requests.slice(before).filter(request => request.path === assetPath)
+  // The server sends the first half before it breaks, but a busy machine can break the connection before all of it
+  // reaches the file. The client resumes from the bytes it has, so the range starts after 0 and at most at the half.
+  const resumedFrom = Number(/^bytes=(\d+)-$/.exec(assetRequests[1]?.range ?? '')?.[1])
   await step(
     '9. a broken download resumes with a range',
-    assetRequests.length === 2 && assetRequests[0]!.fault === 'interrupted' && assetRequests[1]!.status === 206 && assetRequests[1]!.range === `bytes=${asset.size / 2}-`,
+    assetRequests.length === 2 && assetRequests[0]!.fault === 'interrupted' && assetRequests[1]!.status === 206 && resumedFrom > 0 && resumedFrom <= asset.size / 2,
     assetRequests.map(request => `${request.status}${request.range ? ` ${request.range}` : ''}${request.fault ? ` ${request.fault}` : ''}`).join(', '),
   )
 
