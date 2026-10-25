@@ -35,6 +35,8 @@ export default function ergospherePreload(options: PreloadPluginOptions = {}): P
     config(config) {
       const build = config.build ??= {}
       const rolldownOptions = build.rolldownOptions ??= {}
+      // A `?asset` file of the public directory goes into the bundle, as in main.
+      config.publicDir = false
       if (Array.isArray(rolldownOptions.output))
         throw new Error('[ergosphere-it] The preload build of the bundle has one output. Set build.rolldownOptions.output to an object, not a list.')
 

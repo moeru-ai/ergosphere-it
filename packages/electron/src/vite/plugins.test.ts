@@ -66,6 +66,12 @@ describe('ergosphereMain', () => {
     expect(fromObject.build?.rolldownOptions?.input).toMatchObject({ 'bundle/main/index': join(root, 'src/main/app.ts') })
   })
 
+  it('turns off the public directory of main, so its `?asset` files go into the bundle', () => {
+    const config = configure(ergosphereMain({ outDir: 'public-dir', root }), { publicDir: 'resources' })
+
+    expect(config.publicDir).toBe(false)
+  })
+
   it('keeps the input of a second build of electron-vite, for a `?modulePath` script, and adds no launcher', () => {
     const config = configure(ergosphereMain({ outDir: 'module-path', root }), { build: { lib: { entry: 'src/main/index.ts' }, rolldownOptions: { input: join(root, 'src/main/fork.ts') }, write: false } })
 

@@ -45,6 +45,14 @@ export default function ergosphereMain(options: MainPluginOptions = {}): Plugin 
     config(config) {
       const build = config.build ??= {}
       const rolldownOptions = build.rolldownOptions ??= {}
+      // NOTICE:
+      // electron-vite does not copy a `?asset` file of the public directory (`resources` by default). It writes a path
+      // from the output to the file in the project, for an app that ships `resources` next to `out`. A downloaded bundle
+      // lives in another directory, so the path misses. Without a public directory, the file is an asset of the build,
+      // which goes into the bundle with a path inside it.
+      // Source: node_modules/electron-vite/dist/chunks/lib-*.js, assetPlugin, `__VITE_NODE_PUBLIC_ASSET__`.
+      // Removal condition: electron-vite copies public assets into the output.
+      config.publicDir = false
       if (Array.isArray(rolldownOptions.output))
         throw new Error('[ergosphere-it] The main build of the bundle has one output. Set build.rolldownOptions.output to an object, not a list.')
 

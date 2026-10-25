@@ -9,6 +9,8 @@ import { activeBundle, updater } from '@ergosphere-it/electron/main'
 import { app, BrowserWindow, protocol, utilityProcess } from 'electron'
 
 import assetPath from './entries/asset.txt?asset'
+// A file of the public directory, `resources`, as apps import their icons.
+import publicAssetPath from '../resources/public-asset.txt?asset'
 import forkPath from './entries/fork?modulePath'
 import createWorker from './entries/worker?nodeWorker'
 
@@ -116,6 +118,7 @@ void app.whenReady().then(async () => {
       worker.once('error', () => resolve(false))
     })),
     preReady,
+    publicAsset: await check(() => readFileSync(publicAssetPath, 'utf8').trim() === 'public asset of main'),
     releaseId: activeBundle.releaseId,
     sync: await check(async () => existsSync(fileURLToPath(new URL('./sync.mjs', import.meta.url))) && await reply(fileURLToPath(new URL('./sync.mjs', import.meta.url))) === 'sync'),
     type: 'bundle-files',
