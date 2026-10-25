@@ -34,7 +34,7 @@ const electronBinary = electronPath as unknown as string
 /** An event of the test build: a launcher event, or a test event of `src/main.ts`. */
 export type AppEvent
   = | LauncherEvent
-    | { asset: boolean, extraPreload: boolean, modulePath: boolean, nodeWorker: boolean, preReady: string, releaseId: number, sync: boolean, type: 'bundle-files' }
+    | { asset: boolean, extraPreload: boolean, modulePath: boolean, nodeWorker: boolean, preReady: string, publicAsset: boolean, releaseId: number, sync: boolean, type: 'bundle-files' }
     | { mainTag: string, releaseId: number, type: 'bundle-main' }
     | { releaseId: number, type: 'page-mounted', url: string, version: string }
 

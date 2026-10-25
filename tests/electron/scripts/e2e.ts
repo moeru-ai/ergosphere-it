@@ -4,7 +4,7 @@
 //   1. a page-only bundle reloads every window in place, on the route each window shows, and the process stays the same
 //   2. a main-code bundle restarts the app
 //  2b. the downloaded bundle has a second preload entry, a second main entry, a `?modulePath` script, a `?nodeWorker`
-//      worker, and a `?asset` file of main
+//      worker, a `?asset` file of main, and a `?asset` file of the public directory `resources`
 //   3. a bundle that crashes at launch is rolled back at once and blocked, and the app says why
 //   4. a page that never reports healthy rolls back in place
 //   5. a channel file that withdraws the running bundle sends the app back to the previous bundle
@@ -114,7 +114,7 @@ try {
   const first = await waitFor('installed page v1', list => findEvent(list, 'page-mounted', e => e.version === 'v1'))
   // The bundle of the installer finds its entries, worker, and asset too, also from app.asar.
   const installedFiles = await waitFor('files of the installed bundle', list => findEvent(list, 'bundle-files', e => e.releaseId === 1))
-  const fileKinds = ['extraPreload', 'sync', 'modulePath', 'nodeWorker', 'asset'] as const
+  const fileKinds = ['extraPreload', 'sync', 'modulePath', 'nodeWorker', 'asset', 'publicAsset'] as const
   const missing = fileKinds.filter(kind => installedFiles[kind] !== true)
   // Main starts before ready, so APIs that must run before ready work, and the launcher reports that main loaded.
   const loaded = findEvent(readEvents(), 'main-loaded', e => e.releaseId === 1)

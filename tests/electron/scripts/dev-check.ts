@@ -20,7 +20,7 @@ const appRoot = join(import.meta.dirname, '..')
 const work = mkdtempSync(join(tmpdir(), 'ergosphere-dev-'))
 const logFile = join(work, 'events.log')
 const electronVite = join(dirname(createRequire(import.meta.url).resolve('electron-vite/package.json')), 'bin', 'electron-vite.js')
-const kinds = ['extraPreload', 'sync', 'modulePath', 'nodeWorker', 'asset'] as const
+const kinds = ['extraPreload', 'sync', 'modulePath', 'nodeWorker', 'asset', 'publicAsset'] as const
 
 function readEvents(): LoggedEvent[] {
   return existsSync(logFile) ? readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as LoggedEvent) : []
