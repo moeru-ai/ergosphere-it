@@ -330,6 +330,8 @@ app.whenReady().then(() => {
 
 Do not build page paths from `import.meta.dirname` or `__dirname`. After a page-only update, the main code still runs from the bundle that started, so new windows would load old pages.
 
+Main starts before the app is ready, as it would without the launcher. So the APIs that must run before ready, for example `protocol.registerSchemesAsPrivileged`, `app.setPath`, and `app.commandLine.appendSwitch`, work at the top level of main, and so does `await app.whenReady()`.
+
 After a page-only update, the launcher moves every window that shows a page of the old bundle to the same page of the new one. Each window keeps its query and hash, so it stays on its route. You do not register windows.
 
 ### Connect the updater to your pages

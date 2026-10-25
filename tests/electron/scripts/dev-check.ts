@@ -66,7 +66,7 @@ xvfb?.kill()
 await delay(1000)
 rmSync(work, { force: true, maxRetries: 5, recursive: true })
 
-const missing = found ? kinds.filter(kind => found[kind] !== true) : [...kinds]
+const missing = found ? [...kinds.filter(kind => found[kind] !== true), ...(found.preReady === 'ok' ? [] : [`APIs before ready (${found.preReady})`])] : [...kinds]
 if (failed || !found || missing.length > 0) {
   console.error(`FAIL under electron-vite dev: ${failed ? `boot failed: ${failed.error}` : found ? `missing ${missing.join(', ')}` : 'no bundle-files event in 120 s'}`)
   exit(1)

@@ -66,18 +66,23 @@ function e2eSparkleInstaller(): SparkleInstaller {
 
 const installers = { file: e2eFileInstaller, sparkle: e2eSparkleInstaller }
 
-startLauncher({
-  ...config,
-  applyMode: env.ERGOSPHERE_APPLY_MODE === 'auto' ? 'auto' : 'prompt',
-  checkIntervalMs: Number(env.ERGOSPHERE_CHECK_MS ?? config.checkIntervalMs),
-  feedUrl: env.ERGOSPHERE_FEED_URL ?? config.feedUrl,
-  installer: installers[env.ERGOSPHERE_E2E_INSTALLER as keyof typeof installers]?.() ?? undefined,
-  launcherUrl: import.meta.url,
-  launchHealthTimeoutMs: Number(env.ERGOSPHERE_BOOT_HEALTH_MS ?? 60_000),
-  reloadHealthTimeoutMs: Number(env.ERGOSPHERE_HEALTH_MS ?? 15_000),
-  // Each test run signs with its own key.
-  trustedKeys: env.ERGOSPHERE_TRUSTED_KEYS ? JSON.parse(env.ERGOSPHERE_TRUSTED_KEYS) as TrustedKey[] : config.trustedKeys,
-}).catch((error) => {
+// Await at the top level, so the bundle main starts before the app is ready.
+try {
+  // eslint-disable-next-line antfu/no-top-level-await -- Electron emits ready only after the top-level await of its entry.
+  await startLauncher({
+    ...config,
+    applyMode: env.ERGOSPHERE_APPLY_MODE === 'auto' ? 'auto' : 'prompt',
+    checkIntervalMs: Number(env.ERGOSPHERE_CHECK_MS ?? config.checkIntervalMs),
+    feedUrl: env.ERGOSPHERE_FEED_URL ?? config.feedUrl,
+    installer: installers[env.ERGOSPHERE_E2E_INSTALLER as keyof typeof installers]?.() ?? undefined,
+    launcherUrl: import.meta.url,
+    launchHealthTimeoutMs: Number(env.ERGOSPHERE_BOOT_HEALTH_MS ?? 60_000),
+    reloadHealthTimeoutMs: Number(env.ERGOSPHERE_HEALTH_MS ?? 15_000),
+    // Each test run signs with its own key.
+    trustedKeys: env.ERGOSPHERE_TRUSTED_KEYS ? JSON.parse(env.ERGOSPHERE_TRUSTED_KEYS) as TrustedKey[] : config.trustedKeys,
+  })
+}
+catch (error) {
   console.error('[ergosphere-it] The test launcher failed.', error)
   app.exit(1)
-})
+}

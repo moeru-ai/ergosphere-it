@@ -116,7 +116,10 @@ try {
   const installedFiles = await waitFor('files of the installed bundle', list => findEvent(list, 'bundle-files', e => e.releaseId === 1))
   const fileKinds = ['extraPreload', 'sync', 'modulePath', 'nodeWorker', 'asset'] as const
   const missing = fileKinds.filter(kind => installedFiles[kind] !== true)
-  await step('0. boots the bundle of the installer', missing.length === 0, `pid ${first.pid}${missing.length ? `, missing ${missing.join(', ')}` : ', every entry, worker, and asset found'}`)
+  // Main starts before ready, so APIs that must run before ready work, and the launcher reports that main loaded.
+  const loaded = findEvent(readEvents(), 'main-loaded', e => e.releaseId === 1)
+  const firstOk = missing.length === 0 && installedFiles.preReady === 'ok' && Boolean(loaded)
+  await step('0. boots the bundle of the installer', firstOk, `pid ${first.pid}${missing.length ? `, missing ${missing.join(', ')}` : ', every entry, worker, and asset found'}, before ready: ${installedFiles.preReady}, main loaded: ${Boolean(loaded)}`)
 
   // 1. page-only change
   let mark = lastIndex()
@@ -145,7 +148,8 @@ try {
 
   // 2b. the downloaded bundle has every entry and asset that electron-vite builds for main and preload
   const files = await waitFor('files of bundle 3', list => findEvent(since(mark)(list), 'bundle-files', e => e.releaseId === 3))
-  await step('2b. a downloaded bundle has every main and preload entry, worker, and asset', fileKinds.every(kind => files[kind] === true), fileKinds.map(kind => `${kind} ${files[kind] ? 'ok' : 'missing'}`).join(', '))
+  const loaded3 = findEvent(since(mark)(readEvents()), 'main-loaded', e => e.releaseId === 3)
+  await step('2b. a downloaded bundle has every main and preload entry, worker, and asset', fileKinds.every(kind => files[kind] === true) && files.preReady === 'ok' && Boolean(loaded3), `${fileKinds.map(kind => `${kind} ${files[kind] ? 'ok' : 'missing'}`).join(', ')}, before ready: ${files.preReady}, main loaded: ${Boolean(loaded3)}`)
 
   // 3. crash at boot
   mark = lastIndex()

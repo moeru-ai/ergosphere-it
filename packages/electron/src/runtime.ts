@@ -30,12 +30,15 @@ export type LauncherEvent
   = | { addedMs: number, releaseId: number, type: 'health-delayed' }
     | { error: string, releaseId: number, type: 'boot-failed' }
     | { from: number, reason: RollbackReason, to: number, type: 'rollback' }
+    /** The launcher chose the bundle to start. `main-loaded` or `boot-failed` tells how its main loaded. */
     | { fromInstaller: boolean, rejected: { problem: string, releaseId: number }[], releaseId: number, type: 'boot', version: string }
+    /** The bundle main loaded without an error, with its top-level code. */
     | { reason: 'withdrawn', releaseId: number, type: 'installer-discarded' }
     | { reason: string, releaseId: number, type: 'restart' }
     | { releaseId: number, type: 'health-timeout' }
     | { releaseId: number, type: 'healthy' }
     | { releaseId: number, type: 'install' }
+    | { releaseId: number, type: 'main-loaded' }
     | { releaseId: number, type: 'reload' }
     | { status: UpdaterStatus, type: 'status' }
     | { type: 'second-instance' }

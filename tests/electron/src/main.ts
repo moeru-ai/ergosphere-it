@@ -6,7 +6,7 @@ import { env, pid } from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 import { activeBundle, updater } from '@ergosphere-it/electron/main'
-import { app, BrowserWindow, utilityProcess } from 'electron'
+import { app, BrowserWindow, protocol, utilityProcess } from 'electron'
 
 import assetPath from './entries/asset.txt?asset'
 import forkPath from './entries/fork?modulePath'
@@ -24,6 +24,17 @@ function logEvent(event: Record<string, unknown>): void {
 
 // The main tag is part of the main code. A new tag changes main, so the update needs a restart.
 logEvent({ mainTag: __TEST_MAIN_TAG__, releaseId: activeBundle.releaseId, type: 'bundle-main' })
+
+// A real app calls APIs that work only before the app is ready, at the top level of main, as AIRI and LobeHub do. The
+// launcher must start main before ready.
+let preReady = 'ok'
+try {
+  protocol.registerSchemesAsPrivileged([{ privileges: { secure: true, standard: true }, scheme: 'ergosphere-test' }])
+  app.commandLine.appendSwitch('ergosphere-test-switch')
+}
+catch (error) {
+  preReady = error instanceof Error ? error.message : String(error)
+}
 
 // The test plays the user: it applies every update that is ready, as a click on the button does, and closes a
 // rollback notice after it was shown.
@@ -104,10 +115,16 @@ void app.whenReady().then(async () => {
       worker.once('message', message => resolve(message === 'worker'))
       worker.once('error', () => resolve(false))
     })),
+    preReady,
     releaseId: activeBundle.releaseId,
     sync: await check(async () => existsSync(fileURLToPath(new URL('./sync.mjs', import.meta.url))) && await reply(fileURLToPath(new URL('./sync.mjs', import.meta.url))) === 'sync'),
     type: 'bundle-files',
   })
 })
+
+// Many apps wait for ready at the top level of main. The launcher waits for main, and Electron for the launcher, so the
+// launcher must stop waiting here, or the app never gets ready.
+// eslint-disable-next-line antfu/no-top-level-await -- The test needs a top-level await of ready, as apps write it.
+await app.whenReady()
 
 void import('../../../examples/electron-app/src/main/index')
