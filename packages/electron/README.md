@@ -1,7 +1,5 @@
 <!-- Generated from README.md of the repository by `pnpm docs:update`. Edit README.md instead. -->
 
-# ergosphere-it
-
 <picture>
   <source
     width="100%"
@@ -16,10 +14,11 @@
   <img width="100%" alt="ergosphere-it: over-the-air updates for Electron apps that always find their way back. An app drops a crashed bundle 1.0.5 and goes back to 1.0.4 on its own." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/hero-light.webp" />
 </picture>
 
-Over-the-air updates for Electron apps, with signed releases, staged rollouts, and automatic rollback.
+`ergosphere-it`, a toolkit and SDK for integrating fast OTA (Over-the-air) updates for Electron apps, 
+with signed releases, staged rollouts, and automatic rollback.
 
-A rotating black hole drags everything in its ergosphere along with it, but anything inside can still escape.
-ergosphere-it works the same way: every install follows its channel to the newest release, and a bad release rolls back.
+> Why ergosphere? A rotating black hole drags everything in its ergosphere along with it, but anything inside can still escape.
+> `ergosphere-it` works the same way: every install follows its channel to the newest release, and a bad release rolls back.
 
 Your app gets two parts:
 
