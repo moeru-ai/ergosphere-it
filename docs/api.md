@@ -183,8 +183,10 @@ import config from 'virtual:ergosphere-it/config'
 
 import { startLauncher } from '@ergosphere-it/electron/launcher'
 
-void startLauncher({ ...config, installer: myInstaller, launcherUrl: import.meta.url })
+await startLauncher({ ...config, installer: myInstaller, launcherUrl: import.meta.url })
 ```
+
+Await `startLauncher` at the top level of the launcher. Electron emits `ready` only after the top-level await of its entry, so the bundle main starts before the app is ready, as it would without a launcher. Then main can call `protocol.registerSchemesAsPrivileged`, `app.setPath`, and `app.commandLine.appendSwitch` at its top level. A main that awaits `app.whenReady()` at its top level works too: the launcher stops waiting when main asks for ready. The launcher warns when the app was ready before main started.
 
 `startLauncher` also takes `dataDir`, `platform`, `onEvent`, `locate`, and `fetch`. `installer` replaces the installer that `installers` of `ergo.config.ts` names, and `installer: false` turns off installer updates. An installer has a `format`, and the launcher checks each format in its own way. See [the specification](spec.md#installer-formats). Add `"types": ["@ergosphere-it/electron/virtual"]` to the tsconfig of the main process for the virtual module.
 
@@ -193,7 +195,7 @@ void startLauncher({ ...config, installer: myInstaller, launcherUrl: import.meta
 `fetch` replaces the global `fetch` of the launcher, for example to add the credentials of a private server. It gets every URL that the launcher fetches, including the absolute URLs of installer files in signed manifests, which can be on another host, so add credentials only for the origin of your server. The default `fetch` does not cache. electron-updater fetches its feed and installer files with its own network stack, without `fetch`, so the `installer-feed` location must be public or presigned. A custom `Installer` gets the feed as `updaterFeedUrl`, which is not the `feedUrl` of `ergo.config.ts`.
 
 ```ts
-void startLauncher({
+await startLauncher({
   ...config,
   launcherUrl: import.meta.url,
   locate: defineLocator(async (ref) => {
@@ -206,7 +208,7 @@ void startLauncher({
 
 ### Logs
 
-Set `ERGOSPHERE_IT_LOG` to a file path. The launcher writes each event as one JSON line. `updater.onEvent(listener)` gives the same events in main.
+Set `ERGOSPHERE_IT_LOG` to a file path. The launcher writes each event as one JSON line. `boot` names the bundle that the launcher chose, and `main-loaded` or `boot-failed` tells whether its main loaded. `updater.onEvent(listener)` gives the same events in main.
 
 Internal: the launcher class, module resolution hooks, and the global that holds the runtime.
 

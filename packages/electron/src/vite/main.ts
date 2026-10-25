@@ -103,10 +103,14 @@ export default function ergosphereMain(options: MainPluginOptions = {}): Plugin 
         return [
           `import config from '${CONFIG_ID}'`,
           `import { startLauncher } from '@ergosphere-it/electron/launcher'`,
-          `startLauncher({ ...config, launcherUrl: import.meta.url }).catch((error) => {`,
+          // Electron emits ready only after the top-level await of its entry, so the bundle main starts before ready.
+          `try {`,
+          `  await startLauncher({ ...config, launcherUrl: import.meta.url })`,
+          `}`,
+          `catch (error) {`,
           `  console.error('[ergosphere-it] The launcher failed.', error)`,
           `  process.exit(1)`,
-          `})`,
+          `}`,
         ].join('\n')
       }
     },

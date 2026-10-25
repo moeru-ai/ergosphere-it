@@ -84,6 +84,11 @@ const MAX_INSTALLER_FAILURE_DELAY_MS = 3_600_000
 const FIRST_CHECK_DELAY_MS = 3_000
 /** The most that `delayHealthCheck()` adds to one health check, so a bundle that hangs cannot wait forever. */
 const MAX_HEALTH_DELAY_MS = 300_000
+/**
+ * The longest wait for the top-level code of a bundle main before the app gets ready. Only a main that waits at its top
+ * level for something other than `app.whenReady()`, which also needs ready, reaches it.
+ */
+const MAIN_START_TIMEOUT_MS = 10_000
 
 class Launcher implements Runtime {
   readonly activeBundle: ActiveBundle
@@ -412,23 +417,44 @@ class Launcher implements Runtime {
     }
   }
 
+  /**
+   * Starts the bundle main before the app gets ready, as Electron starts an entry. Then main can call APIs that must run
+   * before ready at its top level, for example `protocol.registerSchemesAsPrivileged`, `app.setPath`, and
+   * `app.commandLine.appendSwitch`. Electron emits ready only after the top-level await of the launcher, which awaits
+   * this.
+   */
   private async importMain(): Promise<void> {
     const main = this.running.components.find(component => component.type === 'electron-main')?.entry ?? BUNDLE_LAYOUT.main
     const entry = join(this.running.dir, ...main.split('/'))
-    try {
-      await import(pathToFileURL(entry).href)
-    }
-    catch (error) {
-      const message = errorStackFrom(error) ?? errorMessageFrom(error) ?? 'unknown error'
-      this.emit({ error: message, releaseId: this.running.releaseId, type: 'boot-failed' })
-      if (this.running.fromInstaller || !this.client) {
-        showRescueWindow(message)
+    const { releaseId } = this.running
+    if (app.isReady())
+      console.warn('[ergosphere-it] The app was ready before the bundle main started, so main cannot call the APIs that must run before ready. Await startLauncher() at the top level of the launcher.')
 
-        return
+    const loading = import(pathToFileURL(entry).href).then(
+      () => this.emit({ releaseId, type: 'main-loaded' }),
+      (error: unknown) => this.onMainFailed(error),
+    )
+    // A main that awaits app.whenReady() at its top level waits for the launcher, and the launcher waits for main. So
+    // the launcher stops waiting when main asks for ready, or after a time for a main that waits for something else.
+    const whenReady = app.whenReady
+    let timer: NodeJS.Timeout | undefined
+    const askedForReady = new Promise<void>((resolve) => {
+      app.whenReady = () => {
+        resolve()
+
+        return whenReady.call(app)
       }
-
-      await this.client.rollback(this.running.releaseId, 'crashed-at-launch')
-      this.restart(this.running.releaseId, 'the bundle main threw during import', 1)
+      timer = setTimeout(() => {
+        console.warn(`[ergosphere-it] The top level of the bundle main did not finish in ${MAIN_START_TIMEOUT_MS / 1000} s, so the app gets ready now. Await app.whenReady() before anything that needs ready.`)
+        resolve()
+      }, MAIN_START_TIMEOUT_MS)
+    })
+    try {
+      await Promise.race([loading, askedForReady])
+    }
+    finally {
+      app.whenReady = whenReady
+      clearTimeout(timer)
     }
   }
 
@@ -444,6 +470,20 @@ class Launcher implements Runtime {
     this.health = undefined
     if (!this.healthy)
       health?.onTimeout()
+  }
+
+  /** Handles a bundle main that threw while it loaded: the installer bundle shows a rescue window, others roll back. */
+  private async onMainFailed(error: unknown): Promise<void> {
+    const message = errorStackFrom(error) ?? errorMessageFrom(error) ?? 'unknown error'
+    this.emit({ error: message, releaseId: this.running.releaseId, type: 'boot-failed' })
+    if (this.running.fromInstaller || !this.client) {
+      showRescueWindow(message)
+
+      return
+    }
+
+    await this.client.rollback(this.running.releaseId, 'crashed-at-launch')
+    this.restart(this.running.releaseId, 'the bundle main threw during import', 1)
   }
 
   /** The URL of a page of the running bundle, or of the development server. */
