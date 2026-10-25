@@ -1,11 +1,16 @@
 // The bundle main of the test build. It adds test hooks around the main of the example, then loads it.
 
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { env, pid } from 'node:process'
+import { fileURLToPath } from 'node:url'
 
 import { activeBundle, updater } from '@ergosphere-it/electron/main'
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, utilityProcess } from 'electron'
+
+import assetPath from './entries/asset.txt?asset'
+import forkPath from './entries/fork?modulePath'
+import createWorker from './entries/worker?nodeWorker'
 
 // A crash variant throws at start, so the launcher falls back to an earlier bundle.
 if (__TEST_CRASH__)
@@ -59,6 +64,50 @@ void app.whenReady().then(async () => {
   const window = new BrowserWindow({ show: false, webPreferences: { preload: activeBundle.preload, sandbox: true } })
   await window.loadURL(activeBundle.pageUrl({ hash: '/second' }))
   await window.webContents.executeJavaScript(`location.hash = '#/second-moved'`)
+})
+
+// Every kind of entry and asset that electron-vite builds for main and preload must be in the bundle, so a downloaded
+// bundle finds them as the bundle of the installer does.
+void app.whenReady().then(async () => {
+  const reply = (path: string) => new Promise<string>((resolve, reject) => {
+    const child = utilityProcess.fork(path)
+    child.once('message', (message: string) => {
+      child.kill()
+      resolve(message)
+    })
+    child.once('exit', code => reject(new Error(`${path} exited with ${code}`)))
+    child.postMessage('ping')
+  })
+  const check = async (run: () => boolean | Promise<boolean>) => {
+    try {
+      return await run()
+    }
+    catch {
+      return false
+    }
+  }
+  const extraPreload = await check(async () => {
+    const window = new BrowserWindow({ show: false, webPreferences: { preload: activeBundle.preloadOf('extra'), sandbox: true } })
+    await window.loadURL('data:text/html,<p>extra</p>')
+    const loaded = await window.webContents.executeJavaScript('window.ergosphereExtraPreload?.loaded === true') as boolean
+    window.destroy()
+
+    return loaded
+  })
+  logEvent({
+    // git can check the file out with CRLF line endings on Windows.
+    asset: await check(() => readFileSync(assetPath, 'utf8').trim() === 'asset of main'),
+    extraPreload,
+    modulePath: await check(async () => await reply(forkPath) === 'fork'),
+    nodeWorker: await check(() => new Promise<boolean>((resolve) => {
+      const worker = createWorker({})
+      worker.once('message', message => resolve(message === 'worker'))
+      worker.once('error', () => resolve(false))
+    })),
+    releaseId: activeBundle.releaseId,
+    sync: await check(async () => existsSync(fileURLToPath(new URL('./sync.mjs', import.meta.url))) && await reply(fileURLToPath(new URL('./sync.mjs', import.meta.url))) === 'sync'),
+    type: 'bundle-files',
+  })
 })
 
 void import('../../../examples/electron-app/src/main/index')

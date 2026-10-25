@@ -47,6 +47,7 @@ words:
   - picklist
   - pids
   - rollouts
+  - sandboxed
   - selfh
   - selfhst
   - seqs

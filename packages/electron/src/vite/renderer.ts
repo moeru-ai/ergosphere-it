@@ -18,9 +18,10 @@ export type { PluginOptions } from './shared'
 /**
  * The plugin of the pages. Add it to `renderer.plugins` of the electron-vite config.
  *
- * It builds every HTML entry of the renderer into the bundle at `out/bundle/renderer`. electron-vite builds the renderer
- * last, so after the build it writes `out/bundle.json`: the files of the bundle with their hashes, the release IDs, and
- * the version.
+ * It builds every HTML entry of the renderer into the bundle at `out/bundle/renderer`, at the same paths as electron-vite
+ * builds them. `activeBundle.pageUrl({ page })` loads one, for example `{ page: 'settings.html' }`. electron-vite builds
+ * the renderer last, so after the build it writes `out/bundle.json`: the files of the bundle with their hashes, the
+ * release IDs, and the version.
  */
 export default function ergosphereRenderer(options: PluginOptions = {}): Plugin {
   const context = buildContext(options)
@@ -30,9 +31,12 @@ export default function ergosphereRenderer(options: PluginOptions = {}): Plugin 
     async closeBundle() {
       const config = await loadLauncherConfig(context.root)
       const components: Component[] = []
+      // The entry of a component is the file that its process starts from. The main and preload plugins chose it from
+      // their entries. A preload build with several entries and none named index has no entry, and neither has a
+      // renderer without index.html.
       for (const [type, dir, entry] of [
-        ['electron-main', 'main', BUNDLE_LAYOUT.main],
-        ['electron-preload', 'preload', BUNDLE_LAYOUT.preload],
+        ['electron-main', 'main', context.entries.main ?? BUNDLE_LAYOUT.main],
+        ['electron-preload', 'preload', context.entries.preload],
         ['web', 'renderer', BUNDLE_LAYOUT.renderer],
       ] as const) {
         const files = []
@@ -41,7 +45,7 @@ export default function ergosphereRenderer(options: PluginOptions = {}): Plugin 
           files.push({ path: relative(context.bundleDir, path).split(sep).join('/'), sha256: await contentHash(bytes), size: bytes.byteLength })
         }
         if (files.length > 0)
-          components.push({ entry, files: files.sort((a, b) => (a.path < b.path ? -1 : 1)), type })
+          components.push({ entry: files.some(file => file.path === entry) ? entry : undefined, files: files.sort((a, b) => (a.path < b.path ? -1 : 1)), type })
       }
 
       const info: BuildInfo = {

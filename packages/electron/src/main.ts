@@ -25,6 +25,7 @@ export const activeBundle: ActiveBundle = {
   get preload() {
     return runtime().activeBundle.preload
   },
+  preloadOf: name => runtime().activeBundle.preloadOf(name),
   get releaseId() {
     return runtime().activeBundle.releaseId
   },

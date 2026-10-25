@@ -275,7 +275,19 @@ class Launcher implements Runtime {
       },
       pageUrl: options => this.pageUrl(options),
       get preload() {
-        return join(running().dir, ...BUNDLE_LAYOUT.preload.split('/'))
+        const entry = running().components.find(component => component.type === 'electron-preload')?.entry
+        if (entry === undefined)
+          throw new Error(`The bundle has no preload entry named index. It has ${preloadNamesOf(running().components).join(', ') || 'no preload script'}. Use activeBundle.preloadOf(name).`)
+
+        return join(running().dir, ...entry.split('/'))
+      },
+      preloadOf: (name) => {
+        const path = `${BUNDLE_LAYOUT.preloadDir}/${name}.cjs`
+        const preload = running().components.find(component => component.type === 'electron-preload')
+        if (!preload?.files.some(file => file.path === path))
+          throw new Error(`The bundle has no preload entry ${name}. It has ${preloadNamesOf(running().components).join(', ') || 'no preload script'}.`)
+
+        return join(running().dir, ...path.split('/'))
       },
       get releaseId() {
         return running().releaseId
@@ -411,7 +423,8 @@ class Launcher implements Runtime {
   }
 
   private async importMain(): Promise<void> {
-    const entry = join(this.running.dir, ...BUNDLE_LAYOUT.main.split('/'))
+    const main = this.running.components.find(component => component.type === 'electron-main')?.entry ?? BUNDLE_LAYOUT.main
+    const entry = join(this.running.dir, ...main.split('/'))
     try {
       await import(pathToFileURL(entry).href)
     }
@@ -732,6 +745,15 @@ function percentOf(done: number, total: number): number {
   return total > 0 ? Math.min(100, Math.floor(done / total * 100)) : 100
 }
 
+/** The renderer directory inside a bundle, from the layout. */
+/** The names of the preload entries of a bundle: the scripts at the top of its preload directory. */
+function preloadNamesOf(components: BundleManifest['components']): string[] {
+  const prefix = `${BUNDLE_LAYOUT.preloadDir}/`
+  const files = components.find(component => component.type === 'electron-preload')?.files ?? []
+
+  return files.map(file => file.path).filter(path => path.startsWith(prefix) && path.endsWith('.cjs') && !path.slice(prefix.length).includes('/')).map(path => path.slice(prefix.length, -'.cjs'.length))
+}
+
 /**
  * Reads `out/bundle.json`. The development server of electron-vite does not write it, so a missing file gives a
  * placeholder: updates are off in development anyway.
@@ -752,7 +774,6 @@ function readPreferences(dataDir: string): Preferences {
   }
 }
 
-/** The renderer directory inside a bundle, from the layout. */
 function rendererDirOf(): string {
   return BUNDLE_LAYOUT.renderer.split('/')[0]!
 }

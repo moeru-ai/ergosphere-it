@@ -124,8 +124,8 @@ Internal: the object store and the state file.
 | --- | --- |
 | `/config` | `defineConfig(config)` for `ergo.config.ts`, and, from `@ergosphere-it/publish`, the release stores for its `store`: `createReleaseStore`, `createFileTreeStore`, and `ChannelConflictError`, with their types. |
 | `/storage/s3` | `createS3Store(options)`: a release store with the default layout on S3, or on a service with the same API, such as R2. `createS3Storage(options)`: the storage of files under it, for `createFileTreeStore`. They go through `s3mini`, and check the credentials at the first read or write. |
-| `/vite/main`, `/vite/preload`, `/vite/renderer` | One electron-vite plugin each, as the default export. Options: `outDir` and `root` for all, `entry` for main and preload, and `launcher` for main. The main plugin reads `ergo.config.ts`, and the renderer plugin keeps every HTML entry and writes `out/bundle.json`. |
-| `/main` | `activeBundle` with `preload` and `pageUrl({ page, hash, query })`, and `updater` with `status`, `onStatus()`, `checkForUpdates()`, `applyUpdate()`, `dismissRollback()`, `markBundleHealthy()`, `delayHealthCheck()`, `channel`, `cohorts`, `onBundleChange()`, and `onEvent()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
+| `/vite/main`, `/vite/preload`, `/vite/renderer` | One electron-vite plugin each, as the default export. Options: `outDir` and `root` for all, `entry` for main and preload, and `launcher` for main. The main and preload plugins keep every entry of the electron-vite config. The main plugin reads `ergo.config.ts`, and the renderer plugin keeps every HTML entry and writes `out/bundle.json`. |
+| `/main` | `activeBundle` with `preload`, `preloadOf(name)`, and `pageUrl({ page, hash, query })`, and `updater` with `status`, `onStatus()`, `checkForUpdates()`, `applyUpdate()`, `dismissRollback()`, `markBundleHealthy()`, `delayHealthCheck()`, `channel`, `cohorts`, `onBundleChange()`, and `onEvent()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
 | `/types` | The status types only, for pages and preload scripts. It has no code. |
 | `/release` | `bundleReleaseFromBuild(options)`, `installerReleaseFromBuild(options)`, `readBuildInfo(outDir)` |
 | `/launcher` | `startLauncher(options)`, `defineLocator(locate)`, and `createTreeLocator(feedUrl)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Locator`, `LauncherFileRef`, `FileLocation`, `Installer`, `InstallerFile`, `ElectronUpdaterInstaller`, `SparkleInstaller`, `InstallerProgress`. |
@@ -144,7 +144,8 @@ The bundle that runs now. A page-only update changes it without a restart, so re
 
 | Member | Meaning |
 | --- | --- |
-| `preload` | The path of the preload script, for `webPreferences.preload` |
+| `preload` | The path of the preload script, for `webPreferences.preload`: the preload entry named `index`, or the only entry. It throws when there are several and none is named `index`. |
+| `preloadOf(name)` | The path of a preload entry by its name, for example `preloadOf('settings')`. It throws when the bundle has no such entry. |
 | `pageUrl({ page, hash, query })` | The URL of a page. `page` defaults to `index.html`. Under `electron-vite dev`, it is the URL of the development server. |
 | `resolve(...parts)` | The path of another file in the bundle |
 | `dir` | The directory of the bundle |

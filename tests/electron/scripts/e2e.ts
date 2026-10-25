@@ -3,6 +3,8 @@
 // It publishes bundles to an update tree in memory and drives one real Electron install through these scenarios:
 //   1. a page-only bundle reloads every window in place, on the route each window shows, and the process stays the same
 //   2. a main-code bundle restarts the app
+//  2b. the downloaded bundle has a second preload entry, a second main entry, a `?modulePath` script, a `?nodeWorker`
+//      worker, and a `?asset` file of main
 //   3. a bundle that crashes at launch is rolled back at once and blocked, and the app says why
 //   4. a page that never reports healthy rolls back in place
 //   5. a channel file that withdraws the running bundle sends the app back to the previous bundle
@@ -110,7 +112,11 @@ try {
 
   stopApp = await launchApp(workspace, { capture: options.capture, feedUrl: server.url, installer: 'file', show: options.show })
   const first = await waitFor('installed page v1', list => findEvent(list, 'page-mounted', e => e.version === 'v1'))
-  await step('0. boots the bundle of the installer', true, `pid ${first.pid}`)
+  // The bundle of the installer finds its entries, worker, and asset too, also from app.asar.
+  const installedFiles = await waitFor('files of the installed bundle', list => findEvent(list, 'bundle-files', e => e.releaseId === 1))
+  const fileKinds = ['extraPreload', 'sync', 'modulePath', 'nodeWorker', 'asset'] as const
+  const missing = fileKinds.filter(kind => installedFiles[kind] !== true)
+  await step('0. boots the bundle of the installer', missing.length === 0, `pid ${first.pid}${missing.length ? `, missing ${missing.join(', ')}` : ', every entry, worker, and asset found'}`)
 
   // 1. page-only change
   let mark = lastIndex()
@@ -136,6 +142,10 @@ try {
   const restarted = await waitFor('page v3', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v3'))
   const restartEvent = findEvent(since(mark)(readEvents()), 'restart', e => e.releaseId === 3)
   await step('2. main-code bundle restarts the app', Boolean(restartEvent) && restarted.pid !== reloaded.pid, `pid ${reloaded.pid} -> ${restarted.pid}`)
+
+  // 2b. the downloaded bundle has every entry and asset that electron-vite builds for main and preload
+  const files = await waitFor('files of bundle 3', list => findEvent(since(mark)(list), 'bundle-files', e => e.releaseId === 3))
+  await step('2b. a downloaded bundle has every main and preload entry, worker, and asset', fileKinds.every(kind => files[kind] === true), fileKinds.map(kind => `${kind} ${files[kind] ? 'ok' : 'missing'}`).join(', '))
 
   // 3. crash at boot
   mark = lastIndex()

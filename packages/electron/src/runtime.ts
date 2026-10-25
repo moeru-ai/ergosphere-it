@@ -10,8 +10,17 @@ export interface ActiveBundle extends BundleInfo {
    * window that shows a page of the old bundle to the same page of the new one.
    */
   pageUrl: (options?: LoadOptions) => string
-  /** The path of the preload script of the bundle, for `webPreferences.preload`. */
+  /**
+   * The path of the preload script of the bundle, for `webPreferences.preload`: the preload entry named `index`, or the
+   * only entry. It throws when the bundle has several preload entries and none named `index`.
+   */
   readonly preload: string
+  /**
+   * The path of a preload entry of the bundle by its name, for `webPreferences.preload`, for example
+   * `activeBundle.preloadOf('settings')` for the entry `settings` of `preload.build.rolldownOptions.input`. It throws when
+   * the bundle has no such entry.
+   */
+  preloadOf: (name: string) => string
   /** Resolves a path inside the bundle, for example a file in `renderer/`. */
   resolve: (...parts: string[]) => string
 }

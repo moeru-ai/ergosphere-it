@@ -24,9 +24,13 @@ export const OUT_LAYOUT = {
   launcher: 'launcher/index.mjs',
 } as const
 
-/** Paths in a bundle, relative to its directory. */
+/**
+ * Paths in a bundle, relative to its directory. The entry of each component in `bundle.json` names the file that its
+ * process starts from. These are the defaults, for a bundle whose component has no entry.
+ */
 export const BUNDLE_LAYOUT = {
   main: 'main/index.mjs',
-  preload: 'preload/index.cjs',
+  /** The directory of the preload scripts: `<name>.cjs` for each entry. */
+  preloadDir: 'preload',
   renderer: 'renderer/index.html',
 } as const

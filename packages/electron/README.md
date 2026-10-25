@@ -243,24 +243,53 @@ Set `main` in `package.json` to the launcher:
 }
 ```
 
-The plugins keep the electron-vite source layout: `src/main/index.ts`, `src/preload/index.ts`, and `src/renderer/index.html`. An app with several HTML entries keeps its own `renderer.build.rolldownOptions.input`. The build writes:
+The plugins keep the electron-vite source layout: `src/main/index.ts`, `src/preload/index.ts`, and `src/renderer/index.html`. They also keep every entry that you give electron-vite, in `build.lib.entry` or `build.rolldownOptions.input`, as a path, a list, or an object of names and paths. The build writes:
 
 | Path | Plugin | Content |
 | --- | --- | --- |
 | `out/launcher/index.mjs` | main | The launcher, with the settings of `ergo.config.ts` |
-| `out/bundle/main` | main | The main code of the bundle |
-| `out/bundle/preload` | preload | The preload script. It is CommonJS, so it works in a sandbox. |
-| `out/bundle/renderer` | renderer | The pages |
+| `out/bundle/main` | main | `<name>.mjs` for each main entry, with the chunks, workers, `?modulePath` scripts, and `?asset` files of main. The app starts from the entry named `index`, or from the only entry. |
+| `out/bundle/preload` | preload | `<name>.cjs` for each preload entry. They are CommonJS, so they work in a sandbox. |
+| `out/bundle/renderer` | renderer | The pages, one for each HTML entry |
 | `out/bundle.json` | renderer | The files of the bundle with their hashes, the release IDs, and the version. electron-vite builds the renderer last, so this plugin writes it. |
 
 Under `electron-vite dev`, the launcher loads the development server, and updates are off.
+
+<details>
+<summary>Several entries</summary>
+
+```ts
+export default defineConfig({
+  main: {
+    // index starts the app. Main starts sync with utilityProcess.fork(fileURLToPath(new URL('./sync.mjs', import.meta.url))).
+    build: { rolldownOptions: { input: { index: 'src/main/index.ts', sync: 'src/main/sync.ts' } } },
+    plugins: [ergosphereMain()],
+  },
+  preload: {
+    // activeBundle.preload is index, and activeBundle.preloadOf('settings') is settings.
+    build: { lib: { entry: { index: 'src/preload/index.ts', settings: 'src/preload/settings.ts' } } },
+    plugins: [ergospherePreload()],
+  },
+  renderer: {
+    // activeBundle.pageUrl() is index.html, and activeBundle.pageUrl({ page: 'settings.html' }) is settings.html.
+    build: { rolldownOptions: { input: { index: 'src/renderer/index.html', settings: 'src/renderer/settings.html' } } },
+    plugins: [ergosphereRenderer()],
+  },
+})
+```
+
+- Main code finds its other entries next to itself with `import.meta.url`. Main and these files always come from one bundle, because a change of main restarts the app. Pages are different, so load them with `activeBundle.pageUrl`.
+- With several main entries, name the one that starts the app `index`. The build fails otherwise.
+- A sandboxed window cannot load a preload script that requires a shared chunk. The build warns when an entry does, and then set `preload.build.isolatedEntries` to `true` and `build.externalizeDeps` to `false`, so each entry is one file.
+
+</details>
 
 <details>
 <summary>Plugin options</summary>
 
 | Option | Plugins | Default | Meaning |
 | --- | --- | --- | --- |
-| `entry` | main, preload | the entry that electron-vite finds | The main or preload entry of the bundle |
+| `entry` | main, preload | the entries of the electron-vite config | One entry in place of the entries of the config. It is the entry named `index`. |
 | `launcher` | main | the generated launcher | A launcher file of your own, for example for tests |
 | `outDir` | all | `out` | The output directory. Pass the same value to all three. |
 | `root` | all | the current directory | The directory with `package.json` and `ergo.config.ts`. Pass the same value to all three. |
@@ -298,7 +327,7 @@ app.whenReady().then(() => {
 ```
 
 - `activeBundle` is the bundle that runs now: the bundle of the installer, or a downloaded one.
-- `activeBundle.preload` is the path of its preload script.
+- `activeBundle.preload` is the path of its preload script, and `activeBundle.preloadOf(name)` is the path of another preload entry.
 - `activeBundle.pageUrl({ page, hash, query })` is the URL of a page: `index.html` by default, another HTML entry with `page`, and a route with `hash`. Under `electron-vite dev`, it is the URL of the development server.
 
 Do not build page paths from `import.meta.dirname` or `__dirname`. After a page-only update, the main code still runs from the bundle that started, so new windows would load old pages.

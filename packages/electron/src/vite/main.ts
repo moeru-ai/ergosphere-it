@@ -6,12 +6,16 @@ import { resolve } from 'node:path'
 
 import { loadLauncherConfig, readPackageJson } from '../config'
 import { OUT_LAYOUT } from '../layout'
+import { defaultEntryOf, entriesOf } from './entries'
 import { buildContext } from './shared'
 
 export type { PluginOptions } from './shared'
 
 export interface MainPluginOptions extends PluginOptions {
-  /** The main entry of the bundle. Defaults to the entry that electron-vite finds, `src/main/index.ts`. */
+  /**
+   * The main entry of the bundle, in place of the entries of the electron-vite config. Without it, the plugin keeps every
+   * main entry of the config, and the app starts from the entry named `index`, or from the only entry.
+   */
   entry?: string
   /**
    * A launcher file of your own, instead of the generated one. It must call `startLauncher` from
@@ -27,9 +31,11 @@ const LAUNCHER_ID = 'virtual:ergosphere-it/launcher'
 /**
  * The plugin of the main process. Add it to `main.plugins` of the electron-vite config.
  *
- * It builds two entries: the launcher at `out/launcher/index.mjs`, which only an installer changes, and the main code of
- * the bundle at `out/bundle/main/index.mjs`, which updates over the air. The launcher gets the settings of
- * `ergo.config.ts`.
+ * It builds the launcher at `out/launcher/index.mjs`, which only an installer changes, and every main entry of the
+ * config into the bundle at `out/bundle/main/<name>.mjs`, which updates over the air. The app starts from the entry
+ * named `index`, or from the only entry. Other entries are for scripts that main starts, for example with
+ * `utilityProcess.fork`. Main finds them next to itself with `new URL('./<name>.mjs', import.meta.url)`, because main and
+ * these scripts always come from one bundle. The launcher gets the settings of `ergo.config.ts`.
  */
 export default function ergosphereMain(options: MainPluginOptions = {}): Plugin {
   const context = buildContext(options)
@@ -39,29 +45,47 @@ export default function ergosphereMain(options: MainPluginOptions = {}): Plugin 
     config(config) {
       const build = config.build ??= {}
       const rolldownOptions = build.rolldownOptions ??= {}
-      // The preset of electron-vite runs first. Without an input, it sets `build.lib` to the main entry that it finds.
-      const lib = build.lib === false ? undefined : build.lib
-      const presetEntry = typeof lib?.entry === 'string' ? lib.entry : undefined
-      const userInput = typeof rolldownOptions.input === 'string' ? rolldownOptions.input : undefined
-      const entry = options.entry ? resolve(context.root, options.entry) : userInput ?? presetEntry ?? resolve(context.root, 'src/main/index.ts')
+      if (Array.isArray(rolldownOptions.output))
+        throw new Error('[ergosphere-it] The main build of the bundle has one output. Set build.rolldownOptions.output to an object, not a list.')
+
+      // NOTICE:
+      // electron-vite builds the script of a `?modulePath` import in a second build with `write: false`, and with the
+      // script as its only input. The main build emits its output as assets. So this build keeps its input and gets no
+      // launcher, and only its names put its files into the bundle.
+      // Source: node_modules/electron-vite/dist/chunks/lib-*.js, modulePathPlugin and bundleEntryFile.
+      // Removal condition: electron-vite marks these builds in another way, or stops running config plugins for them.
+      if (build.write === false) {
+        build.lib = false
+        rolldownOptions.output = { ...rolldownOptions.output, ...bundleOutputOf('[name]-[hash].mjs') }
+
+        return
+      }
+
+      const entries = options.entry ? { index: resolve(context.root, options.entry) } : entriesOf(build, context.root, 'main')
+      const start = defaultEntryOf(entries)
+      if (start === undefined)
+        throw new Error(`[ergosphere-it] The main build has the entries ${Object.keys(entries).join(', ')}. Name the entry that starts the app index, or pass entry to ergosphereMain.`)
+      context.entries.main = `main/${start}.mjs`
 
       // NOTICE:
       // The preset of electron-vite sets `build.lib` before this hook runs, because its plugins come first.
-      // A lib entry wins over `rolldownOptions.input`, so the two entries of this plugin need `lib` off.
+      // A lib entry wins over `rolldownOptions.input`, so the entries of this plugin need `lib` off.
       // Source: node_modules/electron-vite/dist/chunks/lib-*.js, electronMainConfigPresetPlugin.
       // Removal condition: electron-vite lets a plugin add entries without a lib entry.
       build.lib = false
+      // The launcher and the bundle are two directories of out/, so one build writes to out/ with paths in the names.
       build.outDir = context.outDir
       // Change the object in place: the preset points `rollupOptions` at it.
       rolldownOptions.input = {
-        'bundle/main/index': entry,
+        ...Object.fromEntries(Object.entries(entries).map(([name, path]) => [`bundle/main/${name}`, path])),
         'launcher/index': options.launcher ? resolve(context.root, options.launcher) : LAUNCHER_ID,
       }
       rolldownOptions.output = {
-        ...(Array.isArray(rolldownOptions.output) ? {} : rolldownOptions.output),
-        chunkFileNames: 'bundle/main/chunks/[name]-[hash].mjs',
-        entryFileNames: '[name].mjs',
-        format: 'es',
+        ...rolldownOptions.output,
+        ...bundleOutputOf('bundle/main/[name]-[hash].mjs'),
+        // The entries above name their directory. Other entry chunks, for example a worker of a `?nodeWorker` import,
+        // go into the bundle next to the main code that starts them.
+        entryFileNames: chunk => (chunk.name.startsWith('bundle/') || chunk.name.startsWith('launcher/') ? '[name].mjs' : 'bundle/main/[name]-[hash].mjs'),
       }
 
       const expectedMain = `out/${OUT_LAYOUT.launcher}`
@@ -88,5 +112,16 @@ export default function ergosphereMain(options: MainPluginOptions = {}): Plugin 
       if (id === CONFIG_ID || id === LAUNCHER_ID)
         return `\0${id}`
     },
+  }
+}
+
+/** The names of the output of main: chunks and assets in the bundle, so a downloaded bundle has them too. */
+function bundleOutputOf(entryFileNames: string) {
+  return {
+    // Assets of main, for example from `?asset` imports.
+    assetFileNames: 'bundle/main/chunks/[name]-[hash][extname]',
+    chunkFileNames: 'bundle/main/chunks/[name]-[hash].mjs',
+    entryFileNames,
+    format: 'es' as const,
   }
 }
