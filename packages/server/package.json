@@ -1,7 +1,7 @@
 {
   "name": "@ergosphere-it/server",
   "type": "module",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "An in-memory server for ergosphere-it update trees, with a release console for local tests and demos",
   "author": {
     "name": "Moeru AI Project AIRI Team",

@@ -1,7 +1,7 @@
 {
   "name": "@ergosphere-it/protocol",
   "type": "module",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Schemas, signatures, and verification rules of the ergosphere-it update protocol",
   "author": {
     "name": "Moeru AI Project AIRI Team",
