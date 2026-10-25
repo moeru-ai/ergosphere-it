@@ -313,6 +313,21 @@ export class Workspace {
   }
 }
 
+// NOTICE:
+// xvfb-run stops its X server when its child exits. A relaunch exits the first Electron process, so the relaunched
+// process lost its display and hung before boot (found on Debian 13).
+// On Linux without a display, start one Xvfb for the whole run instead. Stop it with the app.
+export async function ensureDisplay(): Promise<{ display?: string, xvfb?: ChildProcess }> {
+  if (platform !== 'linux' || env.DISPLAY)
+    return { display: env.DISPLAY }
+
+  const display = `:${90 + Math.floor(Math.random() * 400)}`
+  const xvfb = spawn('Xvfb', [display, '-screen', '0', '1280x800x24', '-nolisten', 'tcp'], { stdio: 'ignore' })
+  await delay(1000)
+
+  return { display, xvfb }
+}
+
 /** Returns the first event of a type that matches, with the type of that event. */
 export function findEvent<Type extends AppEvent['type']>(
   events: readonly LoggedEvent[],
@@ -400,19 +415,4 @@ async function buildApp(out: string, releaseId: number, variant: Variant): Promi
         env[name] = value
     }
   }
-}
-
-// NOTICE:
-// xvfb-run stops its X server when its child exits. A relaunch exits the first Electron process, so the relaunched
-// process lost its display and hung before boot (found on Debian 13).
-// On Linux without a display, start one Xvfb for the whole run instead. Stop it with the app.
-async function ensureDisplay(): Promise<{ display?: string, xvfb?: ChildProcess }> {
-  if (platform !== 'linux' || env.DISPLAY)
-    return { display: env.DISPLAY }
-
-  const display = `:${90 + Math.floor(Math.random() * 400)}`
-  const xvfb = spawn('Xvfb', [display, '-screen', '0', '1280x800x24', '-nolisten', 'tcp'], { stdio: 'ignore' })
-  await delay(1000)
-
-  return { display, xvfb }
 }

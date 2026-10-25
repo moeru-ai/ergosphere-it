@@ -33,7 +33,7 @@ const LAUNCHER_ID = 'virtual:ergosphere-it/launcher'
  *
  * It builds the launcher at `out/launcher/index.mjs`, which only an installer changes, and every main entry of the
  * config into the bundle at `out/bundle/main/<name>.mjs`, which updates over the air. The app starts from the entry
- * named `index`, or from the only entry. Other entries are for scripts that main starts, for example with
+ * named `index`, or from the only entry, which the bundle names `index.mjs`. Other entries are for scripts that main starts, for example with
  * `utilityProcess.fork`. Main finds them next to itself with `new URL('./<name>.mjs', import.meta.url)`, because main and
  * these scripts always come from one bundle. The launcher gets the settings of `ergo.config.ts`.
  */
@@ -65,7 +65,10 @@ export default function ergosphereMain(options: MainPluginOptions = {}): Plugin 
       const start = defaultEntryOf(entries)
       if (start === undefined)
         throw new Error(`[ergosphere-it] The main build has the entries ${Object.keys(entries).join(', ')}. Name the entry that starts the app index, or pass entry to ergosphereMain.`)
-      context.entries.main = `main/${start}.mjs`
+      // The entry that starts the app is always index.mjs, so the launcher finds it also without bundle.json, under
+      // `electron-vite dev`. Nothing refers to it by name. Only an app with one main entry not named index sees the name
+      // change.
+      context.entries.main = 'main/index.mjs'
 
       // NOTICE:
       // The preset of electron-vite sets `build.lib` before this hook runs, because its plugins come first.
@@ -77,7 +80,7 @@ export default function ergosphereMain(options: MainPluginOptions = {}): Plugin 
       build.outDir = context.outDir
       // Change the object in place: the preset points `rollupOptions` at it.
       rolldownOptions.input = {
-        ...Object.fromEntries(Object.entries(entries).map(([name, path]) => [`bundle/main/${name}`, path])),
+        ...Object.fromEntries(Object.entries(entries).map(([name, path]) => [`bundle/main/${name === start ? 'index' : name}`, path])),
         'launcher/index': options.launcher ? resolve(context.root, options.launcher) : LAUNCHER_ID,
       }
       rolldownOptions.output = {

@@ -61,8 +61,9 @@ describe('ergosphereMain', () => {
     const fromList = configure(ergosphereMain({ outDir: 'list', root }), { build: { rolldownOptions: { input: ['src/main/app.ts'] } } })
     const fromObject = configure(ergosphereMain({ outDir: 'object', root }), { build: { rolldownOptions: { input: { app: 'src/main/app.ts' } } } })
 
-    expect(fromList.build?.rolldownOptions?.input).toMatchObject({ 'bundle/main/app': join(root, 'src/main/app.ts') })
-    expect(fromObject.build?.rolldownOptions?.input).toMatchObject({ 'bundle/main/app': join(root, 'src/main/app.ts') })
+    // The only entry starts the app, so the bundle names it index.mjs, which the launcher finds without bundle.json.
+    expect(fromList.build?.rolldownOptions?.input).toMatchObject({ 'bundle/main/index': join(root, 'src/main/app.ts') })
+    expect(fromObject.build?.rolldownOptions?.input).toMatchObject({ 'bundle/main/index': join(root, 'src/main/app.ts') })
   })
 
   it('keeps the input of a second build of electron-vite, for a `?modulePath` script, and adds no launcher', () => {

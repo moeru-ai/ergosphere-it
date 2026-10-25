@@ -8,6 +8,7 @@
   "scripts": {
     "demo": "node scripts/demo.ts",
     "e2e": "node scripts/e2e.ts",
+    "e2e:dev": "node scripts/dev-check.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
