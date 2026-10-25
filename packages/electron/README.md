@@ -2,6 +2,20 @@
 
 # ergosphere-it
 
+<picture>
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/hero-dark.webp"
+    media="(prefers-color-scheme: dark)"
+  />
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/hero-light.webp"
+    media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
+  />
+  <img width="100%" alt="ergosphere-it: over-the-air updates for Electron apps that always find their way back. An app drops a crashed bundle 1.0.5 and goes back to 1.0.4 on its own." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/hero-light.webp" />
+</picture>
+
 Over-the-air updates for Electron apps, with signed releases, staged rollouts, and automatic rollback.
 
 A rotating black hole drags everything in its ergosphere along with it, but anything inside can still escape.
@@ -13,6 +27,20 @@ Your app gets two parts:
 - **The launcher** is a small entry that the build generates. It picks the newest bundle that is signed and works, and starts it. Only a full installer changes it, as electron-updater installs today.
 
 When a new bundle crashes or never reports that it works, the app goes back to the bundle before it. You can also withdraw a bad bundle on the server, and every app leaves it at the next check.
+
+<picture>
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/features-dark.webp"
+    media="(prefers-color-scheme: dark)"
+  />
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/features-light.webp"
+    media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
+  />
+  <img width="100%" alt="Only the bundle moves. A few installs go first. No update server." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/features-light.webp" />
+</picture>
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
@@ -462,6 +490,20 @@ On macOS, `pnpm -F @ergosphere-it/tests-electron-sparkle demo` installs a new in
 [The specification](https://github.com/moeru-ai/ergosphere-it/blob/main/docs/spec.md) defines the protocol: formats, signatures, checks, and the rules of every client.
 
 ## What happens when
+
+<picture>
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/how-it-works-dark.webp"
+    media="(prefers-color-scheme: dark)"
+  />
+  <source
+    width="100%"
+    srcset="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/how-it-works-light.webp"
+    media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)"
+  />
+  <img width="100%" alt="How an update works: CI builds and signs a bundle, uploads files, a manifest, and the channel; the app checks the channel, downloads only the files it lacks, applies the bundle, and keeps it only if it reports healthy." src="https://raw.githubusercontent.com/moeru-ai/ergosphere-it/main/docs/assets/banners/how-it-works-light.webp" />
+</picture>
 
 | Situation | What the app does |
 | --- | --- |

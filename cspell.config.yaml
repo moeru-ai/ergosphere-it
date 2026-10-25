@@ -21,15 +21,19 @@ words:
   - bumpp
   - cloudflarestorage
   - codesign
+  - cwebp
   - desync
   - desyncs
   - doctoc
   - ergosphere
   - eventa
   - flathub
+  - gabarito
   - guiiai
+  - iconify
   - innei
   - kirie
+  - lerp
   - libexec
   - logg
   - masknet
@@ -38,10 +42,13 @@ words:
   - neko
   - nolisten
   - nsis
+  - oklch
   - pacman
   - picklist
   - pids
   - rollouts
+  - selfh
+  - selfhst
   - seqs
   - spki
   - tauri

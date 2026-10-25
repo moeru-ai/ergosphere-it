@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Over-the-air updates for Electron apps, with signed releases, staged rollouts, and automatic rollback." />
+    <meta name="color-scheme" content="dark light" />
+    <title>ergosphere-it</title>
+    <script>
+      // Set the theme before the first paint, as src/theme.ts decides it, so the page does not flash.
+      (function () {
+        var forced = new URLSearchParams(location.search).get('theme')
+        var saved
+        try { saved = localStorage.getItem('ergosphere-it:theme') } catch (e) {}
+        var theme = forced === 'light' || forced === 'dark' ? forced : saved === 'light' || saved === 'dark' ? saved : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+        document.documentElement.dataset.theme = theme
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

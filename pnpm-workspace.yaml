@@ -15,6 +15,7 @@ packages:
   - packages/**
   - examples/**
   - tests/**
+  - docs/visuals
   - '!**/dist/**'
 
 allowBuilds:
@@ -27,10 +28,18 @@ allowBuilds:
 catalog:
   '@arethetypeswrong/core': ^0.18.5
   '@electron/asar': ^4.3.1
+  '@fontsource/gabarito': ^5.3.0
+  '@fontsource/maple-mono': ^5.3.0
   '@guiiai/logg': ^1.2.12
   '@hono/node-server': ^2.1.5
+  '@iconify-json/material-symbols': ^1.2.96
+  '@iconify-json/selfhst': ^1.2.25
+  '@iconify/utils': ^3.1.7
+  '@iconify/vue': ^5.0.4
   '@moeru/eslint-config': ^0.1.0-beta.20
   '@moeru/std': ^0.1.0-beta.20
+  '@pierre/highlights': ^0.2.0
+  '@proj-airi/chromatic': ^1.1.5
   '@types/node': ^26.2.0
   '@vitejs/plugin-vue': ^6.0.10
   '@vitest/coverage-v8': ^5.0.0

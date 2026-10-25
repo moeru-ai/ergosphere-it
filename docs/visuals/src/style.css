@@ -1,0 +1,156 @@
+:root {
+  --font-sans: 'Gabarito', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Maple Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Dark, the default. Colors that take an alpha also come as channels: rgb(var(--x-rgb) / 20%). */
+  --bg: #08080b;
+  --surface: #111117;
+  --surface-2: #1a1a22;
+  --surface-3: #24242e;
+  --text: #ece9e2;
+  --text-rgb: 236 233 226;
+  --text-hover: #fff;
+  --soft: #cfcbc2;
+  --muted: #9a978f;
+  --faint: #5d5b57;
+  --line-number: #4a4844;
+
+  /* Devices are raised plastic; wells are sunk into them. */
+  --device-hi: #1d1d26;
+  --device-lo: #131319;
+  --tile-hi: #23232c;
+  --tile-lo: #191920;
+  --sheet-hi: #2a2a34;
+  --sheet-lo: #1d1d25;
+  --well-hi: #0a0a0e;
+  --well-lo: #101016;
+  --well-shadow: rgb(0 0 0 / 60%);
+  --tray: rgb(0 0 0 / 22%);
+  --empty: rgb(255 255 255 / 3%);
+  --figure-hi: #17171e;
+  --figure-lo: #0d0d12;
+  --code-bg: #0d0d12;
+  --hover-line: rgb(255 255 255 / 4%);
+  --wire: rgb(236 233 226 / 14%);
+  --shadow: rgb(0 0 0 / 40%);
+
+  /* Accents (cyan, orange, red, green) come from src/palette.ts. */
+  color-scheme: dark;
+}
+
+/* Light: neutral white and grey devices, dark ink. */
+:root[data-theme='light'] {
+  --bg: #f4f4f5;
+  --surface: #eaeaec;
+  --surface-2: #e0e0e3;
+  --surface-3: #d3d3d8;
+  --text: #18181b;
+  --text-rgb: 24 24 27;
+  --text-hover: #000;
+  --soft: #3f3f46;
+  --muted: #62626a;
+  --faint: #8d8d95;
+  --line-number: #b4b4bb;
+  --device-hi: #ffffff;
+  --device-lo: #ececef;
+  --tile-hi: #ffffff;
+  --tile-lo: #e9e9ec;
+  --sheet-hi: #ffffff;
+  --sheet-lo: #ededf0;
+  --well-hi: #d6d6db;
+  --well-lo: #e3e3e7;
+  --well-shadow: rgb(0 0 0 / 14%);
+  --tray: rgb(0 0 0 / 5%);
+  --empty: rgb(0 0 0 / 5%);
+  --figure-hi: #fafafa;
+  --figure-lo: #ececef;
+  --code-bg: #fbfbfc;
+  --hover-line: rgb(0 0 0 / 4%);
+  --wire: rgb(24 24 27 / 20%);
+  --shadow: rgb(20 20 30 / 12%);
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  transition: background 0.3s;
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Banners: the page around the rounded frame stays transparent. A dark color scheme makes Chrome paint a dark canvas
+ * under a transparent page, so a capture keeps the light scheme. The page has no form controls that it would change.
+ */
+html.capture {
+  color-scheme: light;
+}
+
+html.capture,
+html.capture body {
+  background: transparent;
+  /* Not even for a moment: a screenshot can land while the background still fades. */
+  transition: none;
+}
+
+code,
+.mono {
+  font-family: var(--font-mono);
+}
+
+a {
+  color: var(--cyan-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+/* Buttons are filled, not outlined. */
+.btn {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.btn:hover {
+  background: var(--surface-3);
+}
+
+.btn.primary {
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 500;
+}
+
+.btn.primary:hover {
+  background: var(--text-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

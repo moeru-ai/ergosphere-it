@@ -1,0 +1,32 @@
+{
+  "name": "@ergosphere-it/docs-visuals",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The ergosphere-it page: an OTA updater that can always get back, told with a few shapes",
+  "scripts": {
+    "build": "vite build",
+    "banners": "node scripts/banners.ts",
+    "dev": "vite",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fontsource/gabarito": "catalog:",
+    "@fontsource/maple-mono": "catalog:",
+    "@iconify/vue": "catalog:",
+    "@pierre/highlights": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@iconify-json/material-symbols": "catalog:",
+    "@iconify-json/selfhst": "catalog:",
+    "@iconify/utils": "catalog:",
+    "@proj-airi/chromatic": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}
