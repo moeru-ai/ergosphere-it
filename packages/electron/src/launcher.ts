@@ -29,6 +29,7 @@ import { writeRuntime } from './global'
 import { BUNDLE_LAYOUT, OUT_LAYOUT } from './layout'
 import { createTreeLocator } from './locate'
 import { registerBundleModuleHooks } from './module-hooks'
+import { defaultPreloadPathOf, preloadPathOf } from './preload-files'
 
 export type { LauncherConfig } from './config'
 export type { ElectronUpdaterInstaller, Installer, InstallerFile, InstallerFormat, InstallerProgress, SparkleAppcast, SparkleInstaller } from './installer'
@@ -275,20 +276,9 @@ class Launcher implements Runtime {
       },
       pageUrl: options => this.pageUrl(options),
       get preload() {
-        const entry = running().components.find(component => component.type === 'electron-preload')?.entry
-        if (entry === undefined)
-          throw new Error(`The bundle has no preload entry named index. It has ${preloadNamesOf(running().components).join(', ') || 'no preload script'}. Use activeBundle.preloadOf(name).`)
-
-        return join(running().dir, ...entry.split('/'))
+        return defaultPreloadPathOf(running().dir, running().components.find(component => component.type === 'electron-preload')?.entry)
       },
-      preloadOf: (name) => {
-        const path = `${BUNDLE_LAYOUT.preloadDir}/${name}.cjs`
-        const preload = running().components.find(component => component.type === 'electron-preload')
-        if (!preload?.files.some(file => file.path === path))
-          throw new Error(`The bundle has no preload entry ${name}. It has ${preloadNamesOf(running().components).join(', ') || 'no preload script'}.`)
-
-        return join(running().dir, ...path.split('/'))
-      },
+      preloadOf: name => preloadPathOf(running().dir, name),
       get releaseId() {
         return running().releaseId
       },
@@ -746,17 +736,9 @@ function percentOf(done: number, total: number): number {
 }
 
 /** The renderer directory inside a bundle, from the layout. */
-/** The names of the preload entries of a bundle: the scripts at the top of its preload directory. */
-function preloadNamesOf(components: BundleManifest['components']): string[] {
-  const prefix = `${BUNDLE_LAYOUT.preloadDir}/`
-  const files = components.find(component => component.type === 'electron-preload')?.files ?? []
-
-  return files.map(file => file.path).filter(path => path.startsWith(prefix) && path.endsWith('.cjs') && !path.slice(prefix.length).includes('/')).map(path => path.slice(prefix.length, -'.cjs'.length))
-}
-
 /**
  * Reads `out/bundle.json`. The development server of electron-vite does not write it, so a missing file gives a
- * placeholder: updates are off in development anyway.
+ * placeholder: updates are off in development anyway. The preload scripts are then found on the disk.
  */
 function readBuildInfo(path: string, options: LauncherOptions): BuildInfo {
   if (existsSync(path))
