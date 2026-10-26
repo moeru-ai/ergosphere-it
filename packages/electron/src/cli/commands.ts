@@ -7,6 +7,7 @@ import { dirname, join, resolve } from 'node:path'
 import { bytesFromBase64, createKeyPair, keyPairFromPrivateKey, signingKeyToPem, trustedKeyToOpenSsh, verifyChannelFileSignature } from '@ergosphere-it/protocol'
 import { buildChannelFile, isChannelConflict } from '@ergosphere-it/publish'
 import { newQueue } from '@henrygd/queue'
+import { errorMessageFrom } from '@moeru/std/error'
 import { parse } from 'yaml'
 
 import { bundleReleaseFromBuild, installerReleaseFromBuild, readBuildInfo } from '../release'
@@ -60,6 +61,13 @@ export interface PublishContext {
   trustedKeys?: TrustedKey[]
 }
 
+/** An object of a bundle, for logs: its hash, its size, and the paths of the files that have its content. */
+export interface PublishedObject {
+  paths: string[]
+  sha256: string
+  size: number
+}
+
 /**
  * A step of `publishBundle`, in order: the release, the check of each object against the store, the upload of each new
  * object, and then the manifest and the channel. Bytes are the sizes of the objects.
@@ -68,6 +76,8 @@ export type PublishProgress
   = | { bytes: number, channel: string, objects: number, releaseId: number, type: 'release', version: string }
     | { channel: string, releaseId: number, rollout: number, type: 'channel' }
     | { checked: number, objects: number, type: 'checking' }
+    | { durationMs: number, newObjects: number, object: PublishedObject, type: 'uploaded', uploadedObjects: number }
+    | { error: string, object: PublishedObject, step: 'check' | 'upload', type: 'failed' }
     | { newBytes: number, newObjects: number, skipped: number, type: 'checked' }
     | { newBytes: number, newObjects: number, type: 'uploading', uploadedBytes: number, uploadedObjects: number }
     | { releaseId: number, type: 'manifest' }
@@ -134,10 +144,16 @@ export async function publishBundle(options: BundleCommandOptions): Promise<{ re
   })
   const { objects } = release
   report({ bytes: sizeOf(objects), channel, objects: objects.length, releaseId: release.releaseId, type: 'release', version: release.manifest.version })
+  // Files with the same content share one object, so an object can have several paths.
+  const paths = Map.groupBy(release.manifest.components.flatMap(component => component.files), file => file.sha256)
+  const describe = (object: { sha256: string, size: number }): PublishedObject => ({ paths: (paths.get(object.sha256) ?? []).map(file => file.path), sha256: object.sha256, size: object.size })
 
   let checked = 0
   const missing = await filterConcurrently(objects, concurrency, async (object) => {
-    const has = await store.hasObject(object.sha256)
+    const has = await store.hasObject(object.sha256).catch((error: unknown) => {
+      report({ error: errorMessageFrom(error) ?? String(error), object: describe(object), step: 'check', type: 'failed' })
+      throw error
+    })
     report({ checked: ++checked, objects: objects.length, type: 'checking' })
 
     return !has
@@ -148,9 +164,14 @@ export async function publishBundle(options: BundleCommandOptions): Promise<{ re
   let uploadedObjects = 0
   let uploadedBytes = 0
   await eachConcurrently(missing, concurrency, async (object) => {
-    await store.putObject(object)
+    const started = performance.now()
+    await store.putObject(object).catch((error: unknown) => {
+      report({ error: errorMessageFrom(error) ?? String(error), object: describe(object), step: 'upload', type: 'failed' })
+      throw error
+    })
     uploadedObjects++
     uploadedBytes += object.size
+    report({ durationMs: performance.now() - started, newObjects: missing.length, object: describe(object), type: 'uploaded', uploadedObjects })
     report({ newBytes, newObjects: missing.length, type: 'uploading', uploadedBytes, uploadedObjects })
   })
   await store.putBundle({ ...release.signed, document: release.manifest })
