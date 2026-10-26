@@ -19,9 +19,14 @@ const CHANNEL_WRITE_ATTEMPTS = 5
 
 export interface BundleCommandOptions extends PublishContext {
   channel: string
+  /**
+   * How many objects to check against the store at once. A check is a small request, so it defaults to 32. On a later
+   * publish, most of the bundle is in the store, and the check takes most of the time.
+   */
+  checkConcurrency?: number
   /** Limits the bundle to these cohorts. */
   cohorts?: string[]
-  /** How many objects to check or upload at once. Defaults to 8. */
+  /** How many objects to upload at once. Defaults to 8. */
   concurrency?: number
   /** The lowest native version that can run the bundle. Defaults to the native version of the build. */
   minNativeVersion?: number
@@ -136,6 +141,7 @@ export async function publishBundle(options: BundleCommandOptions): Promise<{ re
   const { channel, signingKey, store } = options
   const report = options.onProgress ?? (() => {})
   const concurrency = options.concurrency ?? 8
+  const checkConcurrency = options.checkConcurrency ?? 32
   const info = readBuildInfo(options.outDir)
   const release = await bundleReleaseFromBuild({
     nativeVersion: { max: info.nativeVersion, min: options.minNativeVersion ?? info.nativeVersion },
@@ -149,7 +155,7 @@ export async function publishBundle(options: BundleCommandOptions): Promise<{ re
   const describe = (object: { sha256: string, size: number }): PublishedObject => ({ paths: (paths.get(object.sha256) ?? []).map(file => file.path), sha256: object.sha256, size: object.size })
 
   let checked = 0
-  const missing = await filterConcurrently(objects, concurrency, async (object) => {
+  const missing = await filterConcurrently(objects, checkConcurrency, async (object) => {
     const has = await store.hasObject(object.sha256).catch((error: unknown) => {
       report({ error: errorMessageFrom(error) ?? String(error), object: describe(object), step: 'check', type: 'failed' })
       throw error

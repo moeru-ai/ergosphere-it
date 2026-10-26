@@ -325,7 +325,7 @@ describe('ergosphere-it commands', () => {
     expect(memory.channels.get('beta')?.document).toMatchObject({ bundle: { rollout: { percentage: 30 } }, withdrawn: [99] })
   })
 
-  it('checks and uploads at most `concurrency` objects at once, and reports each step in order', async () => {
+  it('checks at most `checkConcurrency` and uploads at most `concurrency` objects at once, and reports each step in order', async () => {
     const signingKey = await parseSigningKey((await keygen()).privateKey)
     const memory = memoryStore()
     const out = join(root, 'out')
@@ -336,31 +336,32 @@ describe('ergosphere-it commands', () => {
       if (!['main', 'page'].some(text => key === hashes.get(text)))
         memory.objects.delete(key)
     }
-    let running = 0
-    let peak = 0
-    const slow = async (work: () => Promise<void>) => {
-      peak = Math.max(peak, ++running)
+    // The peak of concurrent requests in each step.
+    const peaks = { check: 0, upload: 0 }
+    const running = { check: 0, upload: 0 }
+    const slow = async (step: 'check' | 'upload', work: () => Promise<void>) => {
+      peaks[step] = Math.max(peaks[step], ++running[step])
       await new Promise(resolve => setTimeout(resolve, 5))
       await work()
-      running--
+      running[step]--
     }
     const store = createReleaseStore({
       ...memory.store,
       hasObject: async (sha256) => {
         let has = false
-        await slow(async () => {
+        await slow('check', async () => {
           has = await memory.store.hasObject!(sha256)
         })
         return has
       },
-      putObject: object => slow(() => memory.store.putObject(object)),
+      putObject: object => slow('upload', () => memory.store.putObject(object)),
     })
     const progress: PublishProgress[] = []
 
-    const result = await publishBundle({ channel: 'beta', concurrency: 3, onProgress: step => progress.push(step), outDir: out, signingKey, store })
+    const result = await publishBundle({ channel: 'beta', checkConcurrency: 5, concurrency: 3, onProgress: step => progress.push(step), outDir: out, signingKey, store })
 
     expect(result.uploaded).toBe(20)
-    expect(peak).toBe(3)
+    expect(peaks).toEqual({ check: 5, upload: 3 })
     expect([...new Set(progress.map(step => step.type))]).toEqual(['release', 'checking', 'checked', 'uploaded', 'uploading', 'manifest', 'channel'])
     const uploaded = progress.filter(step => step.type === 'uploaded')
     expect(uploaded).toHaveLength(20)
