@@ -489,7 +489,7 @@ Any static host works. A bucket behind a CDN is a good fit:
   <img width="100%" alt="Two flows in CI. An OTA update publishes a bundle to 20% of the beta channel. A full release publishes installers with electron-builder, and ergosphere-it register installer records them." src="./docs/assets/banners/figure-publish-light.webp" />
 </picture>
 
-Each command reads the build output in `out/`, signs with `ERGOSPHERE_IT_SIGNING_KEY`, and writes to the release store: `--store`, then `ERGOSPHERE_IT_STORE`, then `store` of `ergo.config.ts`. The command prints which one it uses. The release stores below tell how to set one up for S3 or R2:
+Each command reads the build output in `out/`, signs with `ERGOSPHERE_IT_SIGNING_KEY`, and writes to the release store: `--store`, then `ERGOSPHERE_IT_STORE`, then `store` of `ergo.config.ts`. The command prints which one it uses, and each step with its time. `publish bundle` checks and uploads 8 objects at once, skips the objects that the store has, and prints the upload every 5 seconds: the objects, the bytes, the rate, and the time left. The release stores below tell how to set one up for S3 or R2:
 
 ```bash
 # An OTA update of the bundle to 20% of the beta channel

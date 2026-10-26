@@ -120,6 +120,7 @@
     "valibot": "catalog:"
   },
   "devDependencies": {
+    "@guiiai/logg": "catalog:",
     "electron": "catalog:",
     "electron-sparkle-updater": "catalog:",
     "electron-updater": "catalog:",

@@ -2,6 +2,7 @@ import type { BundleManifest, ChannelFile, SigningKey } from '@ergosphere-it/pro
 import type { BundleObject, Signed } from '@ergosphere-it/publish'
 
 import type { BuildInfo } from '../layout'
+import type { PublishProgress } from './commands'
 
 import { Buffer } from 'node:buffer'
 import { createPrivateKey, createPublicKey, generateKeyPairSync } from 'node:crypto'
@@ -25,17 +26,25 @@ const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
 const read = (key: string) => new Uint8Array(readFileSync(join(root, 'storage', ...key.split('/')))) as Uint8Array<ArrayBuffer>
 
 /** Writes the build output of the ergosphere-it plugins with one main file and one page file. */
-async function writeBuild(outDir: string, releaseId: number, page: string): Promise<void> {
-  const files = { 'main/index.mjs': 'main', 'renderer/index.html': page }
+/** The sha256 of each text that a build wrote. */
+const hashes = new Map<string, string>()
+
+async function writeBuild(outDir: string, releaseId: number, page: string, chunks = 0): Promise<void> {
+  const chunkFiles = Object.fromEntries(Array.from({ length: chunks }, (_, index) => [`renderer/chunk-${String(index).padStart(2, '0')}.js`, `chunk ${String(index).padStart(2, '0')}`]))
+  const files: Record<string, string> = { 'main/index.mjs': 'main', 'renderer/index.html': page, ...chunkFiles }
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(join(outDir, 'bundle', path, '..'), { recursive: true })
     writeFileSync(join(outDir, 'bundle', path), text)
   }
-  const entry = async (path: string, text: string) => ({ path, sha256: await contentHash(encode(text)), size: encode(text).byteLength })
+  const entry = async (path: string, text: string) => {
+    const sha256 = await contentHash(encode(text))
+    hashes.set(text, sha256)
+    return { path, sha256, size: encode(text).byteLength }
+  }
   const info: BuildInfo = {
     components: [
       { entry: 'main/index.mjs', files: [await entry('main/index.mjs', 'main')], type: 'electron-main' },
-      { entry: 'renderer/index.html', files: [await entry('renderer/index.html', page)], type: 'web' },
+      { entry: 'renderer/index.html', files: [await entry('renderer/index.html', page), ...await Promise.all(Object.entries(chunkFiles).map(([path, text]) => entry(path, text)))], type: 'web' },
     ],
     installerReleaseId: releaseId + 1,
     nativeVersion: 2,
@@ -314,6 +323,69 @@ describe('ergosphere-it commands', () => {
 
     expect(withdrawn).toEqual(['beta'])
     expect(memory.channels.get('beta')?.document).toMatchObject({ bundle: { rollout: { percentage: 30 } }, withdrawn: [99] })
+  })
+
+  it('checks and uploads at most `concurrency` objects at once, and reports each step in order', async () => {
+    const signingKey = await parseSigningKey((await keygen()).privateKey)
+    const memory = memoryStore()
+    const out = join(root, 'out')
+    await writeBuild(out, 10, 'page', 20)
+    // The store has the main and the page already, from the bundle before.
+    await publishBundle({ channel: 'beta', outDir: out, signingKey, store: memory.store })
+    for (const [key] of memory.objects) {
+      if (!['main', 'page'].some(text => key === hashes.get(text)))
+        memory.objects.delete(key)
+    }
+    let running = 0
+    let peak = 0
+    const slow = async (work: () => Promise<void>) => {
+      peak = Math.max(peak, ++running)
+      await new Promise(resolve => setTimeout(resolve, 5))
+      await work()
+      running--
+    }
+    const store = createReleaseStore({
+      ...memory.store,
+      hasObject: async (sha256) => {
+        let has = false
+        await slow(async () => {
+          has = await memory.store.hasObject!(sha256)
+        })
+        return has
+      },
+      putObject: object => slow(() => memory.store.putObject(object)),
+    })
+    const progress: PublishProgress[] = []
+
+    const result = await publishBundle({ channel: 'beta', concurrency: 3, onProgress: step => progress.push(step), outDir: out, signingKey, store })
+
+    expect(result.uploaded).toBe(20)
+    expect(peak).toBe(3)
+    expect([...new Set(progress.map(step => step.type))]).toEqual(['release', 'checking', 'checked', 'uploading', 'manifest', 'channel'])
+    expect(progress[0]).toMatchObject({ channel: 'beta', objects: 22, releaseId: 10, type: 'release', version: '1.0.10' })
+    expect(progress.find(step => step.type === 'checked')).toEqual({ newBytes: 20 * 'chunk 00'.length, newObjects: 20, skipped: 2, type: 'checked' })
+    expect(progress.filter(step => step.type === 'uploading').at(-1)).toMatchObject({ uploadedBytes: 20 * 'chunk 00'.length, uploadedObjects: 20 })
+    expect(progress.at(-1)).toEqual({ channel: 'beta', releaseId: 10, rollout: 100, type: 'channel' })
+  })
+
+  it('stops starting uploads after one fails, and moves no channel', async () => {
+    const signingKey = await parseSigningKey((await keygen()).privateKey)
+    const memory = memoryStore()
+    const out = join(root, 'out')
+    await writeBuild(out, 10, 'page', 20)
+    let started = 0
+    const store = createReleaseStore({
+      ...memory.store,
+      putObject: async (object) => {
+        if (++started === 2)
+          throw new Error('The network went away.')
+        await memory.store.putObject(object)
+      },
+    })
+
+    await expect(publishBundle({ channel: 'beta', concurrency: 2, outDir: out, signingKey, store })).rejects.toThrow('The network went away.')
+    expect(started).toBeLessThan(5)
+    expect(memory.channels.has('beta')).toBe(false)
   })
 
   it('refuses to change a channel file that no trusted key signed', async () => {
