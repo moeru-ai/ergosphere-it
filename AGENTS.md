@@ -4,7 +4,7 @@ This file tells people and agents how to change ergosphere-it safely. [The speci
 
 ## Check a change
 
-Run these from the repository root, with Node.js 26 or later:
+Run these from the repository root, with Node.js 26 or later. The packages also run on Node.js 24, so code must not need a newer Node.js API: `bytes.ts` of `@ergosphere-it/protocol` has the hex and base64 of `Uint8Array`, which Node.js 24 does not have.
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm spellcheck && pnpm knip && pnpm test:run

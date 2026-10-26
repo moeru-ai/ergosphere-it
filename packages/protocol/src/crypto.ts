@@ -2,11 +2,13 @@ import type { TrustedKey } from './schema'
 
 import canonicalize from 'canonicalize'
 
+import { bytesFromBase64, bytesFromHex, bytesToBase64, bytesToHex } from './bytes'
+
 const ED25519 = { name: 'Ed25519' } as const
 /** The DER of an Ed25519 public key in SPKI form, before the 32 bytes of the key. */
-const SPKI_HEADER = Uint8Array.fromHex('302a300506032b6570032100')
+const SPKI_HEADER = bytesFromHex('302a300506032b6570032100')
 /** The OpenSSH wire form of an Ed25519 public key, before the 32 bytes of the key: the key type and the key length. */
-const SSH_HEADER = Uint8Array.fromHex('0000000b7373682d6564323535313900000020')
+const SSH_HEADER = bytesFromHex('0000000b7373682d6564323535313900000020')
 const KEY_LENGTH = 32
 
 /** A signed document: the exact bytes to publish and their detached base64 signature. */
@@ -42,10 +44,10 @@ export function canonicalJson(value: unknown): string {
 /**
  * Returns the content address of bytes: their SHA-256 as lowercase hex.
  *
- * Objects, file entries, and key IDs use it. It uses WebCrypto and the built-in `Uint8Array.prototype.toHex`.
+ * Objects, file entries, and key IDs use it. It uses WebCrypto.
  */
 export async function contentHash(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)).toHex()
+  return bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)))
 }
 
 /** Creates an Ed25519 key pair with WebCrypto. Clients trust `trustedKey`, and the release pipeline keeps `signingKey`. */
@@ -55,13 +57,13 @@ export async function createKeyPair(): Promise<{ signingKey: SigningKey, trusted
   const privateKey = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey))
   const keyId = await keyIdOf(publicKey)
 
-  return { signingKey: { keyId, privateKey: privateKey.toBase64() }, trustedKey: { keyId, publicKey: publicKey.toBase64() } }
+  return { signingKey: { keyId, privateKey: bytesToBase64(privateKey) }, trustedKey: { keyId, publicKey: bytesToBase64(publicKey) } }
 }
 
 /** Decodes strict standard base64. Returns `undefined` for anything else, including missing padding. */
 export function decodeBase64(text: string): Uint8Array<ArrayBuffer> | undefined {
   try {
-    return Uint8Array.fromBase64(text.trim(), { lastChunkHandling: 'strict' }) as Uint8Array<ArrayBuffer>
+    return bytesFromBase64(text.trim())
   }
   catch {
     return undefined
@@ -101,7 +103,7 @@ export async function keyPairFromPrivateKey(pem: string): Promise<{ signingKey: 
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', publicKey))
   const keyId = await keyIdOf(spki)
 
-  return { signingKey: { keyId, privateKey: der.toBase64() }, trustedKey: { keyId, publicKey: spki.toBase64() } }
+  return { signingKey: { keyId, privateKey: bytesToBase64(der) }, trustedKey: { keyId, publicKey: bytesToBase64(spki) } }
 }
 
 /**
@@ -117,7 +119,7 @@ export async function signDocument(document: Record<string, unknown>, signingKey
 
   const key = await crypto.subtle.importKey('pkcs8', der, ED25519, false, ['sign'])
 
-  return { bytes, signature: new Uint8Array(await crypto.subtle.sign(ED25519, key, bytes)).toBase64() }
+  return { bytes, signature: bytesToBase64(new Uint8Array(await crypto.subtle.sign(ED25519, key, bytes))) }
 }
 
 /** Writes a signing key as a PKCS#8 PEM, the form that {@link keyPairFromPrivateKey} reads. */
@@ -142,7 +144,7 @@ export function trustedKeyToOpenSsh(trustedKey: TrustedKey): string {
   if (!isKey(der, SPKI_HEADER))
     throw new TypeError('The public key is not an Ed25519 SPKI key.')
 
-  return `ssh-ed25519 ${new Uint8Array([...SSH_HEADER, ...der.subarray(SPKI_HEADER.length)]).toBase64()}`
+  return `ssh-ed25519 ${bytesToBase64(new Uint8Array([...SSH_HEADER, ...der.subarray(SPKI_HEADER.length)]))}`
 }
 
 /** Verifies a detached Ed25519 signature over bytes. */
@@ -177,10 +179,10 @@ function spkiFromPublicKey(text: string): string | undefined {
   if (ssh) {
     const wire = decodeBase64(ssh[1]!)
 
-    return isKey(wire, SSH_HEADER) ? new Uint8Array([...SPKI_HEADER, ...wire.subarray(SSH_HEADER.length)]).toBase64() : undefined
+    return isKey(wire, SSH_HEADER) ? bytesToBase64(new Uint8Array([...SPKI_HEADER, ...wire.subarray(SSH_HEADER.length)])) : undefined
   }
 
   const der = decodePem(text, 'PUBLIC KEY')
 
-  return isKey(der, SPKI_HEADER) ? der.toBase64() : undefined
+  return isKey(der, SPKI_HEADER) ? bytesToBase64(der) : undefined
 }

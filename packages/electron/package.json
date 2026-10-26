@@ -84,7 +84,7 @@
     "virtual.d.ts"
   ],
   "engines": {
-    "node": ">=26"
+    "node": ">=24"
   },
   "scripts": {
     "build": "tsdown",

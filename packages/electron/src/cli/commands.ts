@@ -4,7 +4,7 @@ import type { ChannelFileInput, InstallerFileInput, ReleaseStore, StoredDocument
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
-import { createKeyPair, keyPairFromPrivateKey, signingKeyToPem, trustedKeyToOpenSsh, verifyChannelFileSignature } from '@ergosphere-it/protocol'
+import { bytesFromBase64, createKeyPair, keyPairFromPrivateKey, signingKeyToPem, trustedKeyToOpenSsh, verifyChannelFileSignature } from '@ergosphere-it/protocol'
 import { buildChannelFile, isChannelConflict } from '@ergosphere-it/publish'
 import { parse } from 'yaml'
 
@@ -394,7 +394,7 @@ function unwrapPem(text: string): string {
     return value
 
   try {
-    return new TextDecoder().decode(Uint8Array.fromBase64(value))
+    return new TextDecoder().decode(bytesFromBase64(value))
   }
   catch {
     return value

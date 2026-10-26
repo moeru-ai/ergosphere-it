@@ -2,6 +2,7 @@ import { generateKeyPairSync } from 'node:crypto'
 
 import { describe, expect, it } from 'vitest'
 
+import { bytesFromBase64 } from './bytes'
 import { canonicalJson, createKeyPair, isPublicKey, keyPairFromPrivateKey, signDocument, signingKeyToPem, trustedKeyFromPublicKey, trustedKeyToOpenSsh, verifyBytes } from './crypto'
 
 // One key in two forms: ssh-keygen made the OpenSSH key, and Node made the PEM from the JWK of the same 32 bytes.
@@ -55,7 +56,7 @@ describe('keyPairFromPrivateKey', () => {
     const { signingKey, trustedKey } = await keyPairFromPrivateKey(signingKeyToPem((await createKeyPair()).signingKey))
     const { bytes, signature } = await signDocument({ kind: 'test' }, signingKey)
 
-    expect(await verifyBytes(bytes, Uint8Array.fromBase64(signature) as Uint8Array<ArrayBuffer>, trustedKey)).toBe(true)
+    expect(await verifyBytes(bytes, bytesFromBase64(signature), trustedKey)).toBe(true)
   })
 
   it('rejects base64 DER, an encrypted PEM, and a key of another type', async () => {

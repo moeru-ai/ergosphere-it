@@ -49,7 +49,7 @@ export interface Signed<T> extends SignedDocument {
 
 /**
  * The bytes and the signature of a stored document, as a store gives them back. The bytes can be any `Uint8Array`, for
- * example from `Uint8Array.fromBase64`. The signature is base64 text, as in the `.sig` file of the default layout.
+ * example from `bytesFromBase64` of `@ergosphere-it/protocol`. The signature is base64 text, as in the `.sig` file of the default layout.
  */
 export interface StoredDocument {
   bytes: Uint8Array
