@@ -31,6 +31,7 @@ catalog:
   '@fontsource/gabarito': ^5.3.0
   '@fontsource/maple-mono': ^5.3.0
   '@guiiai/logg': ^1.2.12
+  '@henrygd/queue': ^1.2.0
   '@hono/node-server': ^2.1.5
   '@iconify-json/material-symbols': ^1.2.96
   '@iconify-json/selfhst': ^1.2.25

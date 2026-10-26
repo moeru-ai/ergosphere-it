@@ -21,6 +21,9 @@ catalogs:
     '@guiiai/logg':
       specifier: ^1.2.12
       version: 1.2.12
+    '@henrygd/queue':
+      specifier: ^1.2.0
+      version: 1.2.0
     '@hono/node-server':
       specifier: ^2.1.5
       version: 2.1.5
@@ -311,6 +314,9 @@ importers:
       '@ergosphere-it/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@henrygd/queue':
+        specifier: 'catalog:'
+        version: 1.2.0
       '@moeru/std':
         specifier: 'catalog:'
         version: 0.1.0-beta.20
@@ -332,6 +338,9 @@ importers:
       '@ergosphere-it/publish':
         specifier: workspace:*
         version: link:../publish
+      '@henrygd/queue':
+        specifier: 'catalog:'
+        version: 1.2.0
       '@moeru/std':
         specifier: 'catalog:'
         version: 0.1.0-beta.20
