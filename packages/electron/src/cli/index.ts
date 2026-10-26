@@ -5,11 +5,17 @@ import { argv, cwd, env, exit } from 'node:process'
 import { parseArgs } from 'node:util'
 
 import { trustedKeyFromPublicKey } from '@ergosphere-it/protocol'
+import { Format, setGlobalFormat, useLogg } from '@guiiai/logg'
 import { errorMessageFrom } from '@moeru/std/error'
 
 import { findErgoConfig, loadErgoConfig, loadLauncherConfig } from '../config'
 import { gitRootOf, keygen, parseSigningKey, promote, publishBundle, registerInstaller, setRollout, withdraw, writePrivateKey } from './commands'
+import { createPublishReporter } from './progress'
 import { resolveStore } from './store'
+
+// Each line has a time and a level, so a CI log shows how long each step took.
+setGlobalFormat(Format.Pretty)
+const log = useLogg('ergosphere-it').useGlobalConfig()
 
 const usage = `Usage: ergosphere-it <command> [options]
 
@@ -105,7 +111,7 @@ async function run(): Promise<string> {
   // --bucket is the name of --store before release stores.
   const { source, store } = await resolveStore(values.store ?? values.bucket, env.ERGOSPHERE_IT_STORE, cwd())
   // A variable or a flag takes precedence over store of ergo.config.ts, so say which store this run writes to.
-  console.info(`Release store: ${store.name}, from ${source}.`)
+  log.withFields({ source }).log(`Release store: ${store.name}.`)
   const signingKey = await parseSigningKey(required('ERGOSPHERE_IT_SIGNING_KEY', env.ERGOSPHERE_IT_SIGNING_KEY))
   // A channel file in the store can be signed with any key of publicKeys, for example the key before a rotation.
   const publicKeys = findErgoConfig(cwd()) === undefined ? [] : (await loadErgoConfig(cwd())).publicKeys
@@ -117,6 +123,7 @@ async function run(): Promise<string> {
       channel: required('--channel', channel),
       cohorts: values.cohorts?.split(',').map(cohort => cohort.trim()).filter(Boolean),
       minNativeVersion: integer('--min-native-version', values['min-native-version']),
+      onProgress: createPublishReporter(log),
       outDir: values.out,
       rollout: integer('--rollout', values.rollout),
       ...context,
@@ -174,8 +181,12 @@ async function run(): Promise<string> {
 }
 
 run().then((message) => {
-  console.info(message)
+  // The usage and keygen print plain text: people copy the public key out of it.
+  if (values.help || !positionals[0] || positionals[0] === 'keygen')
+    console.info(message)
+  else
+    log.log(message)
 }, (error: unknown) => {
-  console.error(errorMessageFrom(error) ?? 'ergosphere-it failed.')
+  log.error(errorMessageFrom(error) ?? 'ergosphere-it failed.')
   exit(1)
 })

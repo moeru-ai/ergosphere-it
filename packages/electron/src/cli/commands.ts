@@ -19,8 +19,12 @@ export interface BundleCommandOptions extends PublishContext {
   channel: string
   /** Limits the bundle to these cohorts. */
   cohorts?: string[]
+  /** How many objects to check or upload at once. Defaults to 8. */
+  concurrency?: number
   /** The lowest native version that can run the bundle. Defaults to the native version of the build. */
   minNativeVersion?: number
+  /** Reports each step, for logs. The CLI prints it. */
+  onProgress?: (progress: PublishProgress) => void
   outDir: string
   /** Percentage of installs that get the bundle. Defaults to 100. */
   rollout?: number
@@ -54,6 +58,18 @@ export interface PublishContext {
    */
   trustedKeys?: TrustedKey[]
 }
+
+/**
+ * A step of `publishBundle`, in order: the release, the check of each object against the store, the upload of each new
+ * object, and then the manifest and the channel. Bytes are the sizes of the objects.
+ */
+export type PublishProgress
+  = | { bytes: number, channel: string, objects: number, releaseId: number, type: 'release', version: string }
+    | { channel: string, releaseId: number, rollout: number, type: 'channel' }
+    | { checked: number, objects: number, type: 'checking' }
+    | { newBytes: number, newObjects: number, skipped: number, type: 'checked' }
+    | { newBytes: number, newObjects: number, type: 'uploading', uploadedBytes: number, uploadedObjects: number }
+    | { releaseId: number, type: 'manifest' }
 
 /** Returns the root of the git work tree that has the path, or `undefined` when no work tree has it. */
 export function gitRootOf(path: string): string | undefined {
@@ -107,21 +123,37 @@ export async function promote(context: PublishContext, from: string, to: string)
 /** Uploads the bundle of the build output and serves it on a channel. Objects that the store has are skipped. */
 export async function publishBundle(options: BundleCommandOptions): Promise<{ releaseId: number, uploaded: number }> {
   const { channel, signingKey, store } = options
+  const report = options.onProgress ?? (() => {})
+  const concurrency = options.concurrency ?? 8
   const info = readBuildInfo(options.outDir)
   const release = await bundleReleaseFromBuild({
     nativeVersion: { max: info.nativeVersion, min: options.minNativeVersion ?? info.nativeVersion },
     outDir: options.outDir,
     signingKey,
   })
-  let uploaded = 0
-  for (const object of release.objects) {
-    if (await store.hasObject(object.sha256))
-      continue
+  const { objects } = release
+  report({ bytes: sizeOf(objects), channel, objects: objects.length, releaseId: release.releaseId, type: 'release', version: release.manifest.version })
 
+  let checked = 0
+  const missing = await filterConcurrently(objects, concurrency, async (object) => {
+    const has = await store.hasObject(object.sha256)
+    report({ checked: ++checked, objects: objects.length, type: 'checking' })
+
+    return !has
+  })
+  const newBytes = sizeOf(missing)
+  report({ newBytes, newObjects: missing.length, skipped: objects.length - missing.length, type: 'checked' })
+
+  let uploadedObjects = 0
+  let uploadedBytes = 0
+  await eachConcurrently(missing, concurrency, async (object) => {
     await store.putObject(object)
-    uploaded++
-  }
+    uploadedObjects++
+    uploadedBytes += object.size
+    report({ newBytes, newObjects: missing.length, type: 'uploading', uploadedBytes, uploadedObjects })
+  })
   await store.putBundle({ ...release.signed, document: release.manifest })
+  report({ releaseId: release.releaseId, type: 'manifest' })
 
   await writeChannelFile(options, channel, current => ({
     bundle: { cohorts: options.cohorts, releaseId: release.releaseId, rollout: options.rollout },
@@ -129,8 +161,9 @@ export async function publishBundle(options: BundleCommandOptions): Promise<{ re
     product: release.manifest.product,
     withdrawn: current?.withdrawn,
   }))
+  report({ channel, releaseId: release.releaseId, rollout: options.rollout ?? 100, type: 'channel' })
 
-  return { releaseId: release.releaseId, uploaded }
+  return { releaseId: release.releaseId, uploaded: missing.length }
 }
 
 /**
@@ -229,6 +262,44 @@ export function writePrivateKey(path: string, privateKey: string): void {
 
     throw error
   }
+}
+
+/**
+ * Runs `run` for each item, at most `limit` at once. The first failure stops the start of new items, and rejects once
+ * the running items settle.
+ */
+async function eachConcurrently<T>(items: readonly T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  let failed = false
+  const worker = async () => {
+    while (!failed && next < items.length) {
+      const item = items[next++]!
+      try {
+        await run(item)
+      }
+      catch (error) {
+        failed = true
+        throw error
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker))
+}
+
+/** Keeps the items that `test` accepts, in their order, with at most `limit` tests at once. */
+async function filterConcurrently<T>(items: readonly T[], limit: number, test: (item: T) => Promise<boolean>): Promise<T[]> {
+  const kept = Array.from({ length: items.length }).fill(false)
+  const indexes = items.map((_, index) => index)
+  await eachConcurrently(indexes, limit, async (index) => {
+    kept[index] = await test(items[index]!)
+  })
+
+  return items.filter((_, index) => kept[index])
+}
+
+/** The bytes of the objects. */
+function sizeOf(objects: readonly { size: number }[]): number {
+  return objects.reduce((sum, object) => sum + object.size, 0)
 }
 
 /** The Linux package of each file extension that electron-updater installs. */

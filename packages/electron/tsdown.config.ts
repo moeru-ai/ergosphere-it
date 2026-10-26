@@ -2,11 +2,13 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   clean: true,
-  // NOTICE: yaml is bundled, so apps do not install it. A second yaml version in an app gives vite, which takes
-  // yaml as an optional peer, a second install, and every package that takes vite as a peer, such as vue-router,
-  // resolves twice. AIRI bundled two vue-router copies and rendered a blank window. onlyBundle fails the build when
-  // another dependency gets bundled.
-  deps: { neverBundle: ['electron', 'electron-sparkle-updater', 'electron-updater', 'electron-vite', 'vite'], onlyBundle: ['yaml'] },
+  // NOTICE: the packages bundle these dependencies, so apps do not install them.
+  // - yaml: vite takes it as an optional peer. A second yaml version in an app gives vite a second install, and every
+  //   package that takes vite as a peer, such as vue-router, resolves twice. AIRI bundled two vue-router copies and
+  //   rendered a blank window.
+  // - @guiiai/logg and its dependencies: only the CLI uses them, and an app copies its dependencies into app.asar.
+  // onlyBundle fails the build when another dependency gets bundled.
+  deps: { neverBundle: ['electron', 'electron-sparkle-updater', 'electron-updater', 'electron-vite', 'vite'], onlyBundle: ['yaml', '@guiiai/logg', 'error-stack-parser', 'stackframe'] },
   dts: true,
   entry: {
     'cli': 'src/cli/index.ts',
