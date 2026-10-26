@@ -163,7 +163,7 @@ export async function registerInstaller(options: InstallerCommandOptions): Promi
     withdrawn: current?.withdrawn,
   }))
 
-  return { files: release.manifest.artifacts.map(artifact => `${artifact.platform} ${artifact.format}`), releaseId: release.releaseId }
+  return { files: release.manifest.artifacts.map(artifact => `${artifact.platform} ${artifact.format}${artifact.packageType ? ` (${artifact.packageType})` : ''}`), releaseId: release.releaseId }
 }
 
 /** Changes the rollout percentage of the bundle of a channel. Installs keep their buckets. */
