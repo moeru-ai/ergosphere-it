@@ -3,15 +3,16 @@ import type { Logg } from '@guiiai/logg'
 import type { PublishedObject, PublishProgress } from './commands'
 
 export interface ReporterOptions {
-  /** Milliseconds between two lines about the same step. Defaults to 5 seconds. */
+  /** Milliseconds between two progress lines of the same step. Defaults to 5 seconds. */
   intervalMs?: number
   /** The clock in milliseconds. Tests pass their own. */
   now?: () => number
 }
 
 /**
- * Prints the steps of `publishBundle`: one line for each uploaded object and each failure, so a log names the files
- * that moved. A CI log does not redraw lines, so the rate and the time left print at most every `intervalMs`.
+ * Prints the steps of `publishBundle` with logg: a short message, and the data as fields. Each uploaded object and each
+ * failure gets a line, so a log names the files that moved. A CI log does not redraw lines, so the rate and the time
+ * left print at most every `intervalMs`.
  */
 export function createPublishReporter(log: Logg, options: ReporterOptions = {}): (progress: PublishProgress) => void {
   const now = options.now ?? Date.now
@@ -20,52 +21,53 @@ export function createPublishReporter(log: Logg, options: ReporterOptions = {}):
   let lastLine = start
   let uploadStart = start
   const due = () => now() - lastLine >= intervalMs
-  const print = (logger: Logg, message: string) => {
-    lastLine = now()
-    logger.log(message)
-  }
+  const objectFields = (object: PublishedObject) => ({ paths: object.paths, sha256: object.sha256, size: formatBytes(object.size) })
 
   return (progress) => {
     switch (progress.type) {
       case 'channel':
-        print(log, `Channel ${progress.channel} now serves bundle ${progress.releaseId} to ${progress.rollout}% of installs. Published in ${formatDuration(now() - start)}.`)
+        log.withFields({ channel: progress.channel, releaseId: progress.releaseId, rollout: `${progress.rollout}%`, took: formatDuration(now() - start) }).log('Moved the channel to the bundle')
         break
       case 'checked':
         uploadStart = now()
-        print(log, progress.newObjects === 0
-          ? `The store has all ${progress.skipped} objects. Nothing to upload.`
-          : `Uploading ${progress.newObjects} new objects, ${formatBytes(progress.newBytes)}. The store has the other ${progress.skipped}.`)
+        lastLine = uploadStart
+        log.withFields({ inStore: progress.skipped, newObjects: progress.newObjects, newSize: formatBytes(progress.newBytes) }).log('Checked the store')
         break
       case 'checking':
-        if (progress.checked < progress.objects && due())
-          print(log, `Checked ${progress.checked}/${progress.objects} objects.`)
+        if (progress.checked < progress.objects && due()) {
+          lastLine = now()
+          log.withFields({ checked: `${progress.checked}/${progress.objects}` }).log('Checking objects')
+        }
         break
       case 'failed':
-        lastLine = now()
-        log.withFields({ sha256: progress.object.sha256 }).error(`Could not ${progress.step === 'check' ? 'check' : 'upload'} ${describeObject(progress.object)}: ${progress.error}`)
+        log.withFields({ ...objectFields(progress.object), error: progress.error, step: progress.step }).error('Object failed')
         break
       case 'manifest':
-        print(log, `Uploaded the signed manifest of bundle ${progress.releaseId}.`)
+        log.withFields({ releaseId: progress.releaseId }).log('Uploaded the manifest')
         break
       case 'release':
-        print(log.withFields({ channel: progress.channel, releaseId: progress.releaseId, version: progress.version }), `Publishing bundle ${progress.releaseId}: ${progress.objects} objects, ${formatBytes(progress.bytes)}. Checking which objects the store has.`)
+        log.withFields({ channel: progress.channel, objects: progress.objects, releaseId: progress.releaseId, size: formatBytes(progress.bytes), version: progress.version }).log('Publishing the bundle')
         break
       case 'uploaded':
-        log.log(`[${progress.uploadedObjects}/${progress.newObjects}] Uploaded ${describeObject(progress.object)}, in ${formatDuration(progress.durationMs)}.`)
+        log.withFields({ ...objectFields(progress.object), object: `${progress.uploadedObjects}/${progress.newObjects}`, took: formatDuration(progress.durationMs) }).log('Uploaded object')
         break
       case 'uploading': {
-        const elapsed = now() - uploadStart
+        const elapsedMs = now() - uploadStart
         if (progress.uploadedObjects === progress.newObjects) {
-          print(log, `Uploaded ${progress.newObjects} objects, ${formatBytes(progress.newBytes)}, in ${formatDuration(elapsed)}.`)
+          log.withFields({ objects: progress.newObjects, size: formatBytes(progress.newBytes), took: formatDuration(elapsedMs) }).log('Uploaded the objects')
           break
         }
         if (!due())
           break
 
-        const rate = elapsed > 0 ? progress.uploadedBytes / (elapsed / 1000) : 0
-        const percent = progress.newBytes > 0 ? Math.floor(progress.uploadedBytes / progress.newBytes * 100) : 0
-        const left = rate > 0 ? ` About ${formatDuration((progress.newBytes - progress.uploadedBytes) / rate * 1000)} left.` : ''
-        print(log, `Uploaded ${progress.uploadedObjects}/${progress.newObjects} objects, ${formatBytes(progress.uploadedBytes)} of ${formatBytes(progress.newBytes)} (${percent}%), ${formatBytes(rate)}/s.${left}`)
+        lastLine = now()
+        const bytesPerSecond = elapsedMs > 0 ? progress.uploadedBytes / (elapsedMs / 1000) : 0
+        log.withFields({
+          left: bytesPerSecond > 0 ? formatDuration((progress.newBytes - progress.uploadedBytes) / bytesPerSecond * 1000) : undefined,
+          objects: `${progress.uploadedObjects}/${progress.newObjects}`,
+          rate: `${formatBytes(bytesPerSecond)}/s`,
+          size: `${formatBytes(progress.uploadedBytes)}/${formatBytes(progress.newBytes)}`,
+        }).log('Uploading')
         break
       }
     }
@@ -75,7 +77,7 @@ export function createPublishReporter(log: Logg, options: ReporterOptions = {}):
 /** Bytes for people: `912 B`, `48.2 KB`, `412.6 MB`. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024)
-    return `${bytes} B`
+    return `${Math.round(bytes)} B`
   if (bytes < 1024 * 1024)
     return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes < 1024 * 1024 * 1024)
@@ -94,12 +96,4 @@ export function formatDuration(ms: number): string {
     return `${seconds} s`
 
   return `${Math.floor(seconds / 60)} min ${seconds % 60} s`
-}
-
-/** The files of an object, its size, and the start of its hash: `renderer/app.js, 48.2 KB, sha256 1a2b3c4d`. */
-function describeObject(object: PublishedObject): string {
-  const shown = object.paths.slice(0, 3).join(', ') || 'no file'
-  const more = object.paths.length > 3 ? ` and ${object.paths.length - 3} more` : ''
-
-  return `${shown}${more}, ${formatBytes(object.size)}, sha256 ${object.sha256.slice(0, 8)}`
 }

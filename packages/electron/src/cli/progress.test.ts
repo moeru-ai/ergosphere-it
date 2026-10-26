@@ -4,24 +4,25 @@ import { describe, expect, it } from 'vitest'
 
 import { createPublishReporter, formatBytes, formatDuration } from './progress'
 
-/** A logger that keeps the lines it gets. */
+/** A logger that keeps each line as its level, message, and fields. */
 function recordingLogger() {
-  const lines: string[] = []
-  const logger = {
-    error: (message: string) => lines.push(message),
-    log: (message: string) => lines.push(message),
-    withFields: () => logger,
-  } as unknown as Logg
+  const lines: { fields: Record<string, unknown>, level: 'error' | 'log', message: string }[] = []
+  const withFields = (fields: Record<string, unknown>): Logg => ({
+    error: (message: string) => lines.push({ fields, level: 'error', message }),
+    log: (message: string) => lines.push({ fields, level: 'log', message }),
+    withFields: (more: Record<string, unknown>) => withFields({ ...fields, ...more }),
+  }) as unknown as Logg
 
-  return { lines, logger }
+  return { lines, logger: withFields({}) }
 }
 
+const MB = 1024 * 1024
+
 describe('createPublishReporter', () => {
-  it('prints a long upload every 5 seconds and when it ends, with the rate and the time left', () => {
+  it('prints the steps of a long upload, and its progress every 5 seconds with the rate and the time left', () => {
     const { lines, logger } = recordingLogger()
     let now = 0
     const report = createPublishReporter(logger, { now: () => now })
-    const MB = 1024 * 1024
 
     report({ bytes: 400 * MB, channel: 'dev', objects: 1489, releaseId: 7, type: 'release', version: '0.12.0+dev.45.1bf946f' })
     now = 6000
@@ -40,40 +41,29 @@ describe('createPublishReporter', () => {
     report({ releaseId: 7, type: 'manifest' })
     report({ channel: 'dev', releaseId: 7, rollout: 100, type: 'channel' })
 
-    expect(lines).toEqual([
-      'Publishing bundle 7: 1489 objects, 400.0 MB. Checking which objects the store has.',
-      'Checked 800/1489 objects.',
-      'Uploading 1480 new objects, 400.0 MB. The store has the other 9.',
-      'Uploaded 370/1480 objects, 100.0 MB of 400.0 MB (25%), 10.0 MB/s. About 30 s left.',
-      'Uploaded 1480 objects, 400.0 MB, in 40 s.',
-      'Uploaded the signed manifest of bundle 7.',
-      'Channel dev now serves bundle 7 to 100% of installs. Published in 47 s.',
+    expect(lines.map(line => [line.message, line.fields])).toEqual([
+      ['Publishing the bundle', { channel: 'dev', objects: 1489, releaseId: 7, size: '400.0 MB', version: '0.12.0+dev.45.1bf946f' }],
+      ['Checking objects', { checked: '800/1489' }],
+      ['Checked the store', { inStore: 9, newObjects: 1480, newSize: '400.0 MB' }],
+      ['Uploading', { left: '30 s', objects: '370/1480', rate: '10.0 MB/s', size: '100.0 MB/400.0 MB' }],
+      ['Uploaded the objects', { objects: 1480, size: '400.0 MB', took: '40 s' }],
+      ['Uploaded the manifest', { releaseId: 7 }],
+      ['Moved the channel to the bundle', { channel: 'dev', releaseId: 7, rollout: '100%', took: '47 s' }],
     ])
   })
 
-  it('prints one line for each uploaded object, and one for each failure', () => {
+  it('prints one line for each uploaded object, and an error line for each failure', () => {
     const { lines, logger } = recordingLogger()
     const report = createPublishReporter(logger, { now: () => 0 })
-    const object = { paths: ['renderer/assets/about-chunk.js'], sha256: '1a2b3c4d5e6f', size: 49_357 }
+    const object = { paths: ['main/chunks/app.mjs', 'renderer/assets/app.js'], sha256: '1a2b3c4d5e6f', size: 49_357 }
 
     report({ durationMs: 120, newObjects: 1480, object, type: 'uploaded', uploadedObjects: 312 })
-    report({ durationMs: 40, newObjects: 1480, object: { ...object, paths: ['a.png', 'b.png', 'c.png', 'd.png', 'e.png'] }, type: 'uploaded', uploadedObjects: 313 })
     report({ error: 'The network went away.', object, step: 'upload', type: 'failed' })
 
     expect(lines).toEqual([
-      '[312/1480] Uploaded renderer/assets/about-chunk.js, 48.2 KB, sha256 1a2b3c4d, in 120 ms.',
-      '[313/1480] Uploaded a.png, b.png, c.png and 2 more, 48.2 KB, sha256 1a2b3c4d, in 40 ms.',
-      'Could not upload renderer/assets/about-chunk.js, 48.2 KB, sha256 1a2b3c4d: The network went away.',
+      { fields: { object: '312/1480', paths: object.paths, sha256: '1a2b3c4d5e6f', size: '48.2 KB', took: '120 ms' }, level: 'log', message: 'Uploaded object' },
+      { fields: { error: 'The network went away.', paths: object.paths, sha256: '1a2b3c4d5e6f', size: '48.2 KB', step: 'upload' }, level: 'error', message: 'Object failed' },
     ])
-  })
-
-  it('says when the store has every object', () => {
-    const { lines, logger } = recordingLogger()
-    const report = createPublishReporter(logger, { now: () => 0 })
-
-    report({ newBytes: 0, newObjects: 0, skipped: 12, type: 'checked' })
-
-    expect(lines).toEqual(['The store has all 12 objects. Nothing to upload.'])
   })
 })
 
