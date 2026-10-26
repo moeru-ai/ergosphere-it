@@ -41,14 +41,14 @@ describe('createPublishReporter', () => {
     report({ releaseId: 7, type: 'manifest' })
     report({ channel: 'dev', releaseId: 7, rollout: 100, type: 'channel' })
 
-    expect(lines.map(line => [line.message, line.fields])).toEqual([
-      ['Publishing the bundle', { channel: 'dev', objects: 1489, releaseId: 7, size: '400.0 MB', version: '0.12.0+dev.45.1bf946f' }],
-      ['Checking objects', { checked: '800/1489' }],
-      ['Checked the store', { inStore: 9, newObjects: 1480, newSize: '400.0 MB' }],
-      ['Uploading', { left: '30 s', objects: '370/1480', rate: '10.0 MB/s', size: '100.0 MB/400.0 MB' }],
-      ['Uploaded the objects', { objects: 1480, size: '400.0 MB', took: '40 s' }],
-      ['Uploaded the manifest', { releaseId: 7 }],
-      ['Moved the channel to the bundle', { channel: 'dev', releaseId: 7, rollout: '100%', took: '47 s' }],
+    expect(lines.map(line => line.message)).toEqual([
+      'Publishing bundle 7 (0.12.0+dev.45.1bf946f) to dev: 1489 objects, 400.0 MB...',
+      'Checked 800 of 1489 objects...',
+      '1480 objects to upload (400.0 MB), 9 already exist in the store.',
+      'Uploaded 370 of 1480 objects (100.0 MB of 400.0 MB, 10.0 MB/s, about 30 s left)...',
+      'All 1480 objects uploaded (400.0 MB, 40 s).',
+      'Manifest of bundle 7 uploaded.',
+      'Channel dev now serves bundle 7 to 100% of installs (47 s).',
     ])
   })
 
@@ -60,10 +60,19 @@ describe('createPublishReporter', () => {
     report({ durationMs: 120, newObjects: 1480, object, type: 'uploaded', uploadedObjects: 312 })
     report({ error: 'The network went away.', object, step: 'upload', type: 'failed' })
 
-    expect(lines).toEqual([
-      { fields: { object: '312/1480', paths: object.paths, sha256: '1a2b3c4d5e6f', size: '48.2 KB', took: '120 ms' }, level: 'log', message: 'Uploaded object' },
-      { fields: { error: 'The network went away.', paths: object.paths, sha256: '1a2b3c4d5e6f', size: '48.2 KB', step: 'upload' }, level: 'error', message: 'Object failed' },
+    expect(lines.map(line => [line.level, line.message])).toEqual([
+      ['log', 'main/chunks/app.mjs, renderer/assets/app.js uploaded (48.2 KB, 120 ms).'],
+      ['error', 'Could not upload main/chunks/app.mjs, renderer/assets/app.js (sha256 1a2b3c4d5e6f): The network went away.'],
     ])
+  })
+
+  it('says when every object already exists in the store', () => {
+    const { lines, logger } = recordingLogger()
+    const report = createPublishReporter(logger, { now: () => 0 })
+
+    report({ newBytes: 0, newObjects: 0, skipped: 12, type: 'checked' })
+
+    expect(lines.map(line => line.message)).toEqual(['All 12 objects already exist in the store.'])
   })
 })
 

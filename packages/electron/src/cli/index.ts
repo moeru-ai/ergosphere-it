@@ -111,7 +111,7 @@ async function run(): Promise<string> {
   // --bucket is the name of --store before release stores.
   const { source, store } = await resolveStore(values.store ?? values.bucket, env.ERGOSPHERE_IT_STORE, cwd())
   // A variable or a flag takes precedence over store of ergo.config.ts, so say which store this run writes to.
-  log.withFields({ source }).log(`Release store: ${store.name}.`)
+  log.log(`Release store: ${store.name} (from ${source}).`)
   const signingKey = await parseSigningKey(required('ERGOSPHERE_IT_SIGNING_KEY', env.ERGOSPHERE_IT_SIGNING_KEY))
   // A channel file in the store can be signed with any key of publicKeys, for example the key before a rotation.
   const publicKeys = findErgoConfig(cwd()) === undefined ? [] : (await loadErgoConfig(cwd())).publicKeys
