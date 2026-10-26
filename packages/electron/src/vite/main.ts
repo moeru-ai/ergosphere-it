@@ -2,7 +2,7 @@ import type { Plugin } from 'vite'
 
 import type { PluginOptions } from './shared'
 
-import { resolve } from 'node:path'
+import { posix, resolve } from 'node:path'
 
 import { loadLauncherConfig, readPackageJson } from '../config'
 import { OUT_LAYOUT } from '../layout'
@@ -99,9 +99,11 @@ export default function ergosphereMain(options: MainPluginOptions = {}): Plugin 
         entryFileNames: chunk => (chunk.name.startsWith('bundle/') || chunk.name.startsWith('launcher/') ? '[name].mjs' : 'bundle/main/[name]-[hash].mjs'),
       }
 
+      // `./out/launcher/index.mjs` and `out/launcher/index.mjs` name the same file. The expected path is not under
+      // outDir: a build can go to another directory and be copied into `out` of the app, as the e2e test does.
       const expectedMain = `out/${OUT_LAYOUT.launcher}`
       const main = readPackageJson(context.root).main
-      if (main !== expectedMain)
+      if (main === undefined || posix.normalize(main.replaceAll('\\', '/')) !== expectedMain)
         console.warn(`[ergosphere-it] "main" in package.json is ${JSON.stringify(main)}. Set it to "${expectedMain}", so the app starts through its launcher.`)
     },
     async load(id) {

@@ -99,6 +99,16 @@ describe('ergosphereMain', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('out/launcher/index.mjs'))
     warn.mockRestore()
   })
+
+  // AIRI writes "./out/launcher/index.mjs", and the plugin warned about it.
+  it.each(['out/launcher/index.mjs', './out/launcher/index.mjs'])('does not warn when main is %s', (main) => {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ main, name: 'app' }))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    configure(ergosphereMain({ root }), {})
+
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
 })
 
 describe('ergospherePreload', () => {
