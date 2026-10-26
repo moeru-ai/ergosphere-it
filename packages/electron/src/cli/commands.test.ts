@@ -361,7 +361,11 @@ describe('ergosphere-it commands', () => {
 
     expect(result.uploaded).toBe(20)
     expect(peak).toBe(3)
-    expect([...new Set(progress.map(step => step.type))]).toEqual(['release', 'checking', 'checked', 'uploading', 'manifest', 'channel'])
+    expect([...new Set(progress.map(step => step.type))]).toEqual(['release', 'checking', 'checked', 'uploaded', 'uploading', 'manifest', 'channel'])
+    const uploaded = progress.filter(step => step.type === 'uploaded')
+    expect(uploaded).toHaveLength(20)
+    expect(uploaded.map(step => step.object.paths).flat().sort()).toEqual(Array.from({ length: 20 }, (_, index) => `renderer/chunk-${String(index).padStart(2, '0')}.js`))
+    expect(uploaded.at(-1)).toMatchObject({ newObjects: 20, uploadedObjects: 20 })
     expect(progress[0]).toMatchObject({ channel: 'beta', objects: 22, releaseId: 10, type: 'release', version: '1.0.10' })
     expect(progress.find(step => step.type === 'checked')).toEqual({ newBytes: 20 * 'chunk 00'.length, newObjects: 20, skipped: 2, type: 'checked' })
     expect(progress.filter(step => step.type === 'uploading').at(-1)).toMatchObject({ uploadedBytes: 20 * 'chunk 00'.length, uploadedObjects: 20 })
@@ -383,8 +387,17 @@ describe('ergosphere-it commands', () => {
       },
     })
 
-    await expect(publishBundle({ channel: 'beta', concurrency: 2, outDir: out, signingKey, store })).rejects.toThrow('The network went away.')
+    const progress: PublishProgress[] = []
+
+    await expect(publishBundle({ channel: 'beta', concurrency: 2, onProgress: step => progress.push(step), outDir: out, signingKey, store })).rejects.toThrow('The network went away.')
     expect(started).toBeLessThan(5)
+    // The log names the file that failed.
+    expect(progress.filter(step => step.type === 'failed')).toEqual([{
+      error: 'The network went away.',
+      object: { paths: [expect.stringMatching(/^(main\/index\.mjs|renderer\/.+)$/)], sha256: expect.any(String), size: expect.any(Number) },
+      step: 'upload',
+      type: 'failed',
+    }])
     expect(memory.channels.has('beta')).toBe(false)
   })
 

@@ -1,6 +1,6 @@
 import type { Logg } from '@guiiai/logg'
 
-import type { PublishProgress } from './commands'
+import type { PublishedObject, PublishProgress } from './commands'
 
 export interface ReporterOptions {
   /** Milliseconds between two lines about the same step. Defaults to 5 seconds. */
@@ -10,8 +10,8 @@ export interface ReporterOptions {
 }
 
 /**
- * Prints the steps of `publishBundle`. A CI log does not redraw lines, so a long step prints one line at most every
- * `intervalMs`, and one line when it ends.
+ * Prints the steps of `publishBundle`: one line for each uploaded object and each failure, so a log names the files
+ * that moved. A CI log does not redraw lines, so the rate and the time left print at most every `intervalMs`.
  */
 export function createPublishReporter(log: Logg, options: ReporterOptions = {}): (progress: PublishProgress) => void {
   const now = options.now ?? Date.now
@@ -40,11 +40,18 @@ export function createPublishReporter(log: Logg, options: ReporterOptions = {}):
         if (progress.checked < progress.objects && due())
           print(log, `Checked ${progress.checked}/${progress.objects} objects.`)
         break
+      case 'failed':
+        lastLine = now()
+        log.withFields({ sha256: progress.object.sha256 }).error(`Could not ${progress.step === 'check' ? 'check' : 'upload'} ${describeObject(progress.object)}: ${progress.error}`)
+        break
       case 'manifest':
         print(log, `Uploaded the signed manifest of bundle ${progress.releaseId}.`)
         break
       case 'release':
         print(log.withFields({ channel: progress.channel, releaseId: progress.releaseId, version: progress.version }), `Publishing bundle ${progress.releaseId}: ${progress.objects} objects, ${formatBytes(progress.bytes)}. Checking which objects the store has.`)
+        break
+      case 'uploaded':
+        log.log(`[${progress.uploadedObjects}/${progress.newObjects}] Uploaded ${describeObject(progress.object)}, in ${formatDuration(progress.durationMs)}.`)
         break
       case 'uploading': {
         const elapsed = now() - uploadStart
@@ -87,4 +94,12 @@ export function formatDuration(ms: number): string {
     return `${seconds} s`
 
   return `${Math.floor(seconds / 60)} min ${seconds % 60} s`
+}
+
+/** The files of an object, its size, and the start of its hash: `renderer/app.js, 48.2 KB, sha256 1a2b3c4d`. */
+function describeObject(object: PublishedObject): string {
+  const shown = object.paths.slice(0, 3).join(', ') || 'no file'
+  const more = object.paths.length > 3 ? ` and ${object.paths.length - 3} more` : ''
+
+  return `${shown}${more}, ${formatBytes(object.size)}, sha256 ${object.sha256.slice(0, 8)}`
 }

@@ -8,6 +8,7 @@ import { createPublishReporter, formatBytes, formatDuration } from './progress'
 function recordingLogger() {
   const lines: string[] = []
   const logger = {
+    error: (message: string) => lines.push(message),
     log: (message: string) => lines.push(message),
     withFields: () => logger,
   } as unknown as Logg
@@ -47,6 +48,22 @@ describe('createPublishReporter', () => {
       'Uploaded 1480 objects, 400.0 MB, in 40 s.',
       'Uploaded the signed manifest of bundle 7.',
       'Channel dev now serves bundle 7 to 100% of installs. Published in 47 s.',
+    ])
+  })
+
+  it('prints one line for each uploaded object, and one for each failure', () => {
+    const { lines, logger } = recordingLogger()
+    const report = createPublishReporter(logger, { now: () => 0 })
+    const object = { paths: ['renderer/assets/about-chunk.js'], sha256: '1a2b3c4d5e6f', size: 49_357 }
+
+    report({ durationMs: 120, newObjects: 1480, object, type: 'uploaded', uploadedObjects: 312 })
+    report({ durationMs: 40, newObjects: 1480, object: { ...object, paths: ['a.png', 'b.png', 'c.png', 'd.png', 'e.png'] }, type: 'uploaded', uploadedObjects: 313 })
+    report({ error: 'The network went away.', object, step: 'upload', type: 'failed' })
+
+    expect(lines).toEqual([
+      '[312/1480] Uploaded renderer/assets/about-chunk.js, 48.2 KB, sha256 1a2b3c4d, in 120 ms.',
+      '[313/1480] Uploaded a.png, b.png, c.png and 2 more, 48.2 KB, sha256 1a2b3c4d, in 40 ms.',
+      'Could not upload renderer/assets/about-chunk.js, 48.2 KB, sha256 1a2b3c4d: The network went away.',
     ])
   })
 
