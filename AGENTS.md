@@ -8,6 +8,7 @@ Run these from the repository root, with Node.js 26 or later:
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm spellcheck && pnpm knip && pnpm test:run
+pnpm docs:update   # after a change of README.md: the table of contents, and the copy in packages/electron
 pnpm -r build
 pnpm -F @ergosphere-it/tests-electron e2e
 pnpm -F @ergosphere-it/tests-electron e2e --asar

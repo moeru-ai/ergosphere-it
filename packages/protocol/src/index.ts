@@ -2,6 +2,6 @@ export { canonicalJson, contentHash, createKeyPair, isPublicKey, keyPairFromPriv
 export type { SignedDocument, SigningKey } from './crypto'
 export { CandidateError, ChannelError, DocumentError, ErgosphereError, SignatureError } from './errors'
 export type { CandidateErrorCode, ChannelErrorCode, DocumentErrorCode, ErrorCode, SignatureErrorCode } from './errors'
-export type { BundleManifest, ChannelFile, Component, ComponentType, FileEntry, InstallerArtifact, InstallerFormat, InstallerManifest, NativeVersionRange, Rollout, TrustedKey } from './schema'
+export type { BundleManifest, ChannelFile, Component, ComponentType, FileEntry, InstallerArtifact, InstallerFormat, InstallerManifest, InstallerPackageType, NativeVersionRange, Rollout, TrustedKey } from './schema'
 export { checkBundleCandidate, checkInstallerCandidate, isInRollout, isNativeVersionCompatible, isSafeManifestPath, rolloutBucket, validateBundleManifest, validateChannelFile, validateInstallerManifest, verifyBundleManifest, verifyChannelFile, verifyChannelFileSignature, verifyInstallerManifest } from './verify'
 export type { BundleCandidateContext, ChannelFileContext, InstallerCandidateContext } from './verify'

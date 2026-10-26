@@ -13,7 +13,7 @@ import { platform } from 'node:process'
 import { contentHash, trustedKeyFromPublicKey, trustedKeyToOpenSsh, verifyBundleManifest, verifyChannelFile, verifyInstallerManifest } from '@ergosphere-it/protocol'
 import { ChannelConflictError, createReleaseStore } from '@ergosphere-it/publish'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { stringify } from 'yaml'
+import { parse, stringify } from 'yaml'
 
 import { gitRootOf, keygen, parseSigningKey, promote, publishBundle, registerInstaller, setRollout, withdraw, writePrivateKey } from './commands'
 import { openStore } from './store'
@@ -144,6 +144,43 @@ describe('ergosphere-it commands', () => {
     expect(installer.artifacts.find(artifact => artifact.platform === 'win32-x64')?.url).toBe('https://downloads.test/v1.0.10/App%20Setup%201.0.10.exe')
     expect(read('installers/11/feeds/win32-x64/latest.yml')).toBeDefined()
     expect(JSON.parse(decode(read('channels/stable.json')))).toMatchObject({ bundle: { releaseId: 10 }, installer: { releaseId: 11 } })
+  })
+
+  // AIRI names its feeds with the publish channel `latest-${arch}`, and ships a deb and an rpm for each Linux
+  // architecture. Only the first Linux file of a feed named `latest-linux*.yml` counted before.
+  it('registers every installer of feeds that a publish channel renames, with one file per Linux package', async () => {
+    const { privateKey, publicKey } = await keygen()
+    const signingKey = await parseSigningKey(privateKey)
+    const trustedKeys = [await trustedKeyFromPublicKey(publicKey)]
+    const store = openStore(`file://${join(root, 'storage')}`)
+    const out = join(root, 'out')
+    const dist = join(root, 'dist')
+    await writeBuild(out, 10, 'page')
+    mkdirSync(dist)
+    const feed = (...urls: string[]) => stringify({ files: urls.map((url, index) => ({ sha512: Buffer.from(url).toString('base64'), size: index + 1, url })), version: '1.0.10' })
+    writeFileSync(join(dist, 'latest-arm64-mac.yml'), feed('AIRI-1.0.10-arm64-mac.zip', 'AIRI-1.0.10-darwin-arm64.dmg'))
+    writeFileSync(join(dist, 'latest-x64-mac.yml'), feed('AIRI-1.0.10-mac.zip', 'AIRI-1.0.10-darwin-x64.dmg'))
+    writeFileSync(join(dist, 'latest-x64.yml'), feed('AIRI-1.0.10-windows-x64-setup.exe'))
+    writeFileSync(join(dist, 'latest-x64-linux.yml'), feed('AIRI-1.0.10-linux-amd64.deb', 'AIRI-1.0.10-linux-x86_64.rpm'))
+    writeFileSync(join(dist, 'latest-arm64-linux-arm64.yml'), feed('AIRI-1.0.10-linux-arm64.deb', 'AIRI-1.0.10-linux-aarch64.rpm', 'AIRI-1.0.10-linux-arm64.flatpak'))
+
+    await registerInstaller({ channel: 'stable', distDir: dist, filesUrl: 'https://downloads.test/v1.0.10', outDir: out, signingKey, store })
+
+    const installer = await verifyInstallerManifest(read('installers/11/installer.json'), decode(read('installers/11/installer.json.sig')), trustedKeys)
+    const files = installer.artifacts.map(artifact => `${artifact.platform} ${artifact.packageType ?? '-'} ${artifact.url.split('/').at(-1)}`).sort()
+    expect(files).toEqual([
+      'darwin-arm64 - AIRI-1.0.10-arm64-mac.zip',
+      'darwin-x64 - AIRI-1.0.10-mac.zip',
+      'linux-arm64 deb AIRI-1.0.10-linux-arm64.deb',
+      'linux-arm64 rpm AIRI-1.0.10-linux-aarch64.rpm',
+      'linux-x64 deb AIRI-1.0.10-linux-amd64.deb',
+      'linux-x64 rpm AIRI-1.0.10-linux-x86_64.rpm',
+      'win32-x64 - AIRI-1.0.10-windows-x64-setup.exe',
+    ])
+    // electron-updater reads one feed per platform, and its Linux updaters take the file of their package from it.
+    const linuxFeed = parse(decode(read('installers/11/feeds/linux-x64/latest-linux.yml'))) as { files: { url: string }[] }
+    expect(linuxFeed.files.map(file => file.url.split('/').at(-1))).toEqual(['AIRI-1.0.10-linux-amd64.deb', 'AIRI-1.0.10-linux-x86_64.rpm'])
+    expect(read('installers/11/feeds/linux-arm64/latest-linux-arm64.yml')).toBeDefined()
   })
 
   it('registers a Sparkle appcast next to the electron-builder installers, and hosts a copy of it in the release', async () => {

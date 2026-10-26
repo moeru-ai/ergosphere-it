@@ -1,4 +1,4 @@
-import type { BundleManifest, ChannelFile, Component, ComponentType, InstallerArtifact, InstallerFormat, InstallerManifest, NativeVersionRange, SignedDocument, SigningKey } from '@ergosphere-it/protocol'
+import type { BundleManifest, ChannelFile, Component, ComponentType, InstallerArtifact, InstallerFormat, InstallerManifest, InstallerPackageType, NativeVersionRange, SignedDocument, SigningKey } from '@ergosphere-it/protocol'
 
 import { contentHash, signDocument, validateBundleManifest, validateChannelFile, validateInstallerManifest } from '@ergosphere-it/protocol'
 import { sumBy } from 'es-toolkit'
@@ -126,6 +126,11 @@ export type InstallerFileInput
   }
   | {
     format: 'electron-updater'
+    /**
+     * For a Linux file: the package, `appimage`, `deb`, `rpm`, or `pacman`. Each install takes the file of its own
+     * package. Give it to every Linux file, so a platform can have one file of each package.
+     */
+    packageType?: InstallerPackageType
     /** The platform of the file, for example `darwin-arm64` or `win32-x64`. */
     platform: string
     /** SHA-512 of the file as base64, as electron-updater writes it. */
@@ -271,18 +276,24 @@ export async function buildInstallerRelease(input: InstallerReleaseInput): Promi
   const releaseId = input.releaseId ?? createReleaseId()
   const createdAt = input.createdAt ?? new Date().toISOString()
   const feeds: InstallerFeed[] = []
+  // One feed per platform lists every electron-updater file of the platform, as electron-builder writes it. A Linux
+  // updater takes the file of its own package from it, by the file extension.
+  const updaterFiles = Map.groupBy(input.artifacts.filter(artifact => artifact.format === 'electron-updater'), artifact => artifact.platform)
+  for (const [platform, files] of updaterFiles) {
+    feeds.push({
+      bytes: new TextEncoder().encode(feedYaml(files, input.version, createdAt)) as Uint8Array<ArrayBuffer>,
+      contentType: 'application/x-yaml',
+      format: 'electron-updater',
+      name: feedFileName(platform),
+      platform,
+    })
+  }
+
   const artifacts = await Promise.all(input.artifacts.map(async (artifact): Promise<InstallerArtifact> => {
     if (artifact.format === 'electron-updater') {
-      const { format, platform, sha512, size, url } = artifact
-      feeds.push({
-        bytes: new TextEncoder().encode(feedYaml(artifact, input.version, createdAt)) as Uint8Array<ArrayBuffer>,
-        contentType: 'application/x-yaml',
-        format,
-        name: feedFileName(platform),
-        platform,
-      })
+      const { format, packageType, platform, sha512, size, url } = artifact
 
-      return { format, platform, sha512, size, url }
+      return { format, packageType, platform, sha512, size, url }
     }
 
     if (!input.feedUrl)
@@ -402,11 +413,11 @@ export function uploadStages(releases: readonly (BundleRelease | InstallerReleas
   return [[...objects.values()], documents, channelFiles.flatMap(channelFile => channelFile.files)].filter(stage => stage.length > 0)
 }
 
-/** Writes an electron-updater feed with one file, in the shape that electron-builder writes. */
-function feedYaml(artifact: Extract<InstallerFileInput, { format: 'electron-updater' }>, version: string, releaseDate: string): string {
-  const file = { sha512: artifact.sha512, size: artifact.size, url: artifact.url }
+/** Writes an electron-updater feed of the files of one platform, in the shape that electron-builder writes. */
+function feedYaml(artifacts: Extract<InstallerFileInput, { format: 'electron-updater' }>[], version: string, releaseDate: string): string {
+  const files = artifacts.map(artifact => ({ sha512: artifact.sha512, size: artifact.size, url: artifact.url }))
 
-  return stringify({ files: [file], path: artifact.url, releaseDate, sha512: artifact.sha512, version })
+  return stringify({ files, path: files[0]!.url, releaseDate, sha512: files[0]!.sha512, version })
 }
 
 /** SHA-512 as base64, as electron-updater and the installer manifest write it. */

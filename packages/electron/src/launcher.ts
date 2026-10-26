@@ -32,7 +32,7 @@ import { registerBundleModuleHooks } from './module-hooks'
 import { defaultPreloadPathOf, preloadPathOf } from './preload-files'
 
 export type { LauncherConfig } from './config'
-export type { ElectronUpdaterInstaller, Installer, InstallerFile, InstallerFormat, InstallerProgress, SparkleAppcast, SparkleInstaller } from './installer'
+export type { ElectronUpdaterInstaller, Installer, InstallerFile, InstallerFormat, InstallerPackageType, InstallerProgress, SparkleAppcast, SparkleInstaller } from './installer'
 export { createTreeLocator, defineLocator } from './locate'
 export type { FileLocation, LauncherFileRef, Locator } from './locate'
 export type { ActiveBundle, LauncherEvent, LoadOptions, Updater } from './runtime'
@@ -305,7 +305,7 @@ class Launcher implements Runtime {
       fetch: this.options.fetch,
       fs: createNodeFileSystem(),
       host: 'electron',
-      installedApp: this.installer ? { formats: [this.installer.format], releaseId: installerReleaseId } : undefined,
+      installedApp: this.installer ? { formats: [this.installer.format], packageType: this.installer.format === 'electron-updater' ? this.installer.packageType : undefined, releaseId: installerReleaseId } : undefined,
       installerBundle: { components, dir: this.bundleRoot, releaseId, version },
       locate: this.locate,
       maxBootAttempts: this.options.maxLaunchAttempts,

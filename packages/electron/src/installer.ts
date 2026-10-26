@@ -1,4 +1,4 @@
-import type { InstallerFormat } from '@ergosphere-it/protocol'
+import type { InstallerFormat, InstallerPackageType } from '@ergosphere-it/protocol'
 
 /**
  * An installer that downloads one installer file, for example electron-updater with Squirrel.Mac, NSIS, or AppImage.
@@ -11,6 +11,8 @@ export interface ElectronUpdaterInstaller extends InstallerActions {
   /** Downloads the installer file and returns its path. It must not install it. */
   download: (file: InstallerFile, onProgress: (progress: InstallerProgress) => void) => Promise<string>
   format: 'electron-updater'
+  /** On Linux, the package that the app came in. The launcher takes the installer file of the same package. */
+  packageType?: InstallerPackageType
 }
 
 /**
@@ -79,4 +81,4 @@ interface InstallerActions {
   installOnQuit: () => void
 }
 
-export type { InstallerFormat }
+export type { InstallerFormat, InstallerPackageType }

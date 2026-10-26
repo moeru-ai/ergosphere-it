@@ -1,6 +1,6 @@
 import type { GenericSchema, InferOutput } from 'valibot'
 
-import type { BundleManifest, ChannelFile, InstallerArtifact, InstallerFormat, InstallerManifest, NativeVersionRange, Rollout, TrustedKey } from './schema'
+import type { BundleManifest, ChannelFile, InstallerArtifact, InstallerFormat, InstallerManifest, InstallerPackageType, NativeVersionRange, Rollout, TrustedKey } from './schema'
 
 import { safeParse, ValiError } from 'valibot'
 
@@ -43,6 +43,8 @@ export interface InstallerCandidateContext {
   host: string
   /** The `releaseId` of the installed app. */
   installerReleaseId: number
+  /** The Linux package that the app came in. It takes the file of the same package. */
+  packageType?: InstallerPackageType
   /** The platform of this install, for example `darwin-arm64`. An installer release without a file for it is rejected. */
   platform: string
   /** The product of this install. An installer of another product is rejected even when its signature is valid. */
@@ -79,7 +81,8 @@ export function checkBundleCandidate(manifest: BundleManifest, context: BundleCa
  * Returns the installer file of a verified installer release for this install, or throws a `CandidateError`.
  *
  * The checks run in a fixed order: product and host, withdrawn, not newer, platform, then format. The file has the
- * first format of `context.formats` that the release has for the platform.
+ * first format of `context.formats` that the release has for the platform. Within a format, it is the file of
+ * `context.packageType`, or else a file that names no package.
  */
 export function checkInstallerCandidate(manifest: InstallerManifest, context: InstallerCandidateContext): InstallerArtifact {
   const { releaseId } = manifest
@@ -95,12 +98,15 @@ export function checkInstallerCandidate(manifest: InstallerManifest, context: In
     throw new CandidateError('platform-mismatch', `Installer ${releaseId} has no file for ${context.platform}.`, releaseId)
 
   for (const format of context.formats) {
-    const artifact = files.find(entry => entry.format === format)
+    const ofFormat = files.filter(entry => entry.format === format)
+    // A file of the same package, or else a file that names no package.
+    const artifact = ofFormat.find(entry => entry.packageType !== undefined && entry.packageType === context.packageType)
+      ?? ofFormat.find(entry => entry.packageType === undefined)
     if (artifact)
       return artifact
   }
 
-  throw new CandidateError('format-mismatch', `Installer ${releaseId} has ${files.map(entry => entry.format).join(', ')} for ${context.platform}, and this install takes ${context.formats.join(', ') || 'no installer'}.`, releaseId)
+  throw new CandidateError('format-mismatch', `Installer ${releaseId} has ${files.map(describeFile).join(', ')} for ${context.platform}, and this install takes ${context.formats.map(format => describeFile({ format, packageType: context.packageType })).join(', ') || 'no installer'}.`, releaseId)
 }
 
 /** An install accepts a bundle when its native version is inside the bundle range. */
@@ -142,9 +148,12 @@ export function validateInstallerManifest(document: unknown): InstallerManifest 
     if (!URL.canParse(artifact.url))
       throw new DocumentError('invalid-schema', `The installer URL ${artifact.url} is not absolute.`)
 
-    const key = `${artifact.platform} ${artifact.format}`
+    if (artifact.packageType !== undefined && (artifact.format !== 'electron-updater' || !artifact.platform.startsWith('linux-')))
+      throw new DocumentError('invalid-schema', `The ${artifact.format} file of ${artifact.platform} names the package ${artifact.packageType}. Only Linux files of electron-updater have one.`)
+
+    const key = `${artifact.platform} ${describeFile(artifact)}`
     if (files.has(key))
-      throw new DocumentError('invalid-schema', `The platform ${artifact.platform} has two ${artifact.format} files.`)
+      throw new DocumentError('invalid-schema', `The platform ${artifact.platform} has two ${describeFile(artifact)} files.`)
     files.add(key)
   }
 
@@ -226,6 +235,11 @@ function checkFiles(manifest: BundleManifest): void {
     throw new DocumentError('invalid-schema', `totalSize is ${manifest.totalSize}, and the files add up to ${totalSize}.`)
   if (manifest.nativeVersion.min > manifest.nativeVersion.max)
     throw new DocumentError('invalid-schema', 'nativeVersion.min is greater than nativeVersion.max.')
+}
+
+/** A format with its package, for messages: `electron-updater (deb)`. */
+function describeFile(file: Pick<InstallerArtifact, 'format' | 'packageType'>): string {
+  return file.packageType ? `${file.format} (${file.packageType})` : file.format
 }
 
 /** Parses a document with its schema. Throws a `DocumentError` with code `invalid-schema`. */

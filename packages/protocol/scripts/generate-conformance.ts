@@ -184,6 +184,19 @@ cases.push({ kind: 'installer-manifest', name: 'installer: the install takes no 
 cases.push({ kind: 'installer-manifest', name: 'installer: withdrawn', ...validInstaller, context: { ...installerContext, withdrawn: [7] }, expect: { code: 'withdrawn', ok: false } })
 cases.push({ kind: 'installer-manifest', name: 'installer: withdrawn comes before not newer', ...validInstaller, context: { ...installerContext, installerReleaseId: 7, withdrawn: [7] }, expect: { code: 'withdrawn', ok: false } })
 
+// Linux: electron-updater installs the package that the app came in, so a platform has one file of each package.
+const linuxFile = (packageType: string | undefined, extension: string) => ({ format: 'electron-updater', ...(packageType ? { packageType } : {}), platform: 'linux-x64', sha512: 'c2hhNTEybGlu', size: 8192, url: `https://downloads.example.com/AIRI-0.13.0-linux-x64.${extension}` })
+const linuxInstaller = await signed({ ...installer, artifacts: [linuxFile('deb', 'deb'), linuxFile('rpm', 'rpm'), linuxFile('appimage', 'AppImage')] })
+const linuxContext = { ...installerContext, platform: 'linux-x64' }
+cases.push({ kind: 'installer-manifest', name: 'installer: a deb install takes the deb file', ...linuxInstaller, context: { ...linuxContext, packageType: 'deb' }, expect: { ok: true }, takesPackage: 'deb' })
+cases.push({ kind: 'installer-manifest', name: 'installer: an rpm install takes the rpm file', ...linuxInstaller, context: { ...linuxContext, packageType: 'rpm' }, expect: { ok: true }, takesPackage: 'rpm' })
+cases.push({ kind: 'installer-manifest', name: 'installer: an AppImage install takes the AppImage file', ...linuxInstaller, context: { ...linuxContext, packageType: 'appimage' }, expect: { ok: true }, takesPackage: 'appimage' })
+cases.push({ kind: 'installer-manifest', name: 'installer: no file of the package of the install', ...await signed({ ...installer, artifacts: [linuxFile('deb', 'deb'), linuxFile('rpm', 'rpm')] }), context: { ...linuxContext, packageType: 'pacman' }, expect: { code: 'format-mismatch', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: a file without a package serves every package', ...await signed({ ...installer, artifacts: [linuxFile('deb', 'deb'), linuxFile(undefined, 'AppImage')] }), context: { ...linuxContext, packageType: 'rpm' }, expect: { ok: true }, takesPackage: 'none' })
+cases.push({ kind: 'installer-manifest', name: 'installer: two files of one package for one platform', ...await signed({ ...installer, artifacts: [linuxFile('deb', 'deb'), linuxFile('deb', 'deb')] }), expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: a package on a file that is not for Linux', ...await signed({ ...installer, artifacts: [{ ...installer.artifacts[0]!, packageType: 'deb' }] }), expect: { code: 'invalid-schema', ok: false } })
+cases.push({ kind: 'installer-manifest', name: 'installer: an unknown package', ...await signed({ ...installer, artifacts: [linuxFile('snap', 'snap')] }), expect: { code: 'invalid-schema', ok: false } })
+
 const now = '2026-10-24T00:00:00.000Z'
 const target = { channel: 'canary', product: 'airi' }
 cases.push({ kind: 'channel', name: 'channel: valid canary channel file', ...await signed(channelFile()), context: { ...target, now }, expect: { ok: true } })

@@ -615,6 +615,20 @@ describe('updateClient installer check', () => {
     expect(await (await createClient({ installedApp: { formats: [], releaseId: 7 } })).checkInstaller()).toMatchObject({ error: { code: 'format-mismatch' }, status: 'verification-failed' })
   })
 
+  it('returns the file of the Linux package that the app came in', async () => {
+    await publishInstaller(8, {
+      artifacts: [
+        { format: 'electron-updater', packageType: 'deb', platform: 'linux-x64', sha512: 'ZGVi', size: 100, url: 'https://downloads.test/AIRI-linux-amd64.deb' },
+        { format: 'electron-updater', packageType: 'rpm', platform: 'linux-x64', sha512: 'cnBt', size: 100, url: 'https://downloads.test/AIRI-linux-x86_64.rpm' },
+      ],
+    })
+    await server.publishChannel(undefined, { installer: { releaseId: 8 } })
+    const install = (packageType: 'appimage' | 'rpm') => createClient({ installedApp: { formats: ['electron-updater'], packageType, releaseId: 7 }, platform: 'linux-x64' })
+
+    expect(await (await install('rpm')).checkInstaller()).toMatchObject({ artifact: { url: 'https://downloads.test/AIRI-linux-x86_64.rpm' }, status: 'available' })
+    expect(await (await install('appimage')).checkInstaller()).toMatchObject({ error: { code: 'format-mismatch' }, status: 'verification-failed' })
+  })
+
   it('rejects a withdrawn installer, and records it so the host drops its download', async () => {
     await publishInstaller(8)
     await server.publishChannel(undefined, { installer: { releaseId: 8 }, withdrawn: [8] })

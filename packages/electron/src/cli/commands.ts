@@ -1,4 +1,4 @@
-import type { ChannelFile, SigningKey, TrustedKey } from '@ergosphere-it/protocol'
+import type { ChannelFile, InstallerPackageType, SigningKey, TrustedKey } from '@ergosphere-it/protocol'
 import type { ChannelFileInput, InstallerFileInput, ReleaseStore, StoredDocument } from '@ergosphere-it/publish'
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -231,15 +231,38 @@ export function writePrivateKey(path: string, privateKey: string): void {
   }
 }
 
-/** Maps the platform of electron-builder feeds to the platforms of installer releases. */
-function platformsOf(feedName: string, fileName: string): string | undefined {
-  const arch = /arm64|aarch64/i.test(fileName) ? 'arm64' : 'x64'
-  if (feedName.includes('-mac'))
-    return fileName.endsWith('.zip') ? `darwin-${arch}` : undefined
-  if (feedName.startsWith('latest-linux'))
-    return `linux-${feedName === 'latest-linux.yml' ? 'x64' : feedName.slice('latest-linux-'.length, -'.yml'.length)}`
+/** The Linux package of each file extension that electron-updater installs. */
+const LINUX_PACKAGES = { '.AppImage': 'appimage', '.deb': 'deb', '.pacman': 'pacman', '.rpm': 'rpm' } as const
 
-  return fileName.endsWith('.exe') ? `win32-${arch}` : undefined
+/** The architecture in a file or feed name, as electron-builder and package formats write it. */
+function archOf(name: string): string | undefined {
+  if (/arm64|aarch64/i.test(name))
+    return 'arm64'
+  if (/armv7l/i.test(name))
+    return 'armv7l'
+  if (/x64|x86_64|amd64/i.test(name))
+    return 'x64'
+
+  return undefined
+}
+
+/**
+ * Maps a file of an electron-builder feed to the platform and the package of an installer release. Only the files that
+ * electron-updater installs count: the macOS zip, the NSIS installer, and the Linux packages.
+ *
+ * Apps rename the feeds with a publish `channel`, for example `latest-${arch}` gives `latest-arm64-mac.yml` and
+ * `latest-x64-linux.yml`. So the file extension tells the system, and the architecture comes from the file name, then
+ * from the feed name, and is x64 without either, as electron-builder names x64 files.
+ */
+function installerFileOf(feedName: string, fileName: string): undefined | { packageType?: InstallerPackageType, platform: string } {
+  const arch = archOf(fileName) ?? archOf(feedName) ?? 'x64'
+  if (fileName.endsWith('.zip'))
+    return feedName.includes('mac') ? { platform: `darwin-${arch}` } : undefined
+  if (fileName.endsWith('.exe'))
+    return { platform: `win32-${arch}` }
+
+  const extension = Object.keys(LINUX_PACKAGES).find(extension => fileName.endsWith(extension)) as keyof typeof LINUX_PACKAGES | undefined
+  return extension && { packageType: LINUX_PACKAGES[extension], platform: `linux-${arch}` }
 }
 
 /**
@@ -261,9 +284,11 @@ async function readChannel(context: PublishContext, channel: string): Promise<un
 }
 
 /**
- * Reads the `latest*.yml` feeds of electron-builder: one installer file per platform, with its sha512 and size.
+ * Reads the `latest*.yml` feeds of electron-builder: one installer file per platform, and on Linux per package, with
+ * its sha512 and size.
  *
- * macOS updates install the zip, Windows updates the NSIS installer, and Linux updates the AppImage.
+ * macOS updates install the zip, Windows updates the NSIS installer, and Linux updates the AppImage, deb, rpm, or
+ * pacman package that the app came in.
  */
 function readElectronBuilderFeeds(distDir: string, filesUrl: string): InstallerFileInput[] {
   if (!existsSync(distDir))
@@ -271,12 +296,15 @@ function readElectronBuilderFeeds(distDir: string, filesUrl: string): InstallerF
 
   const base = filesUrl.replace(/\/+$/, '')
   const artifacts = new Map<string, InstallerFileInput>()
-  for (const name of readdirSync(distDir).filter(name => /^latest.*\.yml$/.test(name))) {
+  for (const name of readdirSync(distDir).filter(name => /^latest.*\.yml$/.test(name)).sort()) {
     const feed = parse(readFileSync(join(distDir, name), 'utf8')) as { files?: { sha512: string, size: number, url: string }[] }
     for (const file of feed.files ?? []) {
-      const platform = platformsOf(name, file.url)
-      if (platform && !artifacts.has(platform))
-        artifacts.set(platform, { format: 'electron-updater', platform, sha512: file.sha512, size: file.size, url: `${base}/${encodeURIComponent(file.url)}` })
+      const found = installerFileOf(name, file.url)
+      const key = found && `${found.platform} ${found.packageType ?? ''}`
+      if (!found || artifacts.has(key!))
+        continue
+
+      artifacts.set(key!, { format: 'electron-updater', ...found, sha512: file.sha512, size: file.size, url: `${base}/${encodeURIComponent(file.url)}` })
     }
   }
   if (artifacts.size === 0)
