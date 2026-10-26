@@ -1,4 +1,4 @@
-import type { BundleManifest, ChannelFile, Component, InstallerArtifact, InstallerFormat, InstallerManifest, TrustedKey } from '@ergosphere-it/protocol'
+import type { BundleManifest, ChannelFile, Component, InstallerArtifact, InstallerFormat, InstallerManifest, InstallerPackageType, TrustedKey } from '@ergosphere-it/protocol'
 
 import type { Fetch, UpdateFileSystem } from './io'
 import type { Locator } from './locate'
@@ -48,6 +48,8 @@ export type CheckResult
 export interface InstalledApp {
   /** The installer formats that the app can install, the preferred format first. */
   formats: readonly InstallerFormat[]
+  /** On Linux, the package that the app came in, so it takes the installer file of the same package. */
+  packageType?: InstallerPackageType
   /** The release ID of the installer that installed the app. */
   releaseId: number
 }
@@ -269,6 +271,7 @@ export class UpdateClient {
         formats: installedApp.formats,
         host: this.options.host,
         installerReleaseId: installedApp.releaseId,
+        packageType: installedApp.packageType,
         platform,
         product,
         withdrawn: channelFile.withdrawn,

@@ -502,7 +502,9 @@ pnpm exec electron-builder --publish always
 pnpm exec ergosphere-it register installer --channel stable --files-url https://github.com/<owner>/<repo>/releases/download/v1.5.0 --store s3://my-app-updates
 ```
 
-`register installer` reads the `latest*.yml` files of electron-builder in `dist/`. `--files-url` is where the installer files are, for example the download URL of a GitHub release.
+`register installer` reads the `latest*.yml` files of electron-builder in `dist/`, or in `--dist`, with any names, for example `latest-x64-linux.yml` of a publish `channel`. It takes the zip on macOS, the NSIS installer on Windows, and each Linux package: AppImage, deb, rpm, and pacman. A Linux install takes the file of the package that it came in. `--files-url` is where the installer files are, for example the download URL of a GitHub release.
+
+A channel names one installer release, and the release lists the installers of every platform. So register once, after the installers of all platforms are built and uploaded.
 
 With Sparkle on macOS, add the appcast that `generate_appcast` made. The release keeps its own copy of it. `--download-page` is where people download the app by hand, when an installer keeps failing:
 
@@ -615,13 +617,29 @@ jobs:
         env:
           ERGOSPHERE_IT_SIGNING_KEY: ${{ secrets.ERGOSPHERE_IT_SIGNING_KEY }}
 
-  installer:
+  # Every platform builds the same release IDs, so each installer ships the bundle that the installer release names.
+  release-ids:
     if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    outputs:
+      bundle: ${{ steps.ids.outputs.bundle }}
+      installer: ${{ steps.ids.outputs.installer }}
+    steps:
+      - id: ids
+        run: |
+          id=$(date +%s%3N)
+          echo "bundle=$id" >> "$GITHUB_OUTPUT"
+          echo "installer=$((id + 1))" >> "$GITHUB_OUTPUT"
+
+  installer:
+    needs: release-ids
     strategy:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    environment: release
+    env:
+      ERGOSPHERE_IT_RELEASE_ID: ${{ needs.release-ids.outputs.bundle }}
+      ERGOSPHERE_IT_INSTALLER_RELEASE_ID: ${{ needs.release-ids.outputs.installer }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -632,6 +650,32 @@ jobs:
       - run: pnpm exec electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: feeds-${{ matrix.os }}
+          path: dist/latest*.yml
+      - if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: out
+          path: out/
+
+  # One job registers the installers of all platforms. A job per platform would replace the installer of the channel
+  # each time, and the channel would name only the platform that finished last.
+  register:
+    needs: installer
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 26}
+      - run: pnpm install
+      - uses: actions/download-artifact@v4
+        with: {name: out, path: out}
+      - uses: actions/download-artifact@v4
+        with: {pattern: feeds-*, merge-multiple: true, path: dist}
       - run: pnpm exec ergosphere-it register installer --channel stable --files-url https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
         env:
           ERGOSPHERE_IT_SIGNING_KEY: ${{ secrets.ERGOSPHERE_IT_SIGNING_KEY }}
@@ -639,7 +683,7 @@ jobs:
 
 Only the steps that sign get `ERGOSPHERE_IT_SIGNING_KEY`. `pnpm install` runs the scripts of every dependency, and a build runs every plugin, so they do not get it. Keep the secret in the `release` environment, and give the environment required reviewers and a rule that allows only tags and the main branch. Never give it to a workflow that runs for pull requests.
 
-A bundle built on one platform runs on every platform, as long as it has no native files. Build installers on each platform, and register each one.
+A bundle built on one platform runs on every platform, as long as it has no native files. Build installers on each platform with the same release IDs, and register them once. The register job merges the feeds of all jobs, so their names must differ. electron-builder names the feed of each macOS architecture `latest-mac.yml`, so build both macOS architectures in one job, or rename the feeds with a publish `channel`.
 
 </details>
 

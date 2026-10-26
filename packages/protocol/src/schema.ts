@@ -92,9 +92,17 @@ export const bundleManifestSchema = object({
  */
 const installerFormatSchema = picklist(['electron-updater', 'sparkle'])
 
+/**
+ * The Linux package of an `electron-updater` file. electron-updater installs the package that the app came in: the
+ * `package-type` resource of electron-builder names `deb`, `rpm`, or `pacman`, and an app without it is an AppImage.
+ */
+const installerPackageTypeSchema = picklist(['appimage', 'deb', 'pacman', 'rpm'])
+
 /** One file of an installer release. `sha512` and `size` describe the file at `url`. */
 const installerArtifactSchema = object({
   format: installerFormatSchema,
+  /** For a Linux file of `electron-updater`: the package. A platform can have one file of each package. */
+  packageType: optional(installerPackageTypeSchema),
   platform: pipe(string(), minLength(1)),
   sha512: sha512Schema,
   size: sizeSchema,
@@ -155,6 +163,7 @@ export type FileEntry = InferOutput<typeof fileEntrySchema>
 export type InstallerArtifact = InferOutput<typeof installerArtifactSchema>
 export type InstallerFormat = InferOutput<typeof installerFormatSchema>
 export type InstallerManifest = InferOutput<typeof installerManifestSchema>
+export type InstallerPackageType = InferOutput<typeof installerPackageTypeSchema>
 export type NativeVersionRange = InferOutput<typeof nativeVersionRangeSchema>
 export type Rollout = InferOutput<typeof rolloutSchema>
 /** A public key that the app trusts. */

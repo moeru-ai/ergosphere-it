@@ -179,9 +179,10 @@ The manifest is canonical JSON (JCS, RFC 8785). The signature covers the exact b
 
 ### Installer manifest
 
-`installer.json` has the same envelope. It lists installer files with `format`, `platform`, `sha512`, size, and URL. It also records the native version, the release ID of its installer bundle (`bundleReleaseId`), the CI input hash, and an optional `downloadPage`.
+`installer.json` has the same envelope. It lists installer files with `format`, `platform`, `sha512`, size, and URL, and a `packageType` for a Linux file of electron-updater. It also records the native version, the release ID of its installer bundle (`bundleReleaseId`), the CI input hash, and an optional `downloadPage`.
 
 - A platform can have one file of each format, for example a zip for electron-updater and an appcast for Sparkle. An install takes the first format that its installer takes. So an app moves from electron-updater to Sparkle with one release that has both files: installs of the old app take the zip, and the new app takes the appcast.
+- On Linux, electron-updater installs the package that the app came in: `appimage`, `deb`, `rpm`, or `pacman`. So a Linux platform can have one electron-updater file of each `packageType`, and an install takes the file of its own package, or else a file without a `packageType`. Only Linux files of electron-updater have a `packageType`.
 - Installer URLs and `downloadPage` are absolute. Installer files can live anywhere, for example on GitHub Releases.
 - A channel file names the newest installer with `installer.releaseId`. An install with an older installer release downloads the new installer before any bundle, because the new installer ships a newer installer bundle.
 - `downloadPage` is where people download the app by hand. The app shows it when an installer keeps failing.
@@ -190,7 +191,7 @@ The manifest is canonical JSON (JCS, RFC 8785). The signature covers the exact b
 
 | Format | The file at `url` | Who downloads the update | What the launcher checks |
 | --- | --- | --- | --- |
-| `electron-updater` | The installer: a zip, an NSIS installer, or an AppImage | electron-updater, from the feed `installers/<releaseId>/feeds/<platform>/` that the release generates | The `sha512` of the downloaded file, before it installs |
+| `electron-updater` | The installer: a zip, an NSIS installer, or a Linux package (AppImage, deb, rpm, or pacman) | electron-updater, from the feed `installers/<releaseId>/feeds/<platform>/` that the release generates. The feed lists every file of the platform, and a Linux updater takes the file of its package by the extension | The `sha512` of the downloaded file, before it installs |
 | `sparkle` | A Sparkle appcast, which the release hosts at `installers/<releaseId>/sparkle/<platform>/appcast.xml` | Sparkle, which takes the smallest delta chain or the archive | The `sha512` of the appcast before Sparkle reads it, and the version that Sparkle prepared |
 
 - The launcher owns the schedule. It decides when to check, download, and install. An installer turns off any schedule of its own, for example the automatic checks of Sparkle. Otherwise the installer skips the channel, the rollout, and the withdrawn list.
@@ -361,7 +362,7 @@ A verifier returns the verified document, or fails with one reason code. The Typ
 | `duplicate-path` | Two files land on the same file on some file system: the same path, paths that differ only in case or in Unicode normalization, or a file that another path needs as a directory. |
 | `native-version-mismatch` | The native version of the install is outside the bundle range. |
 | `platform-mismatch` | The bundle is for another platform, or the installer release has no file for this platform. |
-| `format-mismatch` | The installer release has files for this platform, but none in a format that the install takes. |
+| `format-mismatch` | The installer release has files for this platform, but none in a format and a package that the install takes. |
 | `not-newer` | The release ID is not greater than the installer bundle or the current bundle. |
 | `withdrawn` | A channel file withdrew this bundle or installer. |
 | `blocked` | The client blocked this bundle after failures. |
@@ -454,6 +455,15 @@ Later the same day, keys and release servers changed:
 
 8. Keys use standard forms: an unencrypted PKCS#8 PEM for the private key, and an OpenSSH key or a PEM for the public key.
 9. Files can live anywhere. A client asks a locator for each file, and a publisher writes to a release store. The file tree is the default of both.
+
+## Decided on 2026-10-26
+
+AIRI ships a deb and an rpm for each Linux architecture, and names its electron-builder feeds with a publish channel, for example `latest-x64-linux.yml`. The first installer contract had one Linux file per platform, and found only feeds named `latest-linux*.yml`.
+
+1. A Linux file of electron-updater has a `packageType`, and a Linux platform can have one file of each package. An install takes the file of its own package.
+2. An installer release has one electron-updater feed per platform, with every file of the platform, as electron-builder writes it.
+3. `register installer` finds the platform by the file extension, and the architecture by the file name, then the feed name. It reads feeds of any name.
+4. Clients before this change reject a release with two Linux files of one platform, as two files of one format. Version 0.1 has no compatibility layer.
 
 ## Open questions
 

@@ -892,6 +892,136 @@
       }
     },
     {
+      "kind": "installer-manifest",
+      "name": "installer: a deb install takes the deb file",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"packageType\":\"deb\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.deb\"},{\"format\":\"electron-updater\",\"packageType\":\"rpm\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.rpm\"},{\"format\":\"electron-updater\",\"packageType\":\"appimage\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.AppImage\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "vs39aq/TLdwgNp9ljO5DtyOQm5nmGvD85AGuAxyH8nBnrLY8rEZplGmFiV0P/QwxDGBGE/TX6Om+lvTPOvw3Aw==",
+      "context": {
+        "formats": [
+          "electron-updater"
+        ],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "linux-x64",
+        "product": "airi",
+        "packageType": "deb"
+      },
+      "expect": {
+        "ok": true
+      },
+      "takesPackage": "deb"
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: an rpm install takes the rpm file",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"packageType\":\"deb\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.deb\"},{\"format\":\"electron-updater\",\"packageType\":\"rpm\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.rpm\"},{\"format\":\"electron-updater\",\"packageType\":\"appimage\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.AppImage\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "vs39aq/TLdwgNp9ljO5DtyOQm5nmGvD85AGuAxyH8nBnrLY8rEZplGmFiV0P/QwxDGBGE/TX6Om+lvTPOvw3Aw==",
+      "context": {
+        "formats": [
+          "electron-updater"
+        ],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "linux-x64",
+        "product": "airi",
+        "packageType": "rpm"
+      },
+      "expect": {
+        "ok": true
+      },
+      "takesPackage": "rpm"
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: an AppImage install takes the AppImage file",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"packageType\":\"deb\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.deb\"},{\"format\":\"electron-updater\",\"packageType\":\"rpm\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.rpm\"},{\"format\":\"electron-updater\",\"packageType\":\"appimage\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.AppImage\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "vs39aq/TLdwgNp9ljO5DtyOQm5nmGvD85AGuAxyH8nBnrLY8rEZplGmFiV0P/QwxDGBGE/TX6Om+lvTPOvw3Aw==",
+      "context": {
+        "formats": [
+          "electron-updater"
+        ],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "linux-x64",
+        "product": "airi",
+        "packageType": "appimage"
+      },
+      "expect": {
+        "ok": true
+      },
+      "takesPackage": "appimage"
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: no file of the package of the install",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"packageType\":\"deb\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.deb\"},{\"format\":\"electron-updater\",\"packageType\":\"rpm\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.rpm\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "0b5iTEjcLYZhA60deeINROTQ854g4fnYUqDlzxOPvS5/c0nkOWFn9mwcpFnAAave43GIfn1O0ClqhsVtKxuuCw==",
+      "context": {
+        "formats": [
+          "electron-updater"
+        ],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "linux-x64",
+        "product": "airi",
+        "packageType": "pacman"
+      },
+      "expect": {
+        "code": "format-mismatch",
+        "ok": false
+      }
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: a file without a package serves every package",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"packageType\":\"deb\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.deb\"},{\"format\":\"electron-updater\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.AppImage\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "m80YCGWYzXojjgqKsKUo2j8RAf3Wih1tvAGiVouPF3bdaaedtoqrPdIH7+AV79bT0d3o5Qjk/egHoNixEHTqDg==",
+      "context": {
+        "formats": [
+          "electron-updater"
+        ],
+        "host": "electron",
+        "installerReleaseId": 6,
+        "platform": "linux-x64",
+        "product": "airi",
+        "packageType": "rpm"
+      },
+      "expect": {
+        "ok": true
+      },
+      "takesPackage": "none"
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: two files of one package for one platform",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"packageType\":\"deb\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.deb\"},{\"format\":\"electron-updater\",\"packageType\":\"deb\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.deb\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "g3LGxUm/cDXq6ajyWsUSGaOfxDaZW6aqIpIS/Nbsperbwc2dULKSuP+p2M2ygdF+m9RAYFIyC+Hibt3jAIkODQ==",
+      "expect": {
+        "code": "invalid-schema",
+        "ok": false
+      }
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: a package on a file that is not for Linux",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"packageType\":\"deb\",\"platform\":\"darwin-arm64\",\"sha512\":\"c2hhNTEy\",\"size\":1024,\"url\":\"https://downloads.example.com/AIRI-0.13.0-arm64-mac.zip\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "kV6aLgWBt7i7Hrgq+RrcvV+ZuKHzlkDmSmhPcd/sLkuJmr6IuFLImD/MPG2z44r6NK1CfVvzb7jcTl99qQKbBQ==",
+      "expect": {
+        "code": "invalid-schema",
+        "ok": false
+      }
+    },
+    {
+      "kind": "installer-manifest",
+      "name": "installer: an unknown package",
+      "document": "{\"artifacts\":[{\"format\":\"electron-updater\",\"packageType\":\"snap\",\"platform\":\"linux-x64\",\"sha512\":\"c2hhNTEybGlu\",\"size\":8192,\"url\":\"https://downloads.example.com/AIRI-0.13.0-linux-x64.snap\"}],\"bundleReleaseId\":10,\"createdAt\":\"2026-10-23T00:00:00.000Z\",\"host\":\"electron\",\"kind\":\"installer\",\"nativeVersion\":3,\"product\":\"airi\",\"releaseId\":7,\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"version\":\"0.13.0\"}",
+      "signature": "GhLmG/8fJoNBr9KoILYN6Vx2sd8hgd5CcaVW4pNTrmiAOz4FJ+ed2cxtyC2tj0ZNevggsflplOfVITJUtNU8CA==",
+      "expect": {
+        "code": "invalid-schema",
+        "ok": false
+      }
+    },
+    {
       "kind": "channel",
       "name": "channel: valid canary channel file",
       "document": "{\"bundle\":{\"cohorts\":[\"alpha\",\"beta\",\"all\"],\"releaseId\":42,\"rollout\":{\"percentage\":25,\"salt\":\"42\"}},\"channel\":\"canary\",\"expiresAt\":\"2026-11-06T00:00:00.000Z\",\"installer\":{\"releaseId\":7},\"issuedAt\":\"2026-10-23T00:00:00.000Z\",\"kind\":\"channel\",\"product\":\"airi\",\"schema\":1,\"signature\":{\"alg\":\"ed25519\",\"keyId\":\"362ff633a498ae53\"},\"withdrawn\":[40,41]}",

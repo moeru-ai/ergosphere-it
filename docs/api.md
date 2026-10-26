@@ -32,12 +32,12 @@ Formats, keys, signatures, and verification. No I/O.
 | `verifyChannelFileSignature(bytes, signature, trustedKeys)` | Verifies the signature and the schema of a channel file, without the checks of freshness. A publisher runs it before it changes a channel file. Clients use `verifyChannelFile`. |
 | `validateBundleManifest(document)`, `validateChannelFile(document)`, `validateInstallerManifest(document)` | Check the schema and rules of a document without its signature. Clients run them after the signature verifies, and publishers run them before they sign. |
 | `checkBundleCandidate(manifest, context)` | Throws a `CandidateError` when an install cannot take a verified bundle. |
-| `checkInstallerCandidate(manifest, context)` | Returns the installer file of a verified installer release for this platform, in the first of `context.formats` that the release has, or throws a `CandidateError`. |
+| `checkInstallerCandidate(manifest, context)` | Returns the installer file of a verified installer release for this platform, in the first of `context.formats` that the release has, or throws a `CandidateError`. Within a format, it takes the file of `context.packageType`, or else a file without a `packageType`. |
 | `isInRollout(rollout, installId)`, `isNativeVersionCompatible(nativeVersion, range)`, `isSafeManifestPath(path)` | Policy helpers. |
 | `contentHash(bytes)` | The content address: SHA-256 as lowercase hex. |
 | `canonicalJson(value)` | The canonical JSON that signatures cover: JCS (RFC 8785) through `canonicalize`. |
 | `ErgosphereError`, `SignatureError`, `DocumentError`, `ChannelError`, `CandidateError`, `ErrorCode` | Errors. |
-| Types: `BundleManifest`, `InstallerManifest`, `InstallerArtifact`, `InstallerFormat`, `ChannelFile`, `Component`, `ComponentType`, `FileEntry`, `NativeVersionRange`, `Rollout`, `SigningKey`, `TrustedKey` | Data. |
+| Types: `BundleManifest`, `InstallerManifest`, `InstallerArtifact`, `InstallerFormat`, `InstallerPackageType`, `ChannelFile`, `Component`, `ComponentType`, `FileEntry`, `NativeVersionRange`, `Rollout`, `SigningKey`, `TrustedKey` | Data. |
 | `@ergosphere-it/protocol/conformance` | Conformance cases. A case expects `ok` or an error `code`. |
 
 Internal: Valibot schemas, signature primitives, base64 decoding.
@@ -81,7 +81,7 @@ for (const stage of uploadStages([release], [channel]))
 | `buildBundleRelease(input)` | Returns the objects, the signed manifest, and the descriptor of a bundle. |
 | `buildChannelFile(input)` | Returns the signed channel file. The caller declares the whole file. |
 | `reissueChannelFile(channelFile, signingKey)` | Signs a channel file again with a new issue time, for example after a backup restore. |
-| `buildInstallerRelease(input)` | Returns the signed installer manifest and `platformFiles`: one electron-updater feed per electron-updater file, and a copy of each Sparkle appcast. Installer URLs must be absolute. A Sparkle appcast needs `feedUrl`. |
+| `buildInstallerRelease(input)` | Returns the signed installer manifest, and `feeds` and `feedFiles`: one electron-updater feed per platform with every electron-updater file of the platform, and a copy of each Sparkle appcast. A Linux file has a `packageType`: `appimage`, `deb`, `rpm`, or `pacman`. Installer URLs must be absolute. A Sparkle appcast needs `feedUrl`. |
 | `checkSparkleAppcast(appcast, version)` | Throws when the appcast does not offer `version`, or names an archive with a relative URL. `buildInstallerRelease` runs it. |
 | `uploadStages(releases, channelFiles)` | Groups files in upload order: objects, then manifests and feeds, then channel files. |
 | `createReleaseStore(callbacks)` | A `ReleaseStore` from callbacks, for example calls to the API of a release server. It checks the required callbacks, and fills `hasObject` and `name`. |
@@ -110,7 +110,7 @@ The update state machine of one install. The host injects the network, file syst
 | `@ergosphere-it/client/node` → `createNodeFileSystem()` | File system for Node.js hosts. |
 
 - `check()` returns `available`, `up-to-date` with an optional `detail`, `retry-scheduled` after a failed download, or `verification-failed` with the `ErgosphereError`. Network and file system errors throw. `force` skips the wait for a retry.
-- `UpdateClientOptions` needs `product`, `host`, `channel`, `feedUrl`, `nativeVersion`, and `installerBundle`. With `installedApp: { releaseId, formats }`, the client also checks for installers in those formats. Download options: `concurrency` (4), `idleTimeoutMs` (30 s), `retries` (3), and `retryDelayMs` (1 s). `locate` tells the client where each file is, and defaults to the default layout under `feedUrl`. It gets a `FileRef` (`{ kind: 'channel', channel }`, `{ kind: 'bundle' | 'installer', releaseId }`, or `{ kind: 'object', releaseId, sha256, size }`; `releaseId` is a number) and returns a `FileLocation`: a URL, or `{ url, signatureUrl? }` for a document, where `signatureUrl` defaults to `<url>.sig`. A location with another field throws. See [file locations](spec.md#file-locations).
+- `UpdateClientOptions` needs `product`, `host`, `channel`, `feedUrl`, `nativeVersion`, and `installerBundle`. With `installedApp: { releaseId, formats, packageType? }`, the client also checks for installers in those formats. On Linux, `packageType` is the package that the app came in, and the client takes the file of that package. Download options: `concurrency` (4), `idleTimeoutMs` (30 s), `retries` (3), and `retryDelayMs` (1 s). `locate` tells the client where each file is, and defaults to the default layout under `feedUrl`. It gets a `FileRef` (`{ kind: 'channel', channel }`, `{ kind: 'bundle' | 'installer', releaseId }`, or `{ kind: 'object', releaseId, sha256, size }`; `releaseId` is a number) and returns a `FileLocation`: a URL, or `{ url, signatureUrl? }` for a document, where `signatureUrl` defaults to `<url>.sig`. A location with another field throws. See [file locations](spec.md#file-locations).
 - `UpdateFileSystem` streams large files: `appendFile` writes a `.part` file, and `hashFile` hashes a file without reading it into memory.
 - `boot()` records a boot attempt, so it is not a query. `boot({ readOnly: true })` selects without a change, for a second instance.
 
@@ -129,10 +129,10 @@ Internal: the object store and the state file.
 | `/types` | The status types only, for pages and preload scripts. It has no code. |
 | `/release` | `bundleReleaseFromBuild(options)`, `installerReleaseFromBuild(options)`, `readBuildInfo(outDir)` |
 | `/launcher` | `startLauncher(options)`, `defineLocator(locate)`, and `createTreeLocator(feedUrl)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Locator`, `LauncherFileRef`, `FileLocation`, `Installer`, `InstallerFile`, `ElectronUpdaterInstaller`, `SparkleInstaller`, `InstallerProgress`. |
-| `/electron-updater` | `createElectronUpdaterInstaller(updater?)`. Without an argument, it creates its own electron-updater instance. |
+| `/electron-updater` | `createElectronUpdaterInstaller(updater?)`. Without an argument, it creates its own electron-updater instance. `linuxPackageType()`: the package that the app came in on Linux, from the `package-type` resource of electron-builder, or `appimage` without it. |
 | `/sparkle` | `createSparkleInstaller(bridge?)`. Without an argument, it loads the bridge of electron-sparkle-updater, and returns `undefined` when Sparkle is not available. |
 | `/virtual` | Types of `virtual:ergosphere-it/config` for a custom launcher |
-| `ergosphere-it` (bin) | `keygen --out-private-key <path>`, `publish bundle`, `register installer` (with `--files-url`, `--sparkle <platform>=<appcast>`, `--download-page`), `promote`, `rollout`, `withdraw` (bundles and installers). `--store` (or `ERGOSPHERE_IT_STORE`) takes `s3://`, `file://`, or a directory. Without it, the commands use `store` of `ergo.config.ts`. `--bucket` is an old name of `--store`. The S3 endpoint comes from `ERGOSPHERE_IT_S3_ENDPOINT` or `AWS_ENDPOINT_URL_S3`. |
+| `ergosphere-it` (bin) | `keygen --out-private-key <path>`, `publish bundle`, `register installer` (with `--files-url`, `--dist`, `--sparkle <platform>=<appcast>`, `--download-page`), `promote`, `rollout`, `withdraw` (bundles and installers). `--store` (or `ERGOSPHERE_IT_STORE`) takes `s3://`, `file://`, or a directory. Without it, the commands use `store` of `ergo.config.ts`. `--bucket` is an old name of `--store`. The S3 endpoint comes from `ERGOSPHERE_IT_S3_ENDPOINT` or `AWS_ENDPOINT_URL_S3`. |
 
 Status types: `UpdaterStatus`, `UpdateInfo`, `BundleInfo`, `UpdateRequirement`, `UpdateError`, `UpdateErrorCode`, `RollbackReason`, `DisabledReason`.
 

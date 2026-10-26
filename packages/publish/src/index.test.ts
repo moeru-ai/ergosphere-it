@@ -131,6 +131,22 @@ describe('buildInstallerRelease', () => {
     })
   })
 
+  it('lists every Linux package of a platform in its one feed, so each Linux updater finds its own file', async () => {
+    const linux = [
+      { format: 'electron-updater', packageType: 'deb', platform: 'linux-x64', sha512: 'ZGVi', size: 300, url: 'https://downloads.test/AIRI-0.13.0-linux-amd64.deb' },
+      { format: 'electron-updater', packageType: 'rpm', platform: 'linux-x64', sha512: 'cnBt', size: 400, url: 'https://downloads.test/AIRI-0.13.0-linux-x86_64.rpm' },
+    ] as const
+    const built = await buildInstallerRelease({ artifacts: [...linux], bundleReleaseId: 100, createdAt: '2026-10-24T00:00:00.000Z', host: 'electron', nativeVersion: 2, product: 'app', releaseId: 7, signingKey, version: '0.13.0' })
+    const verified = await verifyInstallerManifest(built.manifestFiles[0]!.bytes, decode(built.manifestFiles[1]!.bytes), [trustedKey])
+    const context = { formats: ['electron-updater'], host: 'electron', installerReleaseId: 6, platform: 'linux-x64', product: 'app' } as const
+
+    expect(checkInstallerCandidate(verified, { ...context, packageType: 'rpm' })).toMatchObject({ packageType: 'rpm', url: linux[1].url })
+    expect(built.feedFiles.map(feed => feed.key)).toEqual(['installers/7/feeds/linux-x64/latest-linux.yml'])
+    expect(parse(decode(built.feedFiles[0]!.bytes))).toMatchObject({
+      files: [{ sha512: 'ZGVi', size: 300, url: linux[0].url }, { sha512: 'cnBt', size: 400, url: linux[1].url }],
+    })
+  })
+
   it('hosts a Sparkle appcast in the release, and pins its bytes in the manifest', async () => {
     const built = await buildInstallerRelease({
       artifacts: [artifacts[0], { appcast, format: 'sparkle', platform: 'darwin-arm64' }],

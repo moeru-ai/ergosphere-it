@@ -70,6 +70,8 @@ describe('conformance cases', () => {
               const artifact = checkInstallerCandidate(manifest, testCase.context)
               if (testCase.takes)
                 expect(artifact.format).toBe(testCase.takes)
+              if (testCase.takesPackage)
+                expect(artifact.packageType ?? 'none').toBe(testCase.takesPackage)
             }
 
             return manifest

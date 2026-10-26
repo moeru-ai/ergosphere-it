@@ -1,3 +1,4 @@
+import type { InstallerPackageType } from '@ergosphere-it/protocol'
 import type { AppUpdater, ProgressInfo } from 'electron-updater'
 
 import type { ElectronUpdaterInstaller } from './installer'
@@ -56,14 +57,26 @@ export async function createElectronUpdaterInstaller(updater?: AppUpdater): Prom
       // The launcher calls it only after the file matched the signed manifest.
       instance.autoInstallOnAppQuit = true
     },
+    packageType: linuxPackageType(),
   }
 }
 
 /**
- * Creates the electron-updater instance for this platform, as `autoUpdater` of electron-updater does.
- *
- * On Linux, electron-builder writes `package-type` into the resources of deb, rpm, and pacman packages.
+ * The Linux package that the app came in, as `autoUpdater` of electron-updater tells it: electron-builder writes
+ * `package-type` into the resources of deb, rpm, and pacman packages, and an app without it is an AppImage. Undefined
+ * on macOS and Windows.
  */
+export function linuxPackageType(): InstallerPackageType | undefined {
+  if (platform !== 'linux')
+    return undefined
+
+  const identity = join(resourcesPath ?? '', 'package-type')
+  const type = existsSync(identity) ? readFileSync(identity, 'utf8').trim() : undefined
+
+  return type === 'deb' || type === 'rpm' || type === 'pacman' ? type : 'appimage'
+}
+
+/** Creates the electron-updater instance for this platform, as `autoUpdater` of electron-updater does. */
 async function createUpdaterInstance(): Promise<AppUpdater> {
   const updaters = await import('electron-updater')
   if (platform === 'win32')
@@ -71,14 +84,14 @@ async function createUpdaterInstance(): Promise<AppUpdater> {
   if (platform === 'darwin')
     return new updaters.MacUpdater()
 
-  const identity = join(resourcesPath ?? '', 'package-type')
-  const type = existsSync(identity) ? readFileSync(identity, 'utf8').trim() : undefined
-  if (type === 'deb')
-    return new updaters.DebUpdater()
-  if (type === 'rpm')
-    return new updaters.RpmUpdater()
-  if (type === 'pacman')
-    return new updaters.PacmanUpdater()
-
-  return new updaters.AppImageUpdater()
+  switch (linuxPackageType()) {
+    case 'deb':
+      return new updaters.DebUpdater()
+    case 'pacman':
+      return new updaters.PacmanUpdater()
+    case 'rpm':
+      return new updaters.RpmUpdater()
+    default:
+      return new updaters.AppImageUpdater()
+  }
 }
