@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path'
 
 import { bytesFromBase64, createKeyPair, keyPairFromPrivateKey, signingKeyToPem, trustedKeyToOpenSsh, verifyChannelFileSignature } from '@ergosphere-it/protocol'
 import { buildChannelFile, isChannelConflict } from '@ergosphere-it/publish'
+import { newQueue } from '@henrygd/queue'
 import { parse } from 'yaml'
 
 import { bundleReleaseFromBuild, installerReleaseFromBuild, readBuildInfo } from '../release'
@@ -269,21 +270,21 @@ export function writePrivateKey(path: string, privateKey: string): void {
  * the running items settle.
  */
 async function eachConcurrently<T>(items: readonly T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {
-  let next = 0
-  let failed = false
-  const worker = async () => {
-    while (!failed && next < items.length) {
-      const item = items[next++]!
-      try {
-        await run(item)
-      }
-      catch (error) {
-        failed = true
-        throw error
-      }
-    }
+  const queue = newQueue(Math.max(1, limit))
+  let failure: undefined | { error: unknown }
+  for (const item of items) {
+    queue.add(() => run(item)).catch((error: unknown) => {
+      // clear() rejects the items that did not start. Keep the first error of an item that ran.
+      if (failure)
+        return
+
+      failure = { error }
+      queue.clear()
+    })
   }
-  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker))
+  await queue.done()
+  if (failure)
+    throw failure.error
 }
 
 /** Keeps the items that `test` accepts, in their order, with at most `limit` tests at once. */

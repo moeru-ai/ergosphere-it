@@ -40,6 +40,7 @@
   },
   "dependencies": {
     "@ergosphere-it/protocol": "workspace:*",
+    "@henrygd/queue": "catalog:",
     "@moeru/std": "catalog:",
     "es-toolkit": "catalog:",
     "valibot": "catalog:"

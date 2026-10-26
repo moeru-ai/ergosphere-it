@@ -115,6 +115,7 @@
     "@ergosphere-it/client": "workspace:*",
     "@ergosphere-it/protocol": "workspace:*",
     "@ergosphere-it/publish": "workspace:*",
+    "@henrygd/queue": "catalog:",
     "@moeru/std": "catalog:",
     "s3mini": "catalog:",
     "valibot": "catalog:"

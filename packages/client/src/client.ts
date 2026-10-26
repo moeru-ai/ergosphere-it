@@ -5,6 +5,7 @@ import type { Locator } from './locate'
 import type { BundleRef, ClientState, RollbackReason } from './state'
 
 import { CandidateError, checkBundleCandidate, checkInstallerCandidate, DocumentError, ErgosphereError, isInRollout, SignatureError, verifyBundleManifest, verifyChannelFile, verifyInstallerManifest } from '@ergosphere-it/protocol'
+import { newQueue } from '@henrygd/queue'
 import { errorMessageFrom } from '@moeru/std/error'
 import { withRetry } from '@moeru/std/with-retry'
 import { delay, sumBy } from 'es-toolkit'
@@ -796,20 +797,33 @@ export class UpdateClient {
     const report = () => options.onProgress?.({ downloadedBytes: sumBy([...received.values()], bytes => bytes), totalBytes })
     report()
 
+    // The first failed download stops the start of new downloads. A download that fails reports a problem, and one
+    // that throws stops the stage with its error.
     let failure: undefined | { detail: string, path: string, status: 'failed' }
-    const queue = [...missing]
-    const worker = async () => {
-      for (let next = queue.shift(); next && !failure; next = queue.shift()) {
-        const [hash, object] = next
+    let thrown: undefined | { error: unknown }
+    const downloads = newQueue(this.concurrency)
+    for (const [hash, object] of missing) {
+      downloads.add(async () => {
         const problem = await this.downloadObject(manifest.releaseId, hash, object.size, (bytes) => {
           received.set(hash, bytes)
           report()
         })
-        if (problem)
-          failure ??= { detail: problem, path: object.path, status: 'failed' }
-      }
+        if (problem && !failure) {
+          failure = { detail: problem, path: object.path, status: 'failed' }
+          downloads.clear()
+        }
+      }).catch((error: unknown) => {
+        // clear() rejects the downloads that did not start. Keep the first error of a download that ran.
+        if (failure || thrown)
+          return
+
+        thrown = { error }
+        downloads.clear()
+      })
     }
-    await Promise.all(Array.from({ length: Math.min(this.concurrency, queue.length) }, worker))
+    await downloads.done()
+    if (thrown)
+      throw thrown.error
     if (failure)
       return failure
 
