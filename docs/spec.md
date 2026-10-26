@@ -81,7 +81,7 @@ One trusted Ed25519 key signs both layers. The native part contains the public k
 - The signature is Ed25519 over the exact bytes of the document file. It is stored as base64 in a detached `<file>.sig` file.
 - `keyId` is the first 16 hex characters of the SHA-256 of the public key in SPKI DER form.
 - A client parses the JSON only to read `signature.keyId`, and finds that key in its trusted list. It verifies the signature over the raw bytes before it uses any other field.
-- Implementations use WebCrypto Ed25519 and the built-in `Uint8Array` base64 and hex methods, so the same code runs in Node.js 26 or later, Electron 43 or later, and current browsers.
+- Implementations use WebCrypto Ed25519, and the `Uint8Array` base64 and hex methods where the runtime has them, so the same code runs in Node.js 24 or later, Electron 43 or later, and current browsers. Node.js 24 has no such methods, and the TypeScript implementation encodes with `atob` and `btoa` there, with the same strict rules.
 
 ### Compatibility
 

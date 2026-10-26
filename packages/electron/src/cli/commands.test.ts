@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { platform } from 'node:process'
 
-import { contentHash, trustedKeyFromPublicKey, trustedKeyToOpenSsh, verifyBundleManifest, verifyChannelFile, verifyInstallerManifest } from '@ergosphere-it/protocol'
+import { bytesToBase64, contentHash, trustedKeyFromPublicKey, trustedKeyToOpenSsh, verifyBundleManifest, verifyChannelFile, verifyInstallerManifest } from '@ergosphere-it/protocol'
 import { ChannelConflictError, createReleaseStore } from '@ergosphere-it/publish'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse, stringify } from 'yaml'
@@ -101,7 +101,7 @@ describe('ergosphere-it commands', () => {
     await expect(parseSigningKey(pem('\r\n'))).resolves.toEqual(expected)
     await expect(parseSigningKey(pem('\\n'))).resolves.toEqual(expected)
     // `base64` of GNU coreutils wraps its output at 76 characters.
-    await expect(parseSigningKey(encode(privateKey).toBase64().match(/.{1,76}/g)!.join('\n'))).resolves.toEqual(expected)
+    await expect(parseSigningKey(bytesToBase64(encode(privateKey)).match(/.{1,76}/g)!.join('\n'))).resolves.toEqual(expected)
     // Text that only starts like base64 of a PEM gets the PEM error, not a base64 error.
     await expect(parseSigningKey('LS0tLS1CRUdJTi!')).rejects.toThrow('ERGOSPHERE_IT_SIGNING_KEY is not valid')
     // The base64 DER without the PEM armor was the old form. It is not a PEM.

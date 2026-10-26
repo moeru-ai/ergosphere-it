@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { canonicalJson } from '../src'
+import { bytesToBase64, canonicalJson } from '../src'
 import { keyIdOf, signDocument } from '../src/crypto'
 
 interface TestKey { keyId: string, privateKey: string, publicKey: string }
@@ -20,7 +20,7 @@ async function createKey(): Promise<TestKey> {
   const spki = new Uint8Array(await crypto.subtle.exportKey('spki', pair.publicKey))
   const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey))
 
-  return { keyId: await keyIdOf(spki), privateKey: pkcs8.toBase64(), publicKey: spki.toBase64() }
+  return { keyId: await keyIdOf(spki), privateKey: bytesToBase64(pkcs8), publicKey: bytesToBase64(spki) }
 }
 
 async function loadKeys(): Promise<{ other: TestKey, trusted: TestKey }> {

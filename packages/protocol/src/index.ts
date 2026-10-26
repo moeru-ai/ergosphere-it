@@ -1,3 +1,4 @@
+export { bytesFromBase64, bytesFromHex, bytesToBase64, bytesToHex } from './bytes'
 export { canonicalJson, contentHash, createKeyPair, isPublicKey, keyPairFromPrivateKey, signDocument, signingKeyToPem, trustedKeyFromPublicKey, trustedKeyToOpenSsh } from './crypto'
 export type { SignedDocument, SigningKey } from './crypto'
 export { CandidateError, ChannelError, DocumentError, ErgosphereError, SignatureError } from './errors'

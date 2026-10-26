@@ -11,7 +11,7 @@ This document lists the public API of each package. [The specification](spec.md)
 - **Small surfaces.** A package exports what its users call. Schemas, helpers, and wiring stay internal.
 - **Names come from the readers.** A name stays when developers who never saw the project understand it without help. See the decisions of 2026-10-24 in the specification.
 
-Runtimes: Node.js 26 or later, Electron 43 or later, and current browsers. `protocol` and `publish` also run in Deno, Bun, and workers.
+Runtimes: Node.js 24 or later, Electron 43 or later, and current browsers. `protocol` and `publish` also run in Deno, Bun, and workers.
 
 ## `@ergosphere-it/protocol`
 
@@ -36,6 +36,7 @@ Formats, keys, signatures, and verification. No I/O.
 | `isInRollout(rollout, installId)`, `isNativeVersionCompatible(nativeVersion, range)`, `isSafeManifestPath(path)` | Policy helpers. |
 | `contentHash(bytes)` | The content address: SHA-256 as lowercase hex. |
 | `canonicalJson(value)` | The canonical JSON that signatures cover: JCS (RFC 8785) through `canonicalize`. |
+| `bytesToHex(bytes)`, `bytesFromHex(text)`, `bytesToBase64(bytes)`, `bytesFromBase64(text)` | Hex and standard base64. They use the methods of `Uint8Array` where the runtime has them, and the same rules on Node.js 24, which does not. `bytesFromBase64` is strict: padding is required, and the bits after the last byte must be zero. |
 | `ErgosphereError`, `SignatureError`, `DocumentError`, `ChannelError`, `CandidateError`, `ErrorCode` | Errors. |
 | Types: `BundleManifest`, `InstallerManifest`, `InstallerArtifact`, `InstallerFormat`, `InstallerPackageType`, `ChannelFile`, `Component`, `ComponentType`, `FileEntry`, `NativeVersionRange`, `Rollout`, `SigningKey`, `TrustedKey` | Data. |
 | `@ergosphere-it/protocol/conformance` | Conformance cases. A case expects `ok` or an error `code`. |

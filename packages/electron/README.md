@@ -76,7 +76,7 @@ When a new bundle crashes or never reports that it works, the app goes back to t
 
 | Tool | Version | Use |
 | --- | --- | --- |
-| Node.js | 26 or later | The build reads `ergo.config.ts` with the TypeScript support of Node.js. The CLI runs on it. |
+| Node.js | 24 or later | The build reads `ergo.config.ts` with the TypeScript support of Node.js. The CLI runs on it. |
 | Electron | 43 or later | The app. The tests use 43.4.1. |
 | electron-vite | 6 | The build. One plugin goes into each process. |
 | electron-builder | any | Optional. It packs installers. ergosphere-it records them as installer releases. |

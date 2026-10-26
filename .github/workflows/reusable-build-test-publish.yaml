@@ -58,6 +58,8 @@ jobs:
             exit 1
           }
 
+  # TODO: the packages support Node.js 24, and every job runs on 26. Add a job that runs the unit tests and the build
+  # on Node.js 24, so a newer Node.js API fails CI.
   build-test:
     name: Build and test
     runs-on: ubuntu-latest
