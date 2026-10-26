@@ -117,14 +117,14 @@
     "@ergosphere-it/publish": "workspace:*",
     "@moeru/std": "catalog:",
     "s3mini": "catalog:",
-    "valibot": "catalog:",
-    "yaml": "catalog:"
+    "valibot": "catalog:"
   },
   "devDependencies": {
     "electron": "catalog:",
     "electron-sparkle-updater": "catalog:",
     "electron-updater": "catalog:",
     "electron-vite": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "yaml": "catalog:"
   }
 }

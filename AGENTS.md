@@ -31,6 +31,7 @@ These rules come from bugs that the tests did not find at first.
 7. **When you copy a design, copy its hidden constraints too.** The LobeHub shell selects and loads its core synchronously, before ready. Its specification does not say so, and an asynchronous launcher broke every app that registers schemes in main.
 8. **Do not guess how Electron or electron-vite behave.** Probe with a minimal app, or read the source in `node_modules`. Write what you found in a `NOTICE:` comment with the source and a removal condition. For example, electron-vite builds `?modulePath` scripts and `isolatedEntries` in second builds with `write: false`, and Electron emits ready only after the top-level await of its entry.
 9. **Keep one place for each layout.** The keys of the default layout live in `@ergosphere-it/publish`. The client, the CLI, and the stores get them from there or from typed releases.
+10. **Keep the dependencies of the packages out of the peer graph of the app.** vite takes `yaml` as an optional peer. When `^2.9.1` of ergosphere-it met `2.9.0` in AIRI, pnpm installed vite twice, then vue-router, which takes vite as a peer, and the renderer bundled two vue-router copies and showed a blank window. The packages bundle `yaml` (`deps.onlyBundle` in `tsdown.config.ts`). Check a new dependency against the peers of vite, electron-vite, and Electron before you add it to `dependencies`.
 
 ## Test machines
 

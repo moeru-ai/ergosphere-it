@@ -35,7 +35,9 @@
   },
   "dependencies": {
     "@ergosphere-it/protocol": "workspace:*",
-    "es-toolkit": "catalog:",
+    "es-toolkit": "catalog:"
+  },
+  "devDependencies": {
     "yaml": "catalog:"
   }
 }

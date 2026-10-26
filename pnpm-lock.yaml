@@ -341,9 +341,6 @@ importers:
       valibot:
         specifier: 'catalog:'
         version: 1.5.0(typescript@6.0.3)
-      yaml:
-        specifier: 'catalog:'
-        version: 2.9.1
     devDependencies:
       electron:
         specifier: 'catalog:'
@@ -360,6 +357,9 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
 
   packages/protocol:
     dependencies:
@@ -378,6 +378,7 @@ importers:
       es-toolkit:
         specifier: 'catalog:'
         version: 1.52.0
+    devDependencies:
       yaml:
         specifier: 'catalog:'
         version: 2.9.1

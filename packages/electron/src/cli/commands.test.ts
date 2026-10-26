@@ -138,7 +138,7 @@ describe('ergosphere-it commands', () => {
 
     const result = await registerInstaller({ channel: 'stable', distDir: dist, filesUrl: 'https://downloads.test/v1.0.10/', outDir: out, signingKey, store })
 
-    expect(result).toEqual({ files: ['linux-arm64 electron-updater', 'darwin-arm64 electron-updater', 'win32-x64 electron-updater'], releaseId: 11 })
+    expect(result).toEqual({ files: ['linux-arm64 electron-updater (appimage)', 'darwin-arm64 electron-updater', 'win32-x64 electron-updater'], releaseId: 11 })
     const installer = await verifyInstallerManifest(read('installers/11/installer.json'), decode(read('installers/11/installer.json.sig')), trustedKeys)
     expect(installer).toMatchObject({ bundleReleaseId: 10, nativeVersion: 2 })
     expect(installer.artifacts.find(artifact => artifact.platform === 'win32-x64')?.url).toBe('https://downloads.test/v1.0.10/App%20Setup%201.0.10.exe')
