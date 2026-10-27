@@ -171,7 +171,7 @@ The bundle that runs now. A page-only update changes it without a restart, so re
 
 `update` is `{ version, releaseId, requires, fromInstaller, downloadPage? }`. `requires` is `reload`, `restart`, or `install`. `downloadPage` comes from the installer release.
 
-The statuses are `idle`, `checking`, `up-to-date`, `downloading`, `preparing`, `download-failed`, `ready`, `applying`, `verification-failed`, `rolled-back`, `error`, and `disabled`. `preparing` is work after a download, for example a Sparkle patch. A `download-failed` of an installer has `attempts`. It stays the status while bundles are up to date, so the app can show `update.downloadPage` after a few attempts.
+The statuses are `idle`, `checking`, `up-to-date`, `downloading`, `preparing`, `download-failed`, `ready`, `applying`, `verification-failed`, `rolled-back`, `error`, and `disabled`. `preparing` is work after a download, for example a Sparkle patch. `downloading` has `percent`, `downloadedBytes` of `totalBytes`, and `bytesPerSecond`, the average since the download started. `totalBytes` counts only the files that the app does not have. `preparing` has `percent` only. A `download-failed` of an installer has `attempts`. It stays the status while bundles are up to date, so the app can show `update.downloadPage` after a few attempts.
 
 `error` is `{ code, message }`. `code` is one of a closed list: `download-failed`, `installer-mismatch`, `network-error`, `storage-error`, `apply-failed`, or a protocol code such as `invalid-signature` or `channel-replayed`. `message` is English text for logs.
 

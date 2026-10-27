@@ -83,7 +83,7 @@ export interface WorkspaceOptions {
   persist?: boolean
 }
 
-/** The statuses of one kind. Some members of `UpdaterStatus` share a shape, for example `downloading` and `preparing`. */
+/** The statuses of one kind. Some members of `UpdaterStatus` share a shape, for example `ready` and `applying`. */
 type StatusOf<Kind extends UpdaterStatus['status']> = UpdaterStatus extends infer Status
   ? Status extends { status: infer Known } ? Kind extends Known ? Status & { status: Kind } : never : never
   : never

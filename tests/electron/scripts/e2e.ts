@@ -132,11 +132,15 @@ try {
   const changed = pageOnly.manifest.components.flatMap(component => component.files.filter(file => !known.has(`objects/sha256/${file.sha256.slice(0, 2)}/${file.sha256}`)))
   const downloaded = requests.slice(objectRequests).filter(r => r.path.startsWith('/objects/')).length
   const onlyPage = changed.length > 0 && changed.every(file => file.path.startsWith('renderer/'))
+  // The download reports its bytes: the objects that the app did not have, once each, and a rate.
+  const changedBytes = [...new Map(changed.map(file => [file.sha256, file.size])).values()].reduce((sum, size) => sum + size, 0)
+  const progress = findStatus(since(mark)(readEvents()).reverse(), 'downloading')
+  const bytesReported = progress?.totalBytes === changedBytes && progress.downloadedBytes === changedBytes && Number.isFinite(progress.bytesPerSecond)
   // Both windows move to the new bundle: the main window, and the window that the app loaded itself on a route that
   // changed after load.
   const second = await waitFor('second window on v2', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v2' && e.url.includes('#/second')))
   const movedRoute = second.url.endsWith('#/second-moved') && /[/\\]bundles[/\\]2[/\\]renderer[/\\]/.test(decodeURIComponent(new URL(second.url).pathname))
-  await step('1. page-only bundle reloads every window in place', reloaded.pid === first.pid && onlyPage && downloaded === changed.length && movedRoute, `pid ${reloaded.pid}, ${downloaded} of ${pageOnly.objects.length} objects downloaded: ${changed.map(file => file.path).join(', ')}, second window at ${new URL(second.url).hash}`)
+  await step('1. page-only bundle reloads every window in place', reloaded.pid === first.pid && onlyPage && downloaded === changed.length && movedRoute && bytesReported, `pid ${reloaded.pid}, ${downloaded} of ${pageOnly.objects.length} objects downloaded: ${changed.map(file => file.path).join(', ')}, progress ${progress?.downloadedBytes}/${progress?.totalBytes} bytes of ${changedBytes} at ${progress?.bytesPerSecond} B/s, second window at ${new URL(second.url).hash}`)
 
   // 2. main-code change
   mark = lastIndex()
