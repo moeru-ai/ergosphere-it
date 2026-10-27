@@ -1,7 +1,7 @@
 {
   "name": "ergosphere-example-electron",
   "type": "module",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "private": true,
   "description": "A minimal Electron app with over-the-air updates from ergosphere-it",
   "main": "out/launcher/index.mjs",
