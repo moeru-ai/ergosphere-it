@@ -10,7 +10,7 @@ import { errorMessageFrom } from '@moeru/std/error'
 
 import { findErgoConfig, loadErgoConfig, loadLauncherConfig } from '../config'
 import { gitRootOf, keygen, parseSigningKey, promote, publishBundle, registerInstaller, setRollout, withdraw, writePrivateKey } from './commands'
-import { createPublishReporter } from './progress'
+import { createPublishReporter, formatBytes, formatDuration } from './progress'
 import { resolveStore } from './store'
 
 // Each line has a time and a level, so a CI log shows how long each step took.
@@ -26,12 +26,14 @@ Commands:
       vault, then delete the file.
   publish bundle --channel <name> [--rollout <percent>] [--cohorts <a,b>] [--min-native-version <n>]
       Uploads the bundle of the build output and serves it on a channel.
-  register installer --channel <name> [--files-url <url>] [--dist <dir>] [--sparkle <platform>=<appcast>]
-                     [--feed-url <url>] [--download-page <url>]
+  register installer --channel <name> [--files-url <url> | --upload-files] [--dist <dir>]
+                     [--sparkle <platform>=<appcast>] [--feed-url <url>] [--download-page <url>]
       Records an installer release, and names it on a channel. --files-url is where the electron-builder installer
-      files are, for example the download URL of a GitHub release. --sparkle adds a Sparkle appcast for a platform,
-      for example darwin-arm64=dist/appcast.xml. The release hosts the appcast under --feed-url, which defaults to
-      feedUrl of ergo.config.ts. --download-page is where people download the app by hand.
+      files are, for example the download URL of a GitHub release. --upload-files uploads the installer files of
+      --dist to the release store instead, for a build without a host, for example a nightly build. --sparkle adds a
+      Sparkle appcast for a platform, for example darwin-arm64=dist/appcast.xml. The release hosts uploaded files and
+      appcasts under --feed-url, which defaults to feedUrl of ergo.config.ts. --download-page is where people download
+      the app by hand.
   promote --from <channel> --to <channel>
       Serves the bundle and the installer of one channel on another, for example from beta to beta-daily.
   rollout --channel <name> <percent>
@@ -74,6 +76,7 @@ const { positionals, values } = parseArgs({
     'sparkle': { multiple: true, type: 'string' },
     'store': { type: 'string' },
     'to': { type: 'string' },
+    'upload-files': { type: 'boolean' },
   },
 })
 
@@ -139,15 +142,18 @@ async function run(): Promise<string> {
 
       return [platform, path]
     }))
-    const feedUrl = values['feed-url'] ?? (Object.keys(sparkleAppcasts).length > 0 ? (await loadLauncherConfig(cwd())).feedUrl : undefined)
+    const uploadFiles = values['upload-files'] ?? false
+    const feedUrl = values['feed-url'] ?? (Object.keys(sparkleAppcasts).length > 0 || uploadFiles ? (await loadLauncherConfig(cwd())).feedUrl : undefined)
     const result = await registerInstaller({
       channel: required('--channel', channel),
       distDir: values.dist,
       downloadPage: values['download-page'],
       feedUrl,
       filesUrl: values['files-url'],
+      onUpload: upload => log.log(`${upload.name} uploaded (${formatBytes(upload.size)}, ${formatDuration(upload.durationMs)}).`),
       outDir: values.out,
       sparkleAppcasts,
+      uploadFiles,
       ...context,
     })
 

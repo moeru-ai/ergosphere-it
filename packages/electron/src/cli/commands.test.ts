@@ -5,7 +5,7 @@ import type { BuildInfo } from '../layout'
 import type { PublishProgress } from './commands'
 
 import { Buffer } from 'node:buffer'
-import { createPrivateKey, createPublicKey, generateKeyPairSync } from 'node:crypto'
+import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -192,6 +192,54 @@ describe('ergosphere-it commands', () => {
     expect(read('installers/11/feeds/linux-arm64/latest-linux-arm64.yml')).toBeDefined()
   })
 
+  it('uploads the installer files to the store, and serves them under the feed URL', async () => {
+    const { privateKey, publicKey } = await keygen()
+    const signingKey = await parseSigningKey(privateKey)
+    const trustedKeys = [await trustedKeyFromPublicKey(publicKey)]
+    const store = openStore(`file://${join(root, 'storage')}`)
+    const out = join(root, 'out')
+    const dist = join(root, 'dist')
+    await writeBuild(out, 10, 'page')
+    mkdirSync(dist)
+    const files = { 'App 1.0.10-arm64-mac.zip': 'mac zip', 'App-1.0.10-arm64.dmg': 'mac dmg', 'App-1.0.10-setup.exe': 'windows exe' }
+    for (const [name, text] of Object.entries(files))
+      writeFileSync(join(dist, name), text)
+    const entry = (url: keyof typeof files) => ({ sha512: createHash('sha512').update(files[url]).digest('base64'), size: encode(files[url]).byteLength, url })
+    writeFileSync(join(dist, 'latest-mac.yml'), stringify({ files: [entry('App 1.0.10-arm64-mac.zip'), entry('App-1.0.10-arm64.dmg')], version: '1.0.10' }))
+    writeFileSync(join(dist, 'latest.yml'), stringify({ files: [entry('App-1.0.10-setup.exe')], version: '1.0.10' }))
+    const uploads: string[] = []
+
+    await registerInstaller({ channel: 'nightly', distDir: dist, feedUrl: 'https://updates.test/app/', onUpload: upload => uploads.push(upload.name), outDir: out, signingKey, store, uploadFiles: true })
+
+    const installer = await verifyInstallerManifest(read('installers/11/installer.json'), decode(read('installers/11/installer.json.sig')), trustedKeys)
+    expect(installer.artifacts.map(artifact => artifact.url)).toEqual([
+      'https://updates.test/app/installers/11/files/App%201.0.10-arm64-mac.zip',
+      'https://updates.test/app/installers/11/files/App-1.0.10-setup.exe',
+    ])
+    // Only the files that the installers take are uploaded: the zip and not the dmg on macOS.
+    expect(uploads.sort()).toEqual(['App 1.0.10-arm64-mac.zip', 'App-1.0.10-setup.exe'])
+    expect(decode(read('installers/11/files/App 1.0.10-arm64-mac.zip'))).toBe('mac zip')
+    expect(JSON.parse(decode(read('channels/nightly.json')))).toMatchObject({ installer: { releaseId: 11 } })
+  })
+
+  it('does not upload an installer file that differs from its feed', async () => {
+    const signingKey = await parseSigningKey((await keygen()).privateKey)
+    const store = openStore(join(root, 'storage'))
+    const out = join(root, 'out')
+    const dist = join(root, 'dist')
+    await writeBuild(out, 10, 'page')
+    mkdirSync(dist)
+    writeFileSync(join(dist, 'App-1.0.10-setup.exe'), 'changed after the feed')
+    writeFileSync(join(dist, 'latest.yml'), stringify({ files: [{ sha512: 'd2lu', size: 22, url: 'App-1.0.10-setup.exe' }], version: '1.0.10' }))
+    const register = (options: { feedUrl?: string, filesUrl?: string }) => registerInstaller({ channel: 'nightly', distDir: dist, outDir: out, signingKey, store, uploadFiles: true, ...options })
+
+    await expect(register({ feedUrl: 'https://updates.test' })).rejects.toThrow('does not match its electron-builder feed')
+    await expect(register({})).rejects.toThrow('needs the feed URL')
+    await expect(register({ feedUrl: 'https://updates.test', filesUrl: 'https://downloads.test' })).rejects.toThrow('not both')
+    await expect(registerInstaller({ channel: 'nightly', distDir: dist, feedUrl: 'https://updates.test', outDir: out, signingKey, store: createReleaseStore({ getChannel: async () => undefined, putBundle: async () => {}, putChannel: async () => {}, putInstaller: async () => {}, putObject: async () => {} }), uploadFiles: true })).rejects.toThrow('cannot host installer files')
+    expect(() => statSync(join(root, 'storage', 'installers'))).toThrow()
+  })
+
   it('registers a Sparkle appcast next to the electron-builder installers, and hosts a copy of it in the release', async () => {
     const signingKey = await parseSigningKey((await keygen()).privateKey)
     const store = openStore(join(root, 'storage'))
@@ -235,7 +283,7 @@ describe('ergosphere-it commands', () => {
 
     await expect(write('<item><sparkle:shortVersionString>1.0.9</sparkle:shortVersionString><enclosure url="https://d.test/a.zip"/></item>')).rejects.toThrow('offers 1.0.9')
     await expect(write('<item><sparkle:shortVersionString>1.0.10</sparkle:shortVersionString><enclosure url="a.zip"/></item>')).rejects.toThrow('relative URL')
-    await expect(registerInstaller({ channel: 'stable', distDir: root, outDir: out, signingKey, store })).rejects.toThrow('needs --files-url')
+    await expect(registerInstaller({ channel: 'stable', distDir: root, outDir: out, signingKey, store })).rejects.toThrow('needs --files-url or --upload-files')
   })
 
   it('withdraws an installer: the channel stops naming it and lists it as withdrawn', async () => {

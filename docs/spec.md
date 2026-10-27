@@ -107,6 +107,7 @@ By default, the server is static files on R2 or S3 in this layout. Any static se
   installers/<releaseId>/installer.json.sig
   installers/<releaseId>/feeds/<platform>/<feed file>   # immutable, for example latest-mac.yml
   installers/<releaseId>/sparkle/<platform>/appcast.xml # immutable, the Sparkle appcast of the release
+  installers/<releaseId>/files/<file name>              # immutable, an installer file that the store hosts
   channels/<channel>.json                               # mutable, no-store
   channels/<channel>.json.sig
 ```

@@ -508,6 +508,12 @@ pnpm exec ergosphere-it register installer --channel stable --files-url https://
 
 A channel names one installer release, and the release lists the installers of every platform. So register once, after the installers of all platforms are built and uploaded.
 
+A build without a host of its own, for example a nightly build, can keep its installers in the release store. `--upload-files` uploads the installer files of `dist/` that the installer release lists, after it checks each file against the SHA-512 and the size of its feed. Apps download them from `installers/<releaseId>/files/` under `feedUrl` of `ergo.config.ts`, or under `--feed-url`:
+
+```bash
+pnpm exec ergosphere-it register installer --channel nightly --upload-files --store s3://my-app-updates
+```
+
 With Sparkle on macOS, add the appcast that `generate_appcast` made. The release keeps its own copy of it. `--download-page` is where people download the app by hand, when an installer keeps failing:
 
 ```bash
@@ -571,6 +577,8 @@ const store = createReleaseStore({
   putChannel: async ({ bytes, document, signature }, expected) => api.putChannel(document.channel, bytes, signature, expected?.signature),
   // Store the feeds (electron-updater feeds and Sparkle appcasts) before the manifest.
   putInstaller: async ({ bytes, document, feeds, signature }) => api.putInstaller(document.releaseId, bytes, signature, feeds),
+  // Optional, for --upload-files. Returns the URL of the file, absolute or relative to the feed URL.
+  putInstallerFile: async ({ bytes, name, releaseId }) => api.putInstallerFile(releaseId, name, bytes),
   putObject: async ({ bytes, sha256 }) => api.putObject(sha256, bytes),
 })
 ```

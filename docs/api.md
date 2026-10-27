@@ -85,12 +85,12 @@ for (const stage of uploadStages([release], [channel]))
 | `buildInstallerRelease(input)` | Returns the signed installer manifest, and `feeds` and `feedFiles`: one electron-updater feed per platform with every electron-updater file of the platform, and a copy of each Sparkle appcast. A Linux file has a `packageType`: `appimage`, `deb`, `rpm`, or `pacman`. Installer URLs must be absolute. A Sparkle appcast needs `feedUrl`. |
 | `checkSparkleAppcast(appcast, version)` | Throws when the appcast does not offer `version`, or names an archive with a relative URL. `buildInstallerRelease` runs it. |
 | `uploadStages(releases, channelFiles)` | Groups files in upload order: objects, then manifests and feeds, then channel files. |
-| `createReleaseStore(callbacks)` | A `ReleaseStore` from callbacks, for example calls to the API of a release server. It checks the required callbacks, and fills `hasObject` and `name`. |
+| `createReleaseStore(callbacks)` | A `ReleaseStore` from callbacks, for example calls to the API of a release server. It checks the required callbacks, and fills `hasObject` and `name`. The optional `putInstallerFile` hosts an installer file for `--upload-files`, and returns its URL, absolute or relative to the feed URL. |
 | `createFileTreeStore(storage)` | A `ReleaseStore` that keeps the default layout in a `FileTreeStorage`: `read`, `write`, and an optional `list`. |
 | `ChannelConflictError`, `isChannelConflict(error)`, `isReleaseStore(value)` | A store throws `ChannelConflictError` from `putChannel` when the stored channel file is not `expected`, and the publisher tries again. |
 | `createReleaseId(minimum?)` | The next release ID: the current time in milliseconds, or one more than `minimum`. |
 | `feedFileName(platform)` | The feed file that electron-updater reads on a platform, for example `latest-mac.yml`. |
-| Types: `TreeFile`, `BundleRelease`, `BundleDescriptor`, `BundleFile`, `BundleObject`, `InstallerRelease`, `InstallerFeed`, `InstallerFileInput`, `ChannelFileRelease`, `ComponentSpec`, `ReleaseStore`, `ReleaseStoreCallbacks`, `FileTreeStorage`, `Signed`, `StoredDocument` | Data. |
+| Types: `TreeFile`, `BundleRelease`, `BundleDescriptor`, `BundleFile`, `BundleObject`, `InstallerRelease`, `InstallerFeed`, `InstallerFileInput`, `InstallerFileUpload`, `ChannelFileRelease`, `ComponentSpec`, `ReleaseStore`, `ReleaseStoreCallbacks`, `FileTreeStorage`, `Signed`, `StoredDocument` | Data. |
 
 `TreeFile` is `{ key, bytes, headers: { 'Content-Type', 'Cache-Control' }, immutable }`. An immutable file never changes, so a backend can skip it when the key exists.
 
@@ -133,7 +133,7 @@ Internal: the object store and the state file.
 | `/electron-updater` | `createElectronUpdaterInstaller(updater?)`. Without an argument, it creates its own electron-updater instance. `linuxPackageType()`: the package that the app came in on Linux, from the `package-type` resource of electron-builder, or `appimage` without it. |
 | `/sparkle` | `createSparkleInstaller(bridge?)`. Without an argument, it loads the bridge of electron-sparkle-updater, and returns `undefined` when Sparkle is not available. |
 | `/virtual` | Types of `virtual:ergosphere-it/config` for a custom launcher |
-| `ergosphere-it` (bin) | `keygen --out-private-key <path>`, `publish bundle`, `register installer` (with `--files-url`, `--dist`, `--sparkle <platform>=<appcast>`, `--download-page`), `promote`, `rollout`, `withdraw` (bundles and installers). `--store` (or `ERGOSPHERE_IT_STORE`) takes `s3://`, `file://`, or a directory. Without it, the commands use `store` of `ergo.config.ts`. `--bucket` is an old name of `--store`. The S3 endpoint comes from `ERGOSPHERE_IT_S3_ENDPOINT` or `AWS_ENDPOINT_URL_S3`. |
+| `ergosphere-it` (bin) | `keygen --out-private-key <path>`, `publish bundle`, `register installer` (with `--files-url` or `--upload-files`, `--feed-url`, `--dist`, `--sparkle <platform>=<appcast>`, `--download-page`), `promote`, `rollout`, `withdraw` (bundles and installers). `--store` (or `ERGOSPHERE_IT_STORE`) takes `s3://`, `file://`, or a directory. Without it, the commands use `store` of `ergo.config.ts`. `--bucket` is an old name of `--store`. The S3 endpoint comes from `ERGOSPHERE_IT_S3_ENDPOINT` or `AWS_ENDPOINT_URL_S3`. |
 
 Status types: `UpdaterStatus`, `UpdateInfo`, `BundleInfo`, `UpdateRequirement`, `UpdateError`, `UpdateErrorCode`, `RollbackReason`, `DisabledReason`.
 

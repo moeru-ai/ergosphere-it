@@ -1,7 +1,7 @@
 import type { TreeFile } from './index'
 import type { ReleaseStore } from './store'
 
-import { bundleTreeFiles, channelKey, channelTreeFiles, feedTreeFile, installerTreeFiles, objectKey, objectTreeFile } from './tree'
+import { bundleTreeFiles, channelKey, channelTreeFiles, feedTreeFile, installerFileTreeFile, installerTreeFiles, objectKey, objectTreeFile } from './tree'
 
 /**
  * A storage of files: a callback that reads a file and one that writes it. `createFileTreeStore` keeps the default
@@ -51,6 +51,12 @@ export function createFileTreeStore(storage: FileTreeStorage): ReleaseStore {
     putBundle: async bundle => writeAll(bundleTreeFiles(bundle.document.releaseId, bundle)),
     putChannel: async next => writeAll(channelTreeFiles(next.document.channel, next)),
     putInstaller: async installer => writeAll([...installer.feeds.map(feed => feedTreeFile(installer.document.releaseId, feed)), ...installerTreeFiles(installer.document.releaseId, installer)]),
+    async putInstallerFile(file) {
+      const tree = installerFileTreeFile(file)
+      await storage.write(tree)
+
+      return tree.key.split('/').map(encodeURIComponent).join('/')
+    },
     putObject: async object => storage.write(objectTreeFile(object)),
   }
 }

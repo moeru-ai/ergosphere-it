@@ -140,6 +140,15 @@ export type InstallerFileInput
     url: string
   }
 
+/** An installer file that the release store hosts, for an installer release without a host of its own. */
+export interface InstallerFileUpload {
+  bytes: Uint8Array<ArrayBuffer>
+  /** The file name, for example `AIRI-1.5.0-arm64-mac.zip`. electron-updater reads the extension of the URL. */
+  name: string
+  /** The release ID of the installer release. */
+  releaseId: number
+}
+
 export interface InstallerRelease {
   /** `feeds` as files of the default layout. */
   feedFiles: TreeFile[]

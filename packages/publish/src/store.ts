@@ -1,6 +1,6 @@
 import type { BundleManifest, ChannelFile, InstallerManifest, SignedDocument } from '@ergosphere-it/protocol'
 
-import type { BundleObject, InstallerFeed } from './index'
+import type { BundleObject, InstallerFeed, InstallerFileUpload } from './index'
 
 /**
  * Where a publisher keeps releases. The publisher calls it with typed releases, and it stores them in any way: the
@@ -36,6 +36,11 @@ export interface ReleaseStore {
    * Store the feeds before the manifest, so a client that reads the manifest finds them.
    */
   putInstaller: (installer: Signed<InstallerManifest> & { feeds: InstallerFeed[] }) => Promise<void>
+  /**
+   * Hosts an installer file, for an installer release without a host of its own, for example a nightly build. Returns
+   * the URL of the file: absolute, or relative to the feed URL. Without it, installer files need a host of their own.
+   */
+  putInstallerFile?: (file: InstallerFileUpload) => Promise<string>
   putObject: (object: BundleObject) => Promise<void>
 }
 
@@ -94,4 +99,5 @@ export function isReleaseStore(value: unknown): value is ReleaseStore {
 
   return REQUIRED.every(name => typeof store?.[name] === 'function') && typeof store?.hasObject === 'function' && typeof store.name === 'string'
     && (store.listChannels === undefined || typeof store.listChannels === 'function')
+    && (store.putInstallerFile === undefined || typeof store.putInstallerFile === 'function')
 }
