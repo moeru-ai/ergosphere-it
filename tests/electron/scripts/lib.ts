@@ -254,10 +254,7 @@ export class Workspace {
     if (!existsSync(this.logFile))
       return []
 
-    return readFileSync(this.logFile, 'utf8')
-      .split('\n')
-      .filter(Boolean)
-      .map(line => JSON.parse(line) as LoggedEvent)
+    return parseEventLog(readFileSync(this.logFile, 'utf8'))
   }
 
   /** Signs the canary channel file again with the same content. */
@@ -385,6 +382,16 @@ export async function launchApp(workspace: Workspace, options: LaunchOptions): P
     }
     xvfb?.kill()
   }
+}
+
+/**
+ * Parses the event log of the launcher, one JSON event per line. The app appends to the log while a test reads it, so
+ * the last line can be half written. Only lines that end with a newline count, and the next read gets the rest.
+ */
+export function parseEventLog(text: string): LoggedEvent[] {
+  const complete = text.slice(0, text.lastIndexOf('\n') + 1)
+
+  return complete.split('\n').filter(Boolean).map(line => JSON.parse(line) as LoggedEvent)
 }
 
 /** Runs `electron-vite build` with the release ID and the build constants of a variant. */

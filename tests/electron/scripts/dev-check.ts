@@ -14,7 +14,7 @@ import { env, execPath, exit, kill, platform } from 'node:process'
 
 import { delay } from 'es-toolkit'
 
-import { ensureDisplay, findEvent } from './lib.ts'
+import { ensureDisplay, findEvent, parseEventLog } from './lib.ts'
 
 const appRoot = join(import.meta.dirname, '..')
 const work = mkdtempSync(join(tmpdir(), 'ergosphere-dev-'))
@@ -23,7 +23,7 @@ const electronVite = join(dirname(createRequire(import.meta.url).resolve('electr
 const kinds = ['extraPreload', 'sync', 'modulePath', 'nodeWorker', 'asset', 'publicAsset'] as const
 
 function readEvents(): LoggedEvent[] {
-  return existsSync(logFile) ? readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as LoggedEvent) : []
+  return existsSync(logFile) ? parseEventLog(readFileSync(logFile, 'utf8')) : []
 }
 
 const { display, xvfb } = await ensureDisplay()
