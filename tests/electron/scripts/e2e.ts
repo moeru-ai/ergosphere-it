@@ -189,7 +189,7 @@ try {
   mark = lastIndex()
   await workspace.publish(7, { label: 'v7', mainTag: '4' }, { nativeVersion: { max: 2, min: 2 } })
   await workspace.point(7)
-  const skipped = await waitFor('skipped bundle 7', list => findStatus(since(mark)(list), 'manual-install-required', status => status.update.releaseId === createReleaseId(7)))
+  const skipped = await waitFor('skipped bundle 7', list => findStatus(since(mark)(list), 'manual-install-required', status => status.update.releaseId === 7))
   await delay(3000)
   const moved = since(mark)(readEvents()).some(e => e.type === 'boot' || e.type === 'reload')
   await step('6. a bundle for a newer native version is not taken, and needs a manual install', !moved, skipped.update.version)
