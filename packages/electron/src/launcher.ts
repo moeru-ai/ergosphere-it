@@ -393,10 +393,7 @@ class Launcher implements Runtime {
     switch (result.status) {
       case 'available':
         return this.stageBundle(client, result)
-      case 'retry-scheduled':
-        this.setStatus({ error: { code: 'download-failed', message: result.error }, retryAt: result.retryAt.toISOString(), status: 'download-failed', update: this.updateInfo(result.manifest) })
-
-        return
+      case 'needs-newer-native-version':
       case 'up-to-date': {
         // An installer that waits for its retry is the update that the app knows about, not "up to date".
         const installerFailure = [...this.installerFailures.values()].at(-1)
@@ -407,11 +404,18 @@ class Launcher implements Runtime {
           return
         else if (installerFailure)
           this.setStatus(installerFailure.status)
+        // The installer check ran first and found no installer to take, so only a manual install reaches the bundle.
+        else if (result.status === 'needs-newer-native-version')
+          this.setStatus({ status: 'manual-install-required', update: this.updateInfo(result.manifest, 'install') })
         else
           this.setStatus({ detail: result.detail, status: 'up-to-date' })
 
         return
       }
+      case 'retry-scheduled':
+        this.setStatus({ error: { code: 'download-failed', message: result.error }, retryAt: result.retryAt.toISOString(), status: 'download-failed', update: this.updateInfo(result.manifest) })
+
+        return
       case 'verification-failed':
         this.setStatus({ error: { code: result.error.code, message: result.error.message }, status: 'verification-failed' })
     }
@@ -563,7 +567,7 @@ class Launcher implements Runtime {
   private async runCheck(force: boolean): Promise<UpdaterStatus> {
     const client = this.client!
     // A notice that the user must see stays while the check runs.
-    if (['download-failed', 'error', 'idle', 'up-to-date', 'verification-failed'].includes(this.status.status))
+    if (['download-failed', 'error', 'idle', 'manual-install-required', 'up-to-date', 'verification-failed'].includes(this.status.status))
       this.setStatus({ status: 'checking' })
 
     try {

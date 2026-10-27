@@ -34,6 +34,8 @@ export interface CheckOptions {
  * The result of a bundle check.
  *
  * - `available`: a verified bundle that this install can take.
+ * - `needs-newer-native-version`: the channel serves a verified bundle that needs a newer native version than this
+ *   install has. Only a new installer can take the app to it, so the host offers an installer or asks for a manual install.
  * - `up-to-date`: nothing to take. `detail` says why, for logs and support. Users see "up to date" in every case.
  * - `retry-scheduled`: the bundle failed to download in this process. The next check waits until `retryAt`, unless it
  *   is forced.
@@ -44,6 +46,7 @@ export type CheckResult
     | { error: ErgosphereError, releaseId?: number, status: 'verification-failed' }
     | { error: string, manifest: BundleManifest, retryAt: Date, status: 'retry-scheduled' }
     | { manifest: BundleManifest, manifestBytes: Uint8Array<ArrayBuffer>, signature: string, status: 'available' }
+    | { manifest: BundleManifest, status: 'needs-newer-native-version' }
 
 /** The installed app, for installer checks. */
 export interface InstalledApp {
@@ -125,7 +128,7 @@ export interface UpdateClientOptions {
 }
 
 /** Why a check found nothing to take. */
-export type UpToDateDetail = 'app-newer-than-feed' | 'needs-newer-native-version' | 'not-in-cohort' | 'not-in-rollout' | 'nothing-published'
+export type UpToDateDetail = 'app-newer-than-feed' | 'not-in-cohort' | 'not-in-rollout' | 'nothing-published'
 
 const CODE_COMPONENTS = new Set<Component['type']>(['electron-main', 'electron-preload'])
 const INSTALLER_KEY = 'installer'
@@ -473,7 +476,7 @@ export class UpdateClient {
     }
     catch (error) {
       if (error instanceof CandidateError && error.code === 'native-version-mismatch')
-        return { detail: 'needs-newer-native-version', status: 'up-to-date' }
+        return { manifest, status: 'needs-newer-native-version' }
 
       throw error
     }

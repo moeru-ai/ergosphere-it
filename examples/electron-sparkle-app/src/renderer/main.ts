@@ -20,6 +20,8 @@ function describe(status: UpdaterStatus): string {
       return `The update check failed. (${status.error.code})`
     case 'idle':
       return ''
+    case 'manual-install-required':
+      return `${status.update.version} needs a new install. Download it from the website.`
     case 'preparing':
       return `Preparing ${status.update.version}…`
     case 'ready':

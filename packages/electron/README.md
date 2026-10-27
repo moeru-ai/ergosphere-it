@@ -413,7 +413,8 @@ Define the events next to your other Eventa contracts, and handle them in main w
 | `status.status` | What to show | Fields |
 | --- | --- | --- |
 | `idle`, `checking` | Nothing, or a spinner for a manual check | |
-| `up-to-date` | "Up to date" for a manual check | `detail` explains why, for logs and support: `nothing-published`, `not-in-rollout`, `not-in-cohort`, `needs-newer-native-version`, `app-newer-than-feed` |
+| `up-to-date` | "Up to date" for a manual check | `detail` explains why, for logs and support: `nothing-published`, `not-in-rollout`, `not-in-cohort`, `app-newer-than-feed` |
+| `manual-install-required` | "A new version is out. Download it from the website." with a link to your download page | `update`, the bundle that needs a newer native version. The channel offers no installer that this app can install. |
 | `downloading` | A progress bar, and the rate | `update`, `percent` from 0 to 100, `downloadedBytes` of `totalBytes`, and `bytesPerSecond`, the average since the download started |
 | `preparing` | A progress bar, for work after the download, for example a Sparkle patch | `update`, `percent` from 0 to 100 |
 | `download-failed` | Nothing, or "Update paused" | `update`, `retryAt`, `error`. The updater tries again at `retryAt`. A manual check tries at once. |
@@ -509,6 +510,12 @@ pnpm exec ergosphere-it register installer --channel stable --files-url https://
 
 A channel names one installer release, and the release lists the installers of every platform. So register once, after the installers of all platforms are built and uploaded.
 
+A build without a host of its own, for example a nightly build, can keep its installers in the release store. `--upload-files` uploads the installer files of `dist/` that the installer release lists, after it checks each file against the SHA-512 and the size of its feed. Apps download them from `installers/<releaseId>/files/` under `feedUrl` of `ergo.config.ts`, or under `--feed-url`:
+
+```bash
+pnpm exec ergosphere-it register installer --channel nightly --upload-files --store s3://my-app-updates
+```
+
 With Sparkle on macOS, add the appcast that `generate_appcast` made. The release keeps its own copy of it. `--download-page` is where people download the app by hand, when an installer keeps failing:
 
 ```bash
@@ -572,6 +579,8 @@ const store = createReleaseStore({
   putChannel: async ({ bytes, document, signature }, expected) => api.putChannel(document.channel, bytes, signature, expected?.signature),
   // Store the feeds (electron-updater feeds and Sparkle appcasts) before the manifest.
   putInstaller: async ({ bytes, document, feeds, signature }) => api.putInstaller(document.releaseId, bytes, signature, feeds),
+  // Optional, for --upload-files. Returns the URL of the file, absolute or relative to the feed URL.
+  putInstallerFile: async ({ bytes, name, releaseId }) => api.putInstallerFile(releaseId, name, bytes),
   putObject: async ({ bytes, sha256 }) => api.putObject(sha256, bytes),
 })
 ```
@@ -765,7 +774,7 @@ On macOS, `pnpm -F @ergosphere-it/tests-electron-sparkle demo` installs a new in
 | A new bundle never reports health | It goes back: in place after a reload, after the last allowed start after a restart. |
 | The installer bundle fails | It shows a window that asks the user to install the app again. It does not restart in a loop. |
 | You withdraw a bundle | Apps that run it go back at the next check, and say why. No app downloads it again. |
-| A bundle needs a newer native version | Apps stay on their bundle, and report `needs-newer-native-version`. When the channel has a newer installer, they offer it. |
+| A bundle needs a newer native version | Apps stay on their bundle. When the channel has a newer installer, they offer it. Otherwise they report `manual-install-required`. |
 | The server goes back to a backup | Apps never go back to an older release. Publish a newer release to move them. |
 | A download fails | It resumes where it stopped. A file with the wrong hash downloads once more. |
 | The app runs from the Mac App Store or the Microsoft Store | Updates are off. Store rules forbid downloaded code. |

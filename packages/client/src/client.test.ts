@@ -110,12 +110,12 @@ describe('updateClient check', () => {
     expect(await client.check()).toMatchObject({ error: { code: 'channel-replayed' }, status: 'verification-failed' })
   })
 
-  it('reports a bundle for a newer native version as up to date with a detail, and does not stage it', async () => {
+  it('reports a bundle for a newer native version with its manifest, and does not stage it', async () => {
     await server.publishBundle(11, installerFiles, { nativeVersion: { max: 4, min: 4 } })
     await server.publishChannel(11)
     const client = await createClient()
 
-    expect(await client.check()).toEqual({ detail: 'needs-newer-native-version', status: 'up-to-date' })
+    expect(await client.check()).toMatchObject({ manifest: { nativeVersion: { max: 4, min: 4 }, releaseId: 11 }, status: 'needs-newer-native-version' })
     expect((await client.state()).deferred).toBeUndefined()
   })
 
@@ -727,7 +727,7 @@ describe('updateClient state and channel file rules', () => {
     await server.publishChannel(11)
     const oldInstall = await createClient({ nativeVersion: 3 })
     const checked = await oldInstall.check()
-    expect(checked).toEqual({ detail: 'needs-newer-native-version', status: 'up-to-date' })
+    expect(checked).toMatchObject({ manifest: { releaseId: 11 }, status: 'needs-newer-native-version' })
 
     // The bundle was staged by an install that supported it, then the app went back to an older install.
     const newInstall = await createClient({ nativeVersion: 4 })

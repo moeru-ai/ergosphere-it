@@ -1,6 +1,7 @@
 import type { ChannelFile, InstallerPackageType, SigningKey, TrustedKey } from '@ergosphere-it/protocol'
 import type { ChannelFileInput, InstallerFileInput, ReleaseStore, StoredDocument } from '@ergosphere-it/publish'
 
+import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
@@ -47,12 +48,20 @@ export interface InstallerCommandOptions extends PublishContext {
   feedUrl?: string
   /**
    * The URL where the electron-builder installer files are, for example
-   * `https://github.com/<owner>/<repo>/releases/download/v1.5.0`. Without it, the release has no electron-updater file.
+   * `https://github.com/<owner>/<repo>/releases/download/v1.5.0`. Without it or `uploadFiles`, the release has no
+   * electron-updater file.
    */
   filesUrl?: string
+  /** Reports each hosted installer file, for logs. The CLI prints it. */
+  onUpload?: (upload: InstallerFileUploaded) => void
   outDir: string
   /** Sparkle appcasts by platform, for example `{ 'darwin-arm64': 'dist/appcast.xml' }`. */
   sparkleAppcasts?: Record<string, string>
+  /**
+   * Uploads the electron-builder installer files of `distDir` to the release store, and serves them under `feedUrl`.
+   * Use it for a build without a host of its own, for example a nightly build. It needs `feedUrl`, and no `filesUrl`.
+   */
+  uploadFiles?: boolean
 }
 
 /** What every command that publishes needs. */
@@ -86,6 +95,14 @@ export type PublishProgress
     | { newBytes: number, newObjects: number, skipped: number, type: 'checked' }
     | { newBytes: number, newObjects: number, type: 'uploading', uploadedBytes: number, uploadedObjects: number }
     | { releaseId: number, type: 'manifest' }
+
+/** An installer file that `registerInstaller` uploaded to the release store. */
+interface InstallerFileUploaded {
+  durationMs: number
+  name: string
+  size: number
+  url: string
+}
 
 /** Returns the root of the git work tree that has the path, or `undefined` when no work tree has it. */
 export function gitRootOf(path: string): string | undefined {
@@ -203,8 +220,14 @@ export async function publishBundle(options: BundleCommandOptions): Promise<{ re
  */
 export async function registerInstaller(options: InstallerCommandOptions): Promise<{ files: string[], releaseId: number }> {
   const { channel, signingKey, store } = options
+  if (options.uploadFiles && options.filesUrl !== undefined)
+    throw new Error('ergosphere-it: register installer takes --files-url or --upload-files, not both.')
+
+  const electronBuilderFiles = options.uploadFiles
+    ? await uploadInstallerFiles(options)
+    : options.filesUrl === undefined ? [] : readElectronBuilderFeeds(options.distDir).map(({ file, name }) => ({ ...file, url: `${options.filesUrl!.replace(/\/+$/, '')}/${encodeURIComponent(name)}` }))
   const artifacts: InstallerFileInput[] = [
-    ...(options.filesUrl === undefined ? [] : readElectronBuilderFeeds(options.distDir, options.filesUrl)),
+    ...electronBuilderFiles,
     ...Object.entries(options.sparkleAppcasts ?? {}).map(([platform, path]): InstallerFileInput => ({
       appcast: new Uint8Array(readFileSync(path)) as Uint8Array<ArrayBuffer>,
       format: 'sparkle',
@@ -212,7 +235,7 @@ export async function registerInstaller(options: InstallerCommandOptions): Promi
     })),
   ]
   if (artifacts.length === 0)
-    throw new Error('ergosphere-it: register installer needs --files-url for electron-builder installers, or --sparkle <platform>=<appcast>.')
+    throw new Error('ergosphere-it: register installer needs --files-url or --upload-files for electron-builder installers, or --sparkle <platform>=<appcast>.')
 
   const release = await installerReleaseFromBuild({ artifacts, downloadPage: options.downloadPage, feedUrl: options.feedUrl, outDir: options.outDir, signingKey })
   await store.putInstaller({ ...release.signed, document: release.manifest, feeds: release.feeds })
@@ -389,12 +412,11 @@ async function readChannel(context: PublishContext, channel: string): Promise<un
  * macOS updates install the zip, Windows updates the NSIS installer, and Linux updates the AppImage, deb, rpm, or
  * pacman package that the app came in.
  */
-function readElectronBuilderFeeds(distDir: string, filesUrl: string): InstallerFileInput[] {
+function readElectronBuilderFeeds(distDir: string): { file: Omit<Extract<InstallerFileInput, { format: 'electron-updater' }>, 'url'>, name: string }[] {
   if (!existsSync(distDir))
     throw new Error(`ergosphere-it: ${distDir} does not exist. Run electron-builder first, or pass --dist.`)
 
-  const base = filesUrl.replace(/\/+$/, '')
-  const artifacts = new Map<string, InstallerFileInput>()
+  const artifacts = new Map<string, { file: Omit<Extract<InstallerFileInput, { format: 'electron-updater' }>, 'url'>, name: string }>()
   for (const name of readdirSync(distDir).filter(name => /^latest.*\.yml$/.test(name)).sort()) {
     const feed = parse(readFileSync(join(distDir, name), 'utf8')) as { files?: { sha512: string, size: number, url: string }[] }
     for (const file of feed.files ?? []) {
@@ -403,7 +425,7 @@ function readElectronBuilderFeeds(distDir: string, filesUrl: string): InstallerF
       if (!found || artifacts.has(key!))
         continue
 
-      artifacts.set(key!, { format: 'electron-updater', ...found, sha512: file.sha512, size: file.size, url: `${base}/${encodeURIComponent(file.url)}` })
+      artifacts.set(key!, { file: { format: 'electron-updater', ...found, sha512: file.sha512, size: file.size }, name: file.url })
     }
   }
   if (artifacts.size === 0)
@@ -427,6 +449,38 @@ function unwrapPem(text: string): string {
   catch {
     return value
   }
+}
+
+/**
+ * Uploads the installer files that the electron-builder feeds of `distDir` name, after a check of each file against the
+ * SHA-512 and the size of its feed, and returns them with their URLs under `feedUrl`. Each file is read into memory, so
+ * at most 2 upload at once.
+ */
+async function uploadInstallerFiles(options: InstallerCommandOptions): Promise<InstallerFileInput[]> {
+  const { distDir, feedUrl, store } = options
+  if (!feedUrl)
+    throw new Error('ergosphere-it: --upload-files needs the feed URL. Set feedUrl in ergo.config.ts, or pass --feed-url.')
+  if (!store.putInstallerFile)
+    throw new Error(`ergosphere-it: ${store.name} cannot host installer files. Pass --files-url with the host of the files.`)
+
+  const releaseId = readBuildInfo(options.outDir).installerReleaseId
+  const base = `${feedUrl.replace(/\/+$/, '')}/`
+  const files = readElectronBuilderFeeds(distDir)
+  // Indexed, so the manifest keeps the order of the feeds and does not depend on which upload finished first.
+  const uploaded: InstallerFileInput[] = Array.from({ length: files.length })
+  await eachConcurrently(files.map((entry, index) => ({ ...entry, index })), 2, async ({ file, index, name }) => {
+    const bytes = new Uint8Array(readFileSync(join(distDir, name))) as Uint8Array<ArrayBuffer>
+    const sha512 = createHash('sha512').update(bytes).digest('base64')
+    if (bytes.byteLength !== file.size || sha512 !== file.sha512)
+      throw new Error(`ergosphere-it: ${join(distDir, name)} does not match its electron-builder feed. Build the installers again.`)
+
+    const started = performance.now()
+    const url = new URL(await store.putInstallerFile!({ bytes, name, releaseId }), base).href
+    options.onUpload?.({ durationMs: performance.now() - started, name, size: file.size, url })
+    uploaded[index] = { ...file, url }
+  })
+
+  return uploaded
 }
 
 /**

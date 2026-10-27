@@ -3,7 +3,7 @@
 
 import type { SignedDocument } from '@ergosphere-it/protocol'
 
-import type { BundleObject, InstallerFeed, TreeFile } from './index'
+import type { BundleObject, InstallerFeed, InstallerFileUpload, TreeFile } from './index'
 
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 const NO_STORE = 'no-store'
@@ -31,6 +31,11 @@ export function feedTreeFile(releaseId: number, feed: InstallerFeed): TreeFile {
   const dir = feed.format === 'sparkle' ? 'sparkle' : 'feeds'
 
   return treeFile(`installers/${releaseId}/${dir}/${feed.platform}/${feed.name}`, feed.bytes, feed.contentType, true)
+}
+
+/** The file of a hosted installer file in the tree: `installers/<releaseId>/files/<name>`. It never changes. */
+export function installerFileTreeFile(file: InstallerFileUpload): TreeFile {
+  return treeFile(`installers/${file.releaseId}/files/${file.name}`, file.bytes, 'application/octet-stream', true)
 }
 
 /** The files of a signed installer manifest in the tree: `installers/<releaseId>/installer.json` and its signature. */
