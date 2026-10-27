@@ -627,8 +627,9 @@ class Launcher implements Runtime {
     const { manifest } = available
     const requirement = requirementOf(this.running.components, manifest.components)
     const info = this.updateInfo(manifest, requirement === 'restart' ? 'restart' : 'reload')
+    const started = Date.now()
     const staged = await client.stage(available, {
-      onProgress: ({ downloadedBytes, totalBytes }) => this.setStatus({ percent: percentOf(downloadedBytes, totalBytes), status: 'downloading', update: info }),
+      onProgress: ({ downloadedBytes, totalBytes }) => this.setStatus(downloadingStatus(info, started, downloadedBytes, totalBytes)),
     })
     if (staged.status === 'failed') {
       this.setStatus({ error: { code: 'download-failed', message: `${staged.path}: ${staged.detail}` }, retryAt: staged.retryAt.toISOString(), status: 'download-failed', update: info })
@@ -658,9 +659,10 @@ class Launcher implements Runtime {
       this.installerFailures.set(releaseId, { count, retryAt, status })
       this.setStatus(status)
     }
+    const started = Date.now()
     const onProgress = (progress: InstallerProgress) => this.setStatus(progress.phase === 'prepare'
       ? { percent: progress.percent, status: 'preparing', update: info }
-      : { percent: percentOf(progress.transferredBytes, progress.totalBytes), status: 'downloading', update: info })
+      : downloadingStatus(info, started, progress.transferredBytes, progress.totalBytes))
 
     let appcast: LoopbackFile | undefined
     try {
@@ -758,6 +760,20 @@ function classifyError(error: unknown): UpdateError {
   const kind: UpdateErrorCode = typeof code === 'string' && /^E[A-Z_]+$/.test(code) && !NETWORK_ERROR_CODES.has(code) ? 'storage-error' : 'network-error'
 
   return { code: kind, message }
+}
+
+/** The status of a download that started at `started`, with its bytes and its average rate. */
+function downloadingStatus(update: UpdateInfo, started: number, downloadedBytes: number, totalBytes: number): UpdaterStatus {
+  const seconds = (Date.now() - started) / 1000
+
+  return {
+    bytesPerSecond: seconds > 0 ? Math.round(downloadedBytes / seconds) : 0,
+    downloadedBytes,
+    percent: percentOf(downloadedBytes, totalBytes),
+    status: 'downloading',
+    totalBytes,
+    update,
+  }
 }
 
 /** Downloads a small file, and returns its bytes when their SHA-512 is `sha512`. */

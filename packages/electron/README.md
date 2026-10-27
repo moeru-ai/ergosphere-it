@@ -414,7 +414,8 @@ Define the events next to your other Eventa contracts, and handle them in main w
 | --- | --- | --- |
 | `idle`, `checking` | Nothing, or a spinner for a manual check | |
 | `up-to-date` | "Up to date" for a manual check | `detail` explains why, for logs and support: `nothing-published`, `not-in-rollout`, `not-in-cohort`, `needs-newer-native-version`, `app-newer-than-feed` |
-| `downloading` | A progress bar | `update`, `percent` from 0 to 100 |
+| `downloading` | A progress bar, and the rate | `update`, `percent` from 0 to 100, `downloadedBytes` of `totalBytes`, and `bytesPerSecond`, the average since the download started |
+| `preparing` | A progress bar, for work after the download, for example a Sparkle patch | `update`, `percent` from 0 to 100 |
 | `download-failed` | Nothing, or "Update paused" | `update`, `retryAt`, `error`. The updater tries again at `retryAt`. A manual check tries at once. |
 | `ready` | A button, with its text from `update.requires` | `update` |
 | `applying` | "Restarting…" for a moment | `update` |
