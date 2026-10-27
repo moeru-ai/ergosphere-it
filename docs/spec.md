@@ -91,7 +91,7 @@ One trusted Ed25519 key signs both layers. The native part contains the public k
 
   The PoC and LobeHub require an exact hash match at runtime. That design forces a full update on every native dependency bump. It also needs `.git` at build time, which breaks the Nix build.
 
-- A client reports a bundle for another native version as up to date, with the detail `needs-newer-native-version`. When the channel also names a newer installer, the client offers the installer.
+- A client does not take a bundle for another native version. It reports `needs-newer-native-version` with the bundle manifest. When the channel also names a newer installer, the client offers the installer. Otherwise the host asks users to install a new version by hand. It must not show "up to date", because users can do nothing to get the bundle.
 - When a staged bundle no longer fits the native version, for example after the app went back to an older installer, the client keeps it as `deferred` and tries it again on each boot.
 
 ### Default layout

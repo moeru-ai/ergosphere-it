@@ -18,6 +18,8 @@ const notice = computed(() => {
       return { bad: true, body: `The download of ${status.update.version} failed. The app tries again at ${new Date(status.retryAt).toLocaleTimeString()}.`, title: 'Update paused' }
     case 'downloading':
       return { body: status.update.version, percent: status.percent, title: 'Downloading update' }
+    case 'manual-install-required':
+      return { body: `${status.update.version} needs a new install. Download it from the website.`, title: 'New version available' }
     case 'ready':
       return { action: labels[status.update.requires], body: `${status.update.version} is downloaded.`, title: 'Update ready' }
     case 'rolled-back':
