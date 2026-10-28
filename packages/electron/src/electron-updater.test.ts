@@ -24,6 +24,7 @@ const update = { sha512: 'bWFj', size: 100, updaterFeedUrl: 'https://updates.tes
 function fakeUpdater(version: string | undefined, file = '/tmp/AIRI-arm64-mac.zip') {
   const emitter = new EventEmitter()
   const updater = Object.assign(emitter, {
+    allowDowngrade: false,
     autoDownload: true,
     autoInstallOnAppQuit: true,
     checkForUpdates: vi.fn(async () => (version === undefined ? null : { cancellationToken: undefined, isUpdateAvailable: true, updateInfo: { version } })),
@@ -49,13 +50,15 @@ describe('createElectronUpdaterInstaller', () => {
     expect(file).toBe('/tmp/AIRI-arm64-mac.zip')
     expect(updater.setFeedURL).toHaveBeenCalledWith({ provider: 'generic', url: update.updaterFeedUrl })
     expect([updater.autoDownload, updater.autoInstallOnAppQuit]).toEqual([false, false])
+    // The release ID of the signed manifest orders installers, so a lower version installs too.
+    expect(updater.allowDowngrade).toBe(true)
     expect(progress).toEqual([{ phase: 'download', totalBytes: 100, transferredBytes: 40 }])
     expect(updater.listenerCount('download-progress')).toBe(0)
   })
 
   it('refuses a feed that offers another version than the signed installer manifest', async () => {
     await expect((await createElectronUpdaterInstaller(fakeUpdater('0.15.0'))).download(update, () => {})).rejects.toThrow('offers 0.15.0')
-    await expect((await createElectronUpdaterInstaller(fakeUpdater(undefined))).download(update, () => {})).rejects.toThrow('no newer version')
+    await expect((await createElectronUpdaterInstaller(fakeUpdater(undefined))).download(update, () => {})).rejects.toThrow('must not be the version of this app')
   })
 
   it('installs through quitAndInstall, and installs on quit only until it discards the update', async () => {
