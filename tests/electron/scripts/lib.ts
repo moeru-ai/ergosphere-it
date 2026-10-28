@@ -36,6 +36,7 @@ export type AppEvent
   = | LauncherEvent
     | { asset: boolean, extraPreload: boolean, modulePath: boolean, nodeWorker: boolean, preReady: string, publicAsset: boolean, releaseId: number, sync: boolean, type: 'bundle-files' }
     | { mainTag: string, releaseId: number, type: 'bundle-main' }
+    | { releaseId: number, type: 'download-clicked' }
     | { releaseId: number, type: 'page-mounted', url: string, version: string }
 
 export interface BuildOptions {
@@ -56,6 +57,8 @@ export interface LaunchOptions {
   healthMs?: number
   /** Installs with an installer of the e2e test, which downloads and quits instead of installing. */
   installer?: 'file' | 'sparkle'
+  /** Turns off automatic downloads. The app downloads an available update a few seconds later, as a user does. */
+  manualDownload?: boolean
   show?: boolean
 }
 
@@ -347,7 +350,7 @@ export function findStatus<Kind extends UpdaterStatus['status']>(
 
 /** Starts the test build of the example app against an update server. Returns a function that stops every app process. */
 export async function launchApp(workspace: Workspace, options: LaunchOptions): Promise<() => void> {
-  const { applyAll = true, capture, checkMs = 1000, debugPort, feedUrl, healthMs = 4000, installer, show = false } = options
+  const { applyAll = true, capture, checkMs = 1000, debugPort, feedUrl, healthMs = 4000, installer, manualDownload = false, show = false } = options
   const { display, xvfb } = await ensureDisplay()
   const appEnv = {
     ...env,
@@ -356,6 +359,7 @@ export async function launchApp(workspace: Workspace, options: LaunchOptions): P
     ...(show ? { ERGOSPHERE_SHOW_WINDOW: '1' } : {}),
     ...(installer ? { ERGOSPHERE_E2E_INSTALLER: installer } : {}),
     ...(applyAll ? { ERGOSPHERE_E2E_APPLY: '1' } : {}),
+    ...(manualDownload ? { ERGOSPHERE_E2E_MANUAL_DOWNLOAD: '1' } : {}),
     ERGOSPHERE_BOOT_HEALTH_MS: '15000',
     ERGOSPHERE_CHECK_MS: String(checkMs),
     ERGOSPHERE_FEED_URL: feedUrl,

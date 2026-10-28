@@ -62,6 +62,11 @@ export interface Runtime {
 export interface Updater {
   /** Applies the ready update: a reload, a restart, or a full install. Rejects when no update is ready. */
   applyUpdate: () => Promise<void>
+  /**
+   * Whether a check downloads the update that it finds. When it is off, the status is `available` until the app calls
+   * `downloadUpdate()`, for example on a metered network. Setting it saves it for the next launches. Defaults to true.
+   */
+  autoDownload: boolean
   /** The channel that the app follows. Setting it saves it for the next launches. */
   channel: string
   /** Checks now, also when a failed download waits for its retry time. Automatic checks run without it. */
@@ -78,6 +83,11 @@ export interface Updater {
   delayHealthCheck: (seconds: number) => void
   /** Forgets the last rollback, after the app told the user. */
   dismissRollback: () => Promise<void>
+  /**
+   * Downloads the `available` update, when `autoDownload` is off. It resolves with the status after the download, for
+   * example `ready`. It does nothing when no update is available.
+   */
+  downloadUpdate: () => Promise<UpdaterStatus>
   /**
    * Records that the bundle works. Call it when the app is usable, for example after the main page reports that its
    * stores loaded and its first screen rendered. A new bundle that does not call it in time is rolled back.

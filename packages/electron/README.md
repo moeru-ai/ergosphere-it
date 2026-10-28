@@ -359,6 +359,7 @@ The updater lives in the main process. How your pages reach it is up to you: IPC
 | `updater.status`, `updater.onStatus(listener)` | The status for an update notice. It is plain data, so it can go to a page as it is. |
 | `updater.applyUpdate()` | Applies the ready update: a reload, a restart, or an install. Call it when the user agrees. |
 | `updater.checkForUpdates()` | A manual check, for example from a menu. Automatic checks run without it. |
+| `updater.autoDownload`, `updater.downloadUpdate()` | Set `autoDownload = false` to ask before a download, for example on a metered network. A check then reports `available`, and `downloadUpdate()` downloads the update. |
 | `updater.dismissRollback()` | Forgets the rollback notice after the user saw it. |
 | `updater.markBundleHealthy()` | Tells the launcher that the bundle works. |
 | `updater.delayHealthCheck(seconds)` | Gives a slow start more time. |

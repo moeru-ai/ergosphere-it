@@ -196,6 +196,7 @@ The manifest is canonical JSON (JCS, RFC 8785). The signature covers the exact b
 | `sparkle` | A Sparkle appcast, which the release hosts at `installers/<releaseId>/sparkle/<platform>/appcast.xml` | Sparkle, which takes the smallest delta chain or the archive | The `sha512` of the appcast before Sparkle reads it, and the version that Sparkle prepared |
 
 - The launcher owns the schedule. It decides when to check, download, and install. An installer turns off any schedule of its own, for example the automatic checks of Sparkle. Otherwise the installer skips the channel, the rollout, and the withdrawn list.
+- When the app turned off automatic downloads, a check reports a new installer as `available`, as it does a bundle. The installer downloads only when the app calls `downloadUpdate()`.
 - An electron-updater feed is not signed. After electron-updater downloads a file, the launcher checks it against the signed manifest. A mismatch fails the update with `installer-mismatch`, and the next attempt waits longer, as a failed bundle download does.
 - The release ID orders installers, not the version. electron-updater installs a lower version too, for example a dev build after a nightly build of the same release. It skips a version that is the same as the version of the app, so each installer release needs a version of its own.
 - Sparkle reads an appcast only from HTTP or HTTPS, not from `file://`. So the launcher downloads the appcast, checks it, and serves the checked bytes at a random path on 127.0.0.1. Sparkle reads exactly the checked bytes. The server stays until the update installs or is dropped, because Sparkle can read the appcast again when it installs.
@@ -243,7 +244,7 @@ bundles/<releaseId>/              # materialized bundles, read only after activa
 manifests/<releaseId>.json(.sig)  # signed manifests of the kept bundles
 state.json                        # staged, current, previous, deferred, blocked, withdrawn, boot attempts,
                                   # channel issue times, and the last rollback
-preferences.json                  # the channel and cohorts that the app set at run time
+preferences.json                  # the channel, cohorts, and automatic download setting that the app set at run time
 ```
 
 - The SDK writes `state.json` atomically: it writes a temporary file, flushes it to disk, and renames it. On Windows, it retries a rename for a short time when another process holds the file.
@@ -262,7 +263,7 @@ preferences.json                  # the channel and cohorts that the app set at 
 ### Download and staging
 
 1. Fetch the channel file and check its signature. If the bundle is not newer than `current`, or the install is outside the cohorts or the rollout, stop.
-2. Fetch the manifest and check its signature, release ID, native version, and platform.
+2. Fetch the manifest and check its signature, release ID, native version, and platform. When the app turned off automatic downloads, report the bundle as `available` and stop. The app starts the download, and the steps continue from here.
 3. Check every file path. Reject absolute paths, `..` segments, backslashes, drive letters, and duplicate paths. The PoC and `ota-lab` did not do this check during staging.
 4. For each file, look for its object in this order: the local content store, the running bundle, the installer bundle, and then the network. The SDK hashes every object before it uses it, also objects that are already on disk. The PoC skipped this check for existing objects.
 5. Write objects as `.part` files, hash them, then rename them. Downloads stream to disk, run a few at a time, and stop when no bytes arrive for a while.

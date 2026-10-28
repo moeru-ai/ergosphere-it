@@ -7,6 +7,8 @@ function describe(status: UpdaterStatus): string {
   switch (status.status) {
     case 'applying':
       return `Installing ${status.update.version}…`
+    case 'available':
+      return `${status.update.version} is available.`
     case 'checking':
       return 'Checking for updates…'
     case 'disabled':

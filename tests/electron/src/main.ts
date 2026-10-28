@@ -38,6 +38,23 @@ catch (error) {
   preReady = error instanceof Error ? error.message : String(error)
 }
 
+// A variant that turns off automatic downloads. The test plays the user: it downloads an available update later, as a
+// click on the button does, so the automatic checks between run while the update is available.
+if (env.ERGOSPHERE_E2E_MANUAL_DOWNLOAD === '1') {
+  updater.autoDownload = false
+  let clicked = false
+  updater.onStatus((status) => {
+    if (status.status !== 'available' || clicked)
+      return
+
+    clicked = true
+    setTimeout(() => {
+      logEvent({ releaseId: status.update.releaseId, type: 'download-clicked' })
+      void updater.downloadUpdate()
+    }, 3000)
+  })
+}
+
 // The test plays the user: it applies every update that is ready, as a click on the button does, and closes a
 // rollback notice after it was shown.
 if (env.ERGOSPHERE_E2E_APPLY === '1') {
