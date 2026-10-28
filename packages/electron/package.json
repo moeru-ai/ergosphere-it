@@ -84,14 +84,14 @@
     "virtual.d.ts"
   ],
   "engines": {
-    "node": ">=24"
+    "node": "^24.22.1 || >=26.12.1"
   },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
-    "electron": ">=38",
+    "electron": "^43.8.4 || ^44.10.0 || >=45.1.0",
     "electron-sparkle-updater": "^0.5.3",
     "electron-updater": "^6.8.9",
     "electron-vite": "^6.0.0",

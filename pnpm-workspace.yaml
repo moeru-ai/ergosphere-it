@@ -48,7 +48,8 @@ catalog:
   canonicalize: ^5.1.0
   cspell: ^10.0.1
   doctoc: ^2.5.0
-  electron: 43.4.1
+  # Includes Node.js 24.22.1, with fixes for CVE-2026-111497 and CVE-2026-105483.
+  electron: 43.8.4
   electron-builder: ^26.18.0
   electron-sparkle-updater: ^0.5.3
   electron-updater: ^6.8.9
