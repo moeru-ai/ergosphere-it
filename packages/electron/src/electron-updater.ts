@@ -15,12 +15,18 @@ export type { ElectronUpdaterInstaller, InstallerFile, InstallerProgress } from 
  * Without an argument, it creates its own electron-updater instance, so the `autoUpdater` of the app keeps its own
  * feed and settings. It sets the feed to the generic feed of each installer release, and turns off automatic download
  * and install, because the launcher decides when to download and when to install.
+ *
+ * The launcher also decides which installer is newer, by the release ID of the signed manifest. So electron-updater
+ * takes an installer with a lower version too, for example `0.13.1-dev.900` after `0.13.1-nightly.20`. electron-updater
+ * still skips an installer with the same version as the app, so each installer release needs a version of its own.
  */
 export async function createElectronUpdaterInstaller(updater?: AppUpdater): Promise<ElectronUpdaterInstaller> {
   const instance = updater ?? await createUpdaterInstance()
   // The launcher owns the schedule, so electron-updater never downloads or installs by itself.
   instance.autoDownload = false
   instance.autoInstallOnAppQuit = false
+  // The release ID of the signed manifest orders installers, not the version.
+  instance.allowDowngrade = true
 
   return {
     discard() {
@@ -35,7 +41,7 @@ export async function createElectronUpdaterInstaller(updater?: AppUpdater): Prom
       try {
         const result = await instance.checkForUpdates()
         if (!result?.isUpdateAvailable)
-          throw new Error(`electron-updater finds no newer version than this app at ${update.updaterFeedUrl}. The installer version must be newer than the app version.`)
+          throw new Error(`electron-updater finds no update at ${update.updaterFeedUrl}. The installer version must not be the version of this app.`)
         if (result.updateInfo.version !== update.version)
           throw new Error(`The feed at ${update.updaterFeedUrl} offers ${result.updateInfo.version}, and the installer manifest says ${update.version}.`)
 
