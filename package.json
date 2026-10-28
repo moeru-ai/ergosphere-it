@@ -1,7 +1,7 @@
 {
   "name": "@ergosphere-it/root",
   "type": "module",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "private": true,
   "packageManager": "pnpm@11.24.0",
   "description": "Over-the-air updates for Electron apps, with signed releases, staged rollouts, and automatic rollback",
