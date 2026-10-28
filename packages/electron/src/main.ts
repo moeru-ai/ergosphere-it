@@ -36,12 +36,19 @@ export const activeBundle: ActiveBundle = {
 }
 
 /**
- * The updater. It checks by itself at launch and then on an interval. Call `checkForUpdates()` for a manual check,
- * `applyUpdate()` when the user agrees, and `markBundleHealthy()` when the app works. The app sends `status` to its
+ * The updater. It checks by itself at launch and then on an interval, and downloads what it finds unless `autoDownload`
+ * is off. Call `checkForUpdates()` for a manual check, `downloadUpdate()` for an `available` update, `applyUpdate()` when
+ * the user agrees, and `markBundleHealthy()` when the app works. The app sends `status` to its
  * pages in its own way, for example over IPC or Eventa.
  */
 export const updater: Updater = {
   applyUpdate: () => runtime().updater.applyUpdate(),
+  get autoDownload() {
+    return runtime().updater.autoDownload
+  },
+  set autoDownload(autoDownload) {
+    runtime().updater.autoDownload = autoDownload
+  },
   get channel() {
     return runtime().updater.channel
   },
@@ -57,6 +64,7 @@ export const updater: Updater = {
   },
   delayHealthCheck: seconds => runtime().updater.delayHealthCheck(seconds),
   dismissRollback: () => runtime().updater.dismissRollback(),
+  downloadUpdate: () => runtime().updater.downloadUpdate(),
   markBundleHealthy: () => runtime().updater.markBundleHealthy(),
   onBundleChange: listener => runtime().updater.onBundleChange(listener),
   onEvent: listener => runtime().updater.onEvent(listener),

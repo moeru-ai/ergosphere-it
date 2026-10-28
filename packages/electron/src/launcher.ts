@@ -70,12 +70,17 @@ export interface LauncherOptions extends LauncherConfig {
 /** A file that the launcher serves on 127.0.0.1. */
 interface LoopbackFile { close: () => void, url: string }
 
+/** An update that a check found while `autoDownload` is off. It waits for `downloadUpdate()`. */
+type Offer
+  = | { available: Extract<CheckResult, { status: 'available' }>, kind: 'bundle' }
+    | { available: Extract<InstallerCheckResult, { status: 'available' }>, kind: 'installer' }
+
 interface PendingBundle { components: BundleManifest['components'], info: UpdateInfo }
 
 /** A downloaded installer that waits for `applyUpdate()`, and the server that gives Sparkle its appcast. */
 interface PendingInstaller { appcast?: LoopbackFile, info: UpdateInfo }
 
-interface Preferences { channel?: string, cohorts?: string[] }
+interface Preferences { autoDownload?: boolean, channel?: string, cohorts?: string[] }
 
 /** First wait before an installer that failed to download is tried again. It doubles up to one hour. */
 const INSTALLER_FAILURE_DELAY_MS = 30_000
@@ -97,6 +102,7 @@ class Launcher implements Runtime {
   private readonly buildInfo: BuildInfo
   private readonly bundleChangeListeners = new Set<(bundle: BundleInfo) => void>()
   private readonly bundleRoot: string
+  /** The running check or download. Only one runs at a time. */
   private checking: Promise<UpdaterStatus> | undefined
   private client: undefined | UpdateClient
   private dataDir = ''
@@ -109,6 +115,7 @@ class Launcher implements Runtime {
   /** Failures of each installer release in this process, and the status that the last failure showed. */
   private readonly installerFailures = new Map<number, { count: number, retryAt: number, status: UpdaterStatus }>()
   private readonly locate: Locator<LauncherFileRef>
+  private offer: Offer | undefined
   private readonly options: LauncherOptions
   private pending: PendingBundle | undefined
   private pendingInstaller: PendingInstaller | undefined
@@ -239,6 +246,13 @@ class Launcher implements Runtime {
     this.setStatus({ status: 'idle' })
   }
 
+  /** The update info of a bundle: a reload when only its pages change, a restart otherwise. */
+  private bundleInfo(manifest: BundleManifest): UpdateInfo {
+    const requirement = requirementOf(this.running.components, manifest.components)
+
+    return this.updateInfo(manifest, requirement === 'restart' ? 'restart' : 'reload')
+  }
+
   private async check(force: boolean): Promise<UpdaterStatus> {
     if (this.disabled || !this.client)
       return this.status
@@ -323,6 +337,14 @@ class Launcher implements Runtime {
 
     return {
       applyUpdate: () => this.apply(),
+      get autoDownload() {
+        return launcher.preferences.autoDownload ?? true
+      },
+      set autoDownload(autoDownload) {
+        launcher.writePreferences({ ...launcher.preferences, autoDownload })
+        if (autoDownload && launcher.offer)
+          void launcher.download()
+      },
       get channel() {
         return launcher.preferences.channel ?? launcher.options.channel
       },
@@ -342,6 +364,7 @@ class Launcher implements Runtime {
         if (this.status.status === 'rolled-back')
           this.setStatus({ status: 'idle' })
       },
+      downloadUpdate: () => this.download(),
       markBundleHealthy: () => this.markBundleHealthy(),
       onBundleChange: (listener) => {
         this.bundleChangeListeners.add(listener)
@@ -363,6 +386,24 @@ class Launcher implements Runtime {
         return launcher.status
       },
     }
+  }
+
+  /** Downloads the update of `offer`, after a check or a download that runs now. */
+  private async download(): Promise<UpdaterStatus> {
+    while (this.checking)
+      await this.checking
+
+    const offer = this.offer
+    const client = this.client
+    if (!offer || !client)
+      return this.status
+
+    this.offer = undefined
+    this.checking = this.runDownload(client, offer).finally(() => {
+      this.checking = undefined
+    })
+
+    return this.checking
   }
 
   /** Drops a downloaded installer that the channel now withdraws. */
@@ -392,7 +433,13 @@ class Launcher implements Runtime {
   private async handleCheckResult(client: UpdateClient, result: CheckResult): Promise<void> {
     switch (result.status) {
       case 'available':
-        return this.stageBundle(client, result)
+        if (this.updater.autoDownload)
+          return this.stageBundle(client, result)
+
+        this.offer = { available: result, kind: 'bundle' }
+        this.setStatus({ status: 'available', update: this.bundleInfo(result.manifest) })
+
+        return
       case 'needs-newer-native-version':
       case 'up-to-date': {
         // An installer that waits for its retry is the update that the app knows about, not "up to date".
@@ -567,8 +614,10 @@ class Launcher implements Runtime {
   private async runCheck(force: boolean): Promise<UpdaterStatus> {
     const client = this.client!
     // A notice that the user must see stays while the check runs.
-    if (['download-failed', 'error', 'idle', 'manual-install-required', 'up-to-date', 'verification-failed'].includes(this.status.status))
+    if (['available', 'download-failed', 'error', 'idle', 'manual-install-required', 'up-to-date', 'verification-failed'].includes(this.status.status))
       this.setStatus({ status: 'checking' })
+    // The check finds the update again, or a newer one.
+    this.offer = undefined
 
     try {
       if (this.installer) {
@@ -588,7 +637,13 @@ class Launcher implements Runtime {
 
         const failure = installer.status === 'available' ? this.installerFailures.get(installer.manifest.releaseId) : undefined
         if (installer.status === 'available' && (!failure || force || Date.now() >= failure.retryAt)) {
-          await this.stageInstaller(installer, this.installer)
+          if (this.updater.autoDownload) {
+            await this.stageInstaller(installer, this.installer)
+          }
+          else {
+            this.offer = { available: installer, kind: 'installer' }
+            this.setStatus({ status: 'available', update: installerInfo(installer) })
+          }
 
           return this.status
         }
@@ -605,14 +660,32 @@ class Launcher implements Runtime {
     return this.status
   }
 
+  private async runDownload(client: UpdateClient, offer: Offer): Promise<UpdaterStatus> {
+    try {
+      if (offer.kind === 'installer' && this.installer)
+        await this.stageInstaller(offer.available, this.installer)
+      else if (offer.kind === 'bundle')
+        await this.stageBundle(client, offer.available)
+    }
+    catch (error) {
+      this.setStatus({ error: classifyError(error), status: 'error' })
+    }
+
+    return this.status
+  }
+
   private savePreferences(next: Preferences): void {
-    this.preferences = next
+    this.writePreferences(next)
     if (!this.dataDir)
       return
 
-    writeFileSync(join(this.dataDir, 'preferences.json'), `${JSON.stringify(next, null, 2)}\n`)
-    // A new channel or cohort list needs a new client. A staged bundle stays staged.
+    // A new channel or cohort list needs a new client. A staged bundle stays staged. An available update came from the
+    // old channel, so the next check finds what the new channel serves.
     this.client = this.createClient()
+    if (this.offer) {
+      this.offer = undefined
+      this.setStatus({ status: 'idle' })
+    }
   }
 
   private scheduleChecks(): void {
@@ -629,8 +702,7 @@ class Launcher implements Runtime {
 
   private async stageBundle(client: UpdateClient, available: Extract<CheckResult, { status: 'available' }>): Promise<void> {
     const { manifest } = available
-    const requirement = requirementOf(this.running.components, manifest.components)
-    const info = this.updateInfo(manifest, requirement === 'restart' ? 'restart' : 'reload')
+    const info = this.bundleInfo(manifest)
     const started = Date.now()
     const staged = await client.stage(available, {
       onProgress: ({ downloadedBytes, totalBytes }) => this.setStatus(downloadingStatus(info, started, downloadedBytes, totalBytes)),
@@ -654,8 +726,8 @@ class Launcher implements Runtime {
    * the version that Sparkle prepared is checked after.
    */
   private async stageInstaller(available: Extract<InstallerCheckResult, { status: 'available' }>, installer: Installer): Promise<void> {
-    const { artifact, manifest: { downloadPage, releaseId, version } } = available
-    const info: UpdateInfo = { downloadPage, fromInstaller: true, releaseId, requires: 'install', version }
+    const { artifact, manifest: { releaseId, version } } = available
+    const info = installerInfo(available)
     const fail = (error: UpdateError) => {
       const count = (this.installerFailures.get(releaseId)?.count ?? 0) + 1
       const retryAt = Date.now() + Math.min(INSTALLER_FAILURE_DELAY_MS * 2 ** (count - 1), MAX_INSTALLER_FAILURE_DELAY_MS)
@@ -738,6 +810,13 @@ class Launcher implements Runtime {
     clearTimeout(this.health?.timer)
     this.health = { addedMs: 0, deadline: Date.now() + timeoutMs, onTimeout, timer: setTimeout(() => this.onHealthTimeout(), timeoutMs) }
   }
+
+  /** Saves the preferences for the next launches, without a new client. */
+  private writePreferences(next: Preferences): void {
+    this.preferences = next
+    if (this.dataDir)
+      writeFileSync(join(this.dataDir, 'preferences.json'), `${JSON.stringify(next, null, 2)}\n`)
+  }
 }
 
 /**
@@ -789,6 +868,11 @@ async function fetchChecked(fetchFile: Fetch, url: string, sha512: string): Prom
   const bytes = new Uint8Array(await response.arrayBuffer())
 
   return createHash('sha512').update(bytes).digest('base64') === sha512 ? bytes : undefined
+}
+
+/** The update info of an installer release. */
+function installerInfo({ manifest: { downloadPage, releaseId, version } }: Extract<InstallerCheckResult, { status: 'available' }>): UpdateInfo {
+  return { downloadPage, fromInstaller: true, releaseId, requires: 'install', version }
 }
 
 function percentOf(done: number, total: number): number {

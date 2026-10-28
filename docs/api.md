@@ -126,7 +126,7 @@ Internal: the object store and the state file.
 | `/config` | `defineConfig(config)` for `ergo.config.ts`, and, from `@ergosphere-it/publish`, the release stores for its `store`: `createReleaseStore`, `createFileTreeStore`, and `ChannelConflictError`, with their types. |
 | `/storage/s3` | `createS3Store(options)`: a release store with the default layout on S3, or on a service with the same API, such as R2. `createS3Storage(options)`: the storage of files under it, for `createFileTreeStore`. They go through `s3mini`, and check the credentials at the first read or write. |
 | `/vite/main`, `/vite/preload`, `/vite/renderer` | One electron-vite plugin each, as the default export. Options: `outDir` and `root` for all, `entry` for main and preload, and `launcher` for main. The main and preload plugins keep every entry of the electron-vite config. The main plugin reads `ergo.config.ts`, and the renderer plugin keeps every HTML entry and writes `out/bundle.json`. |
-| `/main` | `activeBundle` with `preload`, `preloadOf(name)`, and `pageUrl({ page, hash, query })`, and `updater` with `status`, `onStatus()`, `checkForUpdates()`, `applyUpdate()`, `dismissRollback()`, `markBundleHealthy()`, `delayHealthCheck()`, `channel`, `cohorts`, `onBundleChange()`, and `onEvent()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
+| `/main` | `activeBundle` with `preload`, `preloadOf(name)`, and `pageUrl({ page, hash, query })`, and `updater` with `status`, `onStatus()`, `checkForUpdates()`, `downloadUpdate()`, `applyUpdate()`, `dismissRollback()`, `markBundleHealthy()`, `delayHealthCheck()`, `autoDownload`, `channel`, `cohorts`, `onBundleChange()`, and `onEvent()`. Types: `ActiveBundle`, `Updater`, `LoadOptions`, `LauncherEvent`, and the status types. |
 | `/types` | The status types only, for pages and preload scripts. It has no code. |
 | `/release` | `bundleReleaseFromBuild(options)`, `installerReleaseFromBuild(options)`, `readBuildInfo(outDir)` |
 | `/launcher` | `startLauncher(options)`, `defineLocator(locate)`, and `createTreeLocator(feedUrl)`, for a custom launcher. Types: `LauncherOptions`, `LauncherConfig`, `Locator`, `LauncherFileRef`, `FileLocation`, `Installer`, `InstallerFile`, `ElectronUpdaterInstaller`, `SparkleInstaller`, `InstallerProgress`. |
@@ -158,10 +158,12 @@ The bundle that runs now. A page-only update changes it without a restart, so re
 | --- | --- |
 | `status`, `onStatus(listener)` | The status for an update notice. `onStatus` calls the listener at once and on every change. |
 | `checkForUpdates()` | Checks now, also when a failed download waits for its retry time. Automatic checks run without it. |
+| `downloadUpdate()` | Downloads the `available` update. It does nothing when no update is available. |
 | `applyUpdate()` | Applies the ready update: a reload, a restart, or an install. Rejects when no update is ready. |
 | `dismissRollback()` | Forgets the rollback notice. |
 | `markBundleHealthy()` | Records that the bundle works. A new bundle that does not call it in time is rolled back. |
 | `delayHealthCheck(seconds)` | Adds time to the running health check, up to five minutes in all. |
+| `autoDownload` | Whether a check downloads the update that it finds. Defaults to true. When it is false, the status is `available` until `downloadUpdate()`. Setting it saves it for the next launches. |
 | `channel` | The channel that the app follows. Setting it saves it for the next launches. |
 | `cohorts` | The cohorts of this install, for example `['qa']`. Setting it saves it for the next launches. |
 | `onBundleChange(listener)` | Calls the listener after a page-only update or a rollback in place switched the bundle. |
@@ -171,7 +173,7 @@ The bundle that runs now. A page-only update changes it without a restart, so re
 
 `update` is `{ version, releaseId, requires, fromInstaller, downloadPage? }`. `requires` is `reload`, `restart`, or `install`. `downloadPage` comes from the installer release.
 
-The statuses are `idle`, `checking`, `up-to-date`, `manual-install-required`, `downloading`, `preparing`, `download-failed`, `ready`, `applying`, `verification-failed`, `rolled-back`, `error`, and `disabled`. `manual-install-required` has the `update` that needs a newer native version, when the channel offers no installer that the app can install. Show the download page of the app. `preparing` is work after a download, for example a Sparkle patch. `downloading` has `percent`, `downloadedBytes` of `totalBytes`, and `bytesPerSecond`, the average since the download started. `totalBytes` counts only the files that the app does not have. `preparing` has `percent` only. A `download-failed` of an installer has `attempts`. It stays the status while bundles are up to date, so the app can show `update.downloadPage` after a few attempts.
+The statuses are `idle`, `checking`, `up-to-date`, `available`, `manual-install-required`, `downloading`, `preparing`, `download-failed`, `ready`, `applying`, `verification-failed`, `rolled-back`, `error`, and `disabled`. `available` has the `update` that a check found while `autoDownload` is false. Automatic checks keep it and do not download it. `manual-install-required` has the `update` that needs a newer native version, when the channel offers no installer that the app can install. Show the download page of the app. `preparing` is work after a download, for example a Sparkle patch. `downloading` has `percent`, `downloadedBytes` of `totalBytes`, and `bytesPerSecond`, the average since the download started. `totalBytes` counts only the files that the app does not have. `preparing` has `percent` only. A `download-failed` of an installer has `attempts`. It stays the status while bundles are up to date, so the app can show `update.downloadPage` after a few attempts.
 
 `error` is `{ code, message }`. `code` is one of a closed list: `download-failed`, `installer-mismatch`, `network-error`, `storage-error`, `apply-failed`, or a protocol code such as `invalid-signature` or `channel-replayed`. `message` is English text for logs.
 

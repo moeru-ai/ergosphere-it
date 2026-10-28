@@ -17,6 +17,7 @@
 //  11. a Sparkle installer: an appcast whose newest version is not the release, and a changed appcast, are refused.
 //      A failed installer stays the status while bundles are up to date. A good appcast is prepared and gets ready.
 //  12. a withdrawn installer that waits for applyUpdate() is discarded
+//  13. with automatic downloads off, a bundle stays available through automatic checks, and downloads on downloadUpdate()
 //
 // Usage: node scripts/e2e.ts [--asar] [--keep] [--show] [--pause <ms>] [--capture <dir>]
 //
@@ -327,6 +328,29 @@ try {
   const discarded = await waitFor('discard of installer 6', list => findEvent(since(mark)(list), 'installer-discarded', e => e.releaseId === 6))
   const idle = await waitFor('the status after the discard', list => findStatus(since(mark)(list), 'up-to-date') ?? findStatus(since(mark)(list), 'idle'))
   await step('12. a withdrawn installer that waits is discarded', discarded.reason === 'withdrawn' && Boolean(idle), `${discarded.type}, then ${idle.status}`)
+
+  // 13. automatic downloads off
+  stopApp()
+  mark = lastIndex()
+  stopApp = await launchApp(workspace, { capture: options.capture, feedUrl: server.url, installer: 'file', manualDownload: true, show: options.show })
+  await waitFor('boot with automatic downloads off', list => findEvent(since(mark)(list), 'page-mounted'))
+
+  mark = lastIndex()
+  const manual = createReleaseId()
+  await workspace.publish(manual, { label: 'v14', mainTag: '2' })
+  await workspace.point(manual, [6])
+  await waitFor('an available bundle', list => findStatus(since(mark)(list), 'available', status => status.update.releaseId === manual))
+  const clicked = await waitFor('the download click', list => findEvent(since(mark)(list), 'download-clicked', e => e.releaseId === manual))
+  const beforeClick = since(mark)(readEvents()).filter(e => e.time < clicked.time)
+  // The checks before the click find the bundle again, and none downloads it.
+  const checksBeforeClick = beforeClick.filter(e => e.type === 'status' && e.status.status === 'checking').length
+  const downloadedBeforeClick = beforeClick.some(e => e.type === 'status' && ['downloading', 'ready'].includes(e.status.status))
+  const manualPage = await waitFor('page v14', list => findEvent(since(mark)(list), 'page-mounted', e => e.version === 'v14'))
+  await step(
+    '13. with automatic downloads off, a bundle waits for downloadUpdate()',
+    checksBeforeClick >= 2 && !downloadedBeforeClick && manualPage.time > clicked.time,
+    `${checksBeforeClick} checks kept it available, downloaded after the click`,
+  )
 }
 catch (error) {
   await step('run', false, errorMessageFrom(error) ?? 'unknown error')

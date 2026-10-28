@@ -50,6 +50,8 @@ export type UpdateRequirement = 'install' | 'reload' | 'restart'
  * The state of the updater, for an update notice. It is plain data, so the app can send it to its pages over IPC.
  *
  * - `up-to-date`: users see "up to date". `detail` is for logs and support.
+ * - `available`: a check found an update, and `autoDownload` is off. It waits for `downloadUpdate()`. Automatic checks
+ *   keep it and do not download it.
  * - `manual-install-required`: the channel serves a newer version that needs a newer native version, and the channel
  *   offers no installer that this app can install. `update` is the bundle that waits. Show the download page of the app,
  *   so users install a new version by hand. The status stays until a check finds an installer or another update.
@@ -79,6 +81,6 @@ export type UpdaterStatus
   | { from: BundleInfo, reason: RollbackReason, status: 'rolled-back', to: BundleInfo }
   | { percent: number, status: 'preparing', update: UpdateInfo }
   | { reason: DisabledReason, status: 'disabled' }
-  | { status: 'applying' | 'ready', update: UpdateInfo }
+  | { status: 'applying' | 'available' | 'ready', update: UpdateInfo }
   | { status: 'checking' | 'idle' }
   | { status: 'manual-install-required', update: UpdateInfo }
