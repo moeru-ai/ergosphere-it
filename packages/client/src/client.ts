@@ -95,7 +95,11 @@ export interface UpdateClientOptions {
   concurrency?: number
   /** The directory that the client owns, for example `<userData>/updates`. */
   dataDir: string
-  /** The URL of the static update server. The default locator reads the file tree under it. */
+  /**
+   * The URL of the static update server. The default locator reads the file tree under it.
+   * Use HTTPS in production, including custom locator URLs and redirects, and keep the runtime patched:
+   * HTTP decoding happens before signature checks. HTTP remains allowed for local servers and other deployment needs.
+   */
   feedUrl: string
   fetch?: Fetch
   fs: UpdateFileSystem

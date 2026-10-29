@@ -21,7 +21,11 @@ export const ergoConfigSchema = object({
   checkIntervalMinutes: optional(pipe(number(), minValue(1)), 60),
   /** Turns updates off for this build, for example a Steam build. Store builds of macOS and Windows turn off by themselves. */
   disabled: optional(boolean(), false),
-  /** The URL of the update server, for example a bucket behind a CDN. The app reads from it. */
+  /**
+   * The URL of the update server, for example a bucket behind a CDN. The app reads from it.
+   * Use HTTPS in production, including download URLs and redirects. Signatures are checked after HTTP decoding,
+   * so keep the runtime patched too. HTTP remains allowed for local servers and other deployment needs.
+   */
   feedUrl: pipe(string(), url('The feedUrl must be a URL.')),
   /** How long a new bundle has to call `markBundleHealthy()` before the app leaves it. */
   health: optional(object({

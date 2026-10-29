@@ -11,7 +11,7 @@ This document lists the public API of each package. [The specification](spec.md)
 - **Small surfaces.** A package exports what its users call. Schemas, helpers, and wiring stay internal.
 - **Names come from the readers.** A name stays when developers who never saw the project understand it without help. See the decisions of 2026-10-24 in the specification.
 
-Runtimes: Node.js 24 or later, Electron 43 or later, and current browsers. `protocol` and `publish` also run in Deno, Bun, and workers.
+Runtimes: Node.js 24.22.1+ on 24.x or 26.12.1 or later; Electron 43.8.4+ on 43.x, 44.10.0+ on 44.x, or 45.1.0 or later; and current browsers. `protocol` and `publish` also run in Deno, Bun, and workers.
 
 ## `@ergosphere-it/protocol`
 

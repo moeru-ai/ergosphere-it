@@ -76,8 +76,8 @@ When a new bundle crashes or never reports that it works, the app goes back to t
 
 | Tool | Version | Use |
 | --- | --- | --- |
-| Node.js | 24 or later | The build reads `ergo.config.ts` with the TypeScript support of Node.js. The CLI runs on it. |
-| Electron | 43 or later | The app. The tests use 43.4.1. |
+| Node.js | 24.22.1+ on 24.x, or 26.12.1 or later | The build reads `ergo.config.ts` with the TypeScript support of Node.js. The CLI runs on it. |
+| Electron | 43.8.4+ on 43.x, 44.10.0+ on 44.x, or 45.1.0 or later | The app. The tests use 43.8.4. |
 | electron-vite | 6 | The build. One plugin goes into each process. |
 | electron-builder | any | Optional. It packs installers. ergosphere-it records them as installer releases. |
 | electron-updater | 6.8.9 or later | Optional. With it, the app also installs new installers. Without it, the app updates only its bundle. |
@@ -623,7 +623,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 26}
+        with: {node-version: '26.12.1'}
       - run: pnpm install
       - run: pnpm build
       - run: pnpm exec ergosphere-it publish bundle --channel beta --rollout ${{ inputs.rollout }}
@@ -657,7 +657,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 26}
+        with: {node-version: '26.12.1'}
       - run: pnpm install
       - run: pnpm build
       - run: pnpm exec electron-builder --publish always
@@ -683,7 +683,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 26}
+        with: {node-version: '26.12.1'}
       - run: pnpm install
       - uses: actions/download-artifact@v4
         with: {name: out, path: out}
@@ -804,7 +804,7 @@ pnpm docs:update
 
 ## Development
 
-Use Node.js 26.7.0 and pnpm 11.24.0.
+Use Node.js 26.12.1 and pnpm 11.24.0.
 
 ```bash
 pnpm install
