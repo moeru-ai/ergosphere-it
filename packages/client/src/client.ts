@@ -206,8 +206,9 @@ export class UpdateClient {
   /**
    * Selects the bundle to boot: staged, then current, then previous, then the bundle of the installer.
    *
-   * The first boot of an installer that a check offered leaves every stored bundle except the bundle that its channel
-   * served at that check. A bundle of another channel can be newer than the installer, and otherwise boots in its place.
+   * The first boot of an installer that a check found hands the install off to it: it leaves every stored bundle except
+   * the bundle that the channel served at that check. A bundle of another channel can be newer than the installer, and
+   * otherwise boots in its place.
    *
    * It counts the boot attempt of the selected bundle. The host must call `markHealthy` when the app works.
    *
@@ -283,11 +284,11 @@ export class UpdateClient {
         product,
         withdrawn: channelFile.withdrawn,
       })
-      const bundleReleaseId = channelFile.bundle?.releaseId
-      const offered = (await this.state()).offeredInstaller
-      if (offered?.releaseId !== target || offered.bundleReleaseId !== bundleReleaseId) {
+      const channelBundleReleaseId = channelFile.bundle?.releaseId
+      const handoff = (await this.state()).installerHandoff
+      if (handoff?.installerReleaseId !== target || handoff.channelBundleReleaseId !== channelBundleReleaseId) {
         await this.update((next) => {
-          next.offeredInstaller = { bundleReleaseId, releaseId: target }
+          next.installerHandoff = { channelBundleReleaseId, installerReleaseId: target }
         })
       }
 
@@ -608,6 +609,27 @@ export class UpdateClient {
     return new TextDecoder().decode(await this.fetchBytes(url))
   }
 
+  /**
+   * On the first boot of the installer of the handoff, leaves every bundle except the bundle that the channel served.
+   *
+   * For example, an install on `dev` runs a dev bundle that is newer than the canary installer. The user moves to
+   * `canary` and installs its installer. Without this, the dev bundle boots again, and the install never leaves `dev`.
+   */
+  private handOffToInstaller(state: ClientState): void {
+    const handoff = state.installerHandoff
+    const installed = this.options.installedApp?.releaseId
+    if (!handoff || installed === undefined || installed < handoff.installerReleaseId)
+      return
+
+    if (installed === handoff.installerReleaseId) {
+      for (const key of ['staged', 'deferred', 'current', 'previous'] as const) {
+        if (state[key] !== handoff.channelBundleReleaseId)
+          state[key] = undefined
+      }
+    }
+    state.installerHandoff = undefined
+  }
+
   /** Checks one stored bundle before boot. Returns the reason it cannot boot, or `undefined`. */
   private async inspect(releaseId: number, state: ClientState): Promise<{ manifest?: BundleManifest, permanent?: boolean, problem?: string }> {
     const manifest = await this.readStoredManifest(releaseId)
@@ -663,27 +685,6 @@ export class UpdateClient {
     return { components, dir, fromInstaller: true, releaseId, version }
   }
 
-  /**
-   * On the first boot of the offered installer, leaves every bundle except the bundle that its channel served.
-   *
-   * For example, an install on `dev` runs a dev bundle that is newer than the canary installer. The user moves to
-   * `canary` and installs its installer. Without this, the dev bundle boots again, and the install never leaves `dev`.
-   */
-  private leaveBundlesForOfferedInstaller(state: ClientState): void {
-    const offered = state.offeredInstaller
-    const installed = this.options.installedApp?.releaseId
-    if (!offered || installed === undefined || installed < offered.releaseId)
-      return
-
-    if (installed === offered.releaseId) {
-      for (const key of ['staged', 'deferred', 'current', 'previous'] as const) {
-        if (state[key] !== offered.bundleReleaseId)
-          state[key] = undefined
-      }
-    }
-    state.offeredInstaller = undefined
-  }
-
   /** Paths of files on disk that can give an object without a download: the running bundle and the installer bundle. */
   private async localSources(): Promise<Map<string, string>> {
     const sources = new Map<string, string>()
@@ -737,7 +738,7 @@ export class UpdateClient {
 
   private async selectBoot(readOnly: boolean): Promise<BootSelection & { rejected: { problem: string, releaseId: number }[] }> {
     const state = await this.state()
-    this.leaveBundlesForOfferedInstaller(state)
+    this.handOffToInstaller(state)
     const rejected: { problem: string, releaseId: number }[] = []
     const accepted: { manifest: BundleManifest, releaseId: number }[] = []
     const seen = new Set<number>()

@@ -665,7 +665,7 @@ describe('updateClient installer check', () => {
     const installed = await createClient({ installedApp: { formats: ['electron-updater'], releaseId: 8 } })
     expect(await installed.boot()).toMatchObject({ fromInstaller: true })
     const state = await installed.state()
-    expect([state.current, state.previous, state.offeredInstaller]).toEqual([undefined, undefined, undefined])
+    expect([state.current, state.previous, state.installerHandoff]).toEqual([undefined, undefined, undefined])
   })
 
   it('keeps the bundle that the channel of the installer serves', async () => {

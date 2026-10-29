@@ -243,7 +243,7 @@ objects/sha256/<aa>/<sha256>      # local content store
 bundles/<releaseId>/              # materialized bundles, read only after activation
 manifests/<releaseId>.json(.sig)  # signed manifests of the kept bundles
 state.json                        # staged, current, previous, deferred, blocked, withdrawn, boot attempts,
-                                  # channel issue times, the offered installer, and the last rollback
+                                  # channel issue times, the installer handoff, and the last rollback
 preferences.json                  # the channel, cohorts, and automatic download setting that the app set at run time
 ```
 
@@ -251,7 +251,7 @@ preferences.json                  # the channel, cohorts, and automatic download
 - The SDK runs state changes one at a time in a process, so two changes never lose a write.
 - A second instance of the app reads the state and never writes it. By default the launcher quits a second instance at start.
 - When the SDK cannot read or write its state at boot, it boots the installer bundle. The installer bundle needs no state.
-- On the first boot of an installer that a check offered, the SDK leaves every stored bundle except the bundle that the channel served at that check. A bundle of another channel can be newer than the installer, for example a dev bundle after the user moved to canary. Without this rule, that bundle boots in place of the installer.
+- An installer check that finds an installer saves an installer handoff: the installer release ID (`installerReleaseId`), and the bundle that the channel serves at that check (`channelBundleReleaseId`). On the first boot of that installer, the SDK leaves every stored bundle except `channelBundleReleaseId`. A bundle of another channel can be newer than the installer, for example a dev bundle after the user moved to canary. Without this rule, that bundle boots in place of the installer.
 - Boot order: staged, then deferred when it is newer than current, then current, then previous, then the installer bundle. A deferred bundle waits for a newer native version, so each boot tries it again. Each candidate must pass these checks:
   1. The signature is valid and the key is trusted.
   2. The release ID is greater than the ID of the installer bundle, and the bundle is not withdrawn or blocked.
