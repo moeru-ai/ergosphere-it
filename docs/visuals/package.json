@@ -1,7 +1,7 @@
 {
   "name": "@ergosphere-it/docs-visuals",
   "type": "module",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "private": true,
   "description": "The ergosphere-it page: an OTA updater that can always get back, told with a few shapes",
   "scripts": {

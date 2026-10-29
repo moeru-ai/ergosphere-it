@@ -1,7 +1,7 @@
 {
   "name": "@ergosphere-it/tests-electron",
   "type": "module",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "private": true,
   "description": "End-to-end tests and the release demo of @ergosphere-it/electron, built from the example app",
   "main": "out/launcher/index.mjs",
