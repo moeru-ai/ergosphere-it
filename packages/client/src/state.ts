@@ -23,6 +23,14 @@ const clientStateSchema = object({
   /** A staged bundle that waits for a newer native version. */
   deferred: optional(releaseIdSchema),
   installId: string(),
+  /**
+   * The installer that the last installer check offered, and the bundle that its channel served then. See
+   * `UpdateClient.boot`.
+   */
+  offeredInstaller: optional(object({
+    bundleReleaseId: optional(releaseIdSchema),
+    releaseId: releaseIdSchema,
+  })),
   previous: optional(releaseIdSchema),
   /**
    * The last rollback, so the app can tell the user after a restart. It stays until the app dismisses it or a newer
