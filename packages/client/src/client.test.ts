@@ -647,6 +647,39 @@ describe('updateClient installer check', () => {
 
     expect(server.requests.filter(url => url.endsWith('/channels/canary.json'))).toHaveLength(1)
   })
+
+  it('boots the installer from another channel, not a newer bundle of the channel before', async () => {
+    await server.publishBundle(12, { ...installerFiles, web: { 'renderer/index.html': '<html>dev</html>' } })
+    await server.publishChannel(12, { channel: 'dev' })
+    const dev = await createClient({ channel: 'dev', installedApp: { formats: ['electron-updater'], releaseId: 7 } })
+    await checkAndStage(dev)
+    await dev.markHealthy(await dev.boot())
+
+    await publishInstaller(8)
+    await server.publishChannel(11, { installer: { releaseId: 8 } })
+    const canary = await createClient({ installedApp: { formats: ['electron-updater'], releaseId: 7 } })
+    expect(await canary.checkInstaller()).toMatchObject({ status: 'available' })
+    // The installer is not installed yet, so the app keeps its bundle.
+    expect(await canary.boot()).toMatchObject({ fromInstaller: false, releaseId: 12 })
+
+    const installed = await createClient({ installedApp: { formats: ['electron-updater'], releaseId: 8 } })
+    expect(await installed.boot()).toMatchObject({ fromInstaller: true })
+    const state = await installed.state()
+    expect([state.current, state.previous, state.keepAfterInstall]).toEqual([undefined, undefined, undefined])
+  })
+
+  it('keeps the bundle that the channel of the installer serves', async () => {
+    await publishInstaller(8)
+    await server.publishBundle(12, { ...installerFiles, web: { 'renderer/index.html': '<html>dev</html>' } })
+    await server.publishChannel(12, { channel: 'dev', installer: { releaseId: 8 } })
+    const dev = await createClient({ channel: 'dev', installedApp: { formats: ['electron-updater'], releaseId: 7 } })
+    await checkAndStage(dev)
+    await dev.markHealthy(await dev.boot())
+    expect(await dev.checkInstaller()).toMatchObject({ status: 'available' })
+
+    const installed = await createClient({ channel: 'dev', installedApp: { formats: ['electron-updater'], releaseId: 8 } })
+    expect(await installed.boot()).toMatchObject({ fromInstaller: false, releaseId: 12 })
+  })
 })
 
 describe('updateClient state and channel file rules', () => {

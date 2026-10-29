@@ -23,6 +23,14 @@ const clientStateSchema = object({
   /** A staged bundle that waits for a newer native version. */
   deferred: optional(releaseIdSchema),
   installId: string(),
+  /**
+   * The bundle to keep after the installer that the last installer check found is installed. It is the bundle that the
+   * channel served at that check, or none. See `UpdateClient.boot`.
+   */
+  keepAfterInstall: optional(object({
+    bundleReleaseId: optional(releaseIdSchema),
+    installerReleaseId: releaseIdSchema,
+  })),
   previous: optional(releaseIdSchema),
   /**
    * The last rollback, so the app can tell the user after a restart. It stays until the app dismisses it or a newer
