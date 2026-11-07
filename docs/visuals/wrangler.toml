@@ -1,0 +1,6 @@
+name = "moeru-ai-ergosphere-it"
+compatibility_date = "2026-11-01"
+preview_urls = true
+
+[assets]
+directory = "./dist"

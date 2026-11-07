@@ -18,6 +18,10 @@ pnpm -F @ergosphere-it/docs-visuals dev
 
 `pnpm -F @ergosphere-it/docs-visuals build` writes a static site to `docs/visuals/dist`. It uses relative paths, so any static host works, for example GitHub Pages.
 
+## Deploy
+
+A push to `main` deploys the page to Cloudflare Workers with `wrangler.toml` (`.github/workflows/deploy-cloudflare-workers.yml`). A pull request uploads a preview version, with the alias `pr-<number>`, after a maintainer approves the `Preview` environment, and a comment on the pull request links to it. Both workflows need the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets.
+
 ## Banners
 
 The README shows four banners and six section figures, each in a dark and a light theme, from `docs/assets/banners`. The hero and how-it-works are animated. Each banner has rounded corners on a transparent ground, so it sits well on any README background. Render them again after a change of the page:
